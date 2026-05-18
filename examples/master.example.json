@@ -1,0 +1,15 @@
+{
+  "domain": "edge-a.example.com",
+  "cert_file": "/var/lib/marzban/certs/linkray/fullchain.cer",
+  "key_file": "/var/lib/marzban/certs/linkray/linkray.key",
+  "panel_port": 9443,
+  "marzban_http_port": 8000,
+  "ports": {
+    "vless_tls": 18080,
+    "vless_reality": 18081,
+    "vless_grpc_reality": 18082,
+    "trojan_tls": 18083,
+    "vmess_tls": 18084,
+    "shadowsocks": 18085
+  }
+}

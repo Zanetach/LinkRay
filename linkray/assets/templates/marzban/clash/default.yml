@@ -1,0 +1,320 @@
+# LinkRay Clash/Mihomo subscription template for Marzban.
+# Applies to /sub/<token>/clash-meta and future users.
+mode: rule
+mixed-port: 7890
+allow-lan: true
+bind-address: "*"
+log-level: info
+ipv6: false
+unified-delay: true
+tcp-concurrent: true
+
+profile:
+  store-selected: true
+  store-fake-ip: true
+
+sniffer:
+  enable: true
+  override-destination: false
+  sniff:
+    TLS:
+      ports: [443]
+    HTTP:
+      ports: [80]
+
+geodata-mode: false
+geodata-loader: memconservative
+geo-auto-update: true
+geo-update-interval: 24
+
+geox-url:
+  geoip: "https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.dat"
+  geosite: "https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geosite.dat"
+  mmdb: "https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.metadb"
+
+dns:
+  enable: true
+  listen: 0.0.0.0:1053
+  ipv6: false
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  fake-ip-filter:
+    - "*.lan"
+    - "*.local"
+    - "*.localhost"
+    - "localhost.ptlogin2.qq.com"
+    - "dns.google"
+    - "time.*.com"
+    - "ntp.*.com"
+  use-hosts: true
+  default-nameserver:
+    - 223.5.5.5
+    - 119.29.29.29
+  nameserver:
+    - https://1.1.1.1/dns-query
+    - https://8.8.8.8/dns-query
+    - tls://1.1.1.1
+  proxy-server-nameserver:
+    - 223.5.5.5
+    - 119.29.29.29
+  nameserver-policy:
+    "geosite:cn,private": https://dns.alidns.com/dns-query
+
+{{ conf | except("proxy-groups", "port", "mode", "rules") | yaml }}
+
+proxy-groups:
+  - name: 手动切换
+    type: select
+    proxies:
+{{ proxy_remarks | yaml | indent(6, true) }}
+
+  - name: 自动选择
+    type: url-test
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+    lazy: true
+    proxies:
+{{ proxy_remarks | yaml | indent(6, true) }}
+
+  - name: 全球代理
+    type: select
+    proxies:
+      - 自动选择
+      - 手动切换
+{{ proxy_remarks | yaml | indent(6, true) }}
+
+  - name: 流媒体
+    type: select
+    proxies:
+      - 全球代理
+      - 自动选择
+      - 手动切换
+{{ proxy_remarks | yaml | indent(6, true) }}
+      - DIRECT
+
+  - name: DNS_Proxy
+    type: select
+    proxies:
+      - 全球代理
+      - 自动选择
+      - 手动切换
+      - DIRECT
+
+  - name: Telegram
+    type: select
+    proxies:
+      - 全球代理
+      - 自动选择
+      - 手动切换
+{{ proxy_remarks | yaml | indent(6, true) }}
+
+  - name: Google
+    type: select
+    proxies:
+      - 全球代理
+      - 自动选择
+      - 手动切换
+{{ proxy_remarks | yaml | indent(6, true) }}
+      - DIRECT
+
+  - name: YouTube
+    type: select
+    proxies:
+      - 流媒体
+      - 全球代理
+      - 自动选择
+      - 手动切换
+{{ proxy_remarks | yaml | indent(6, true) }}
+      - DIRECT
+
+  - name: Netflix
+    type: select
+    proxies:
+      - 流媒体
+      - 全球代理
+      - 自动选择
+      - 手动切换
+{{ proxy_remarks | yaml | indent(6, true) }}
+      - DIRECT
+
+  - name: Spotify
+    type: select
+    proxies:
+      - 流媒体
+      - 全球代理
+      - 自动选择
+      - 手动切换
+{{ proxy_remarks | yaml | indent(6, true) }}
+      - DIRECT
+
+  - name: HBO
+    type: select
+    proxies:
+      - 流媒体
+      - 全球代理
+      - 自动选择
+      - 手动切换
+{{ proxy_remarks | yaml | indent(6, true) }}
+      - DIRECT
+
+  - name: Bing
+    type: select
+    proxies:
+      - 全球代理
+      - 自动选择
+      - 手动切换
+{{ proxy_remarks | yaml | indent(6, true) }}
+      - DIRECT
+
+  - name: OpenAI
+    type: select
+    proxies:
+      - 全球代理
+      - 自动选择
+      - 手动切换
+{{ proxy_remarks | yaml | indent(6, true) }}
+
+  - name: ClaudeAI
+    type: select
+    proxies:
+      - 全球代理
+      - 自动选择
+      - 手动切换
+{{ proxy_remarks | yaml | indent(6, true) }}
+
+  - name: Disney
+    type: select
+    proxies:
+      - 流媒体
+      - 全球代理
+      - 自动选择
+      - 手动切换
+{{ proxy_remarks | yaml | indent(6, true) }}
+      - DIRECT
+
+  - name: GitHub
+    type: select
+    proxies:
+      - 全球代理
+      - 自动选择
+      - 手动切换
+{{ proxy_remarks | yaml | indent(6, true) }}
+      - DIRECT
+
+  - name: 国内媒体
+    type: select
+    proxies:
+      - DIRECT
+      - 全球代理
+      - 自动选择
+      - 手动切换
+
+  - name: 本地直连
+    type: select
+    proxies:
+      - DIRECT
+      - 全球代理
+
+  - name: 漏网之鱼
+    type: select
+    proxies:
+      - 全球代理
+      - 自动选择
+      - 手动切换
+      - DIRECT
+
+rules:
+  - DOMAIN-SUFFIX,local,本地直连
+  - DOMAIN-SUFFIX,lan,本地直连
+  - IP-CIDR,10.0.0.0/8,本地直连,no-resolve
+  - IP-CIDR,172.16.0.0/12,本地直连,no-resolve
+  - IP-CIDR,192.168.0.0/16,本地直连,no-resolve
+  - IP-CIDR,127.0.0.0/8,本地直连,no-resolve
+  - IP-CIDR,169.254.0.0/16,本地直连,no-resolve
+  - IP-CIDR,224.0.0.0/4,本地直连,no-resolve
+
+  - DOMAIN-SUFFIX,dns.google,DNS_Proxy
+  - DOMAIN-SUFFIX,cloudflare-dns.com,DNS_Proxy
+  - DOMAIN-SUFFIX,one.one.one.one,DNS_Proxy
+  - DOMAIN-SUFFIX,quad9.net,DNS_Proxy
+
+  - DOMAIN-SUFFIX,telegram.org,Telegram
+  - DOMAIN-SUFFIX,t.me,Telegram
+  - DOMAIN-SUFFIX,tdesktop.com,Telegram
+  - IP-CIDR,91.108.4.0/22,Telegram,no-resolve
+  - IP-CIDR,91.108.8.0/22,Telegram,no-resolve
+  - IP-CIDR,91.108.12.0/22,Telegram,no-resolve
+  - IP-CIDR,91.108.16.0/22,Telegram,no-resolve
+  - IP-CIDR,91.108.56.0/22,Telegram,no-resolve
+  - IP-CIDR,149.154.160.0/20,Telegram,no-resolve
+
+  - DOMAIN-SUFFIX,youtube.com,YouTube
+  - DOMAIN-SUFFIX,youtu.be,YouTube
+  - DOMAIN-SUFFIX,ytimg.com,YouTube
+  - DOMAIN-SUFFIX,googlevideo.com,YouTube
+  - DOMAIN-SUFFIX,youtubei.googleapis.com,YouTube
+
+  - DOMAIN-SUFFIX,google.com,Google
+  - DOMAIN-SUFFIX,gstatic.com,Google
+  - DOMAIN-SUFFIX,googleapis.com,Google
+  - DOMAIN-SUFFIX,googleusercontent.com,Google
+  - DOMAIN-SUFFIX,gvt1.com,Google
+
+  - DOMAIN-SUFFIX,netflix.com,Netflix
+  - DOMAIN-SUFFIX,netflix.net,Netflix
+  - DOMAIN-SUFFIX,nflxvideo.net,Netflix
+  - DOMAIN-SUFFIX,nflximg.net,Netflix
+  - DOMAIN-SUFFIX,nflxext.com,Netflix
+  - DOMAIN-SUFFIX,nflxso.net,Netflix
+
+  - DOMAIN-SUFFIX,spotify.com,Spotify
+  - DOMAIN-SUFFIX,scdn.co,Spotify
+  - DOMAIN-SUFFIX,spotifycdn.com,Spotify
+
+  - DOMAIN-SUFFIX,max.com,HBO
+  - DOMAIN-SUFFIX,hbo.com,HBO
+  - DOMAIN-SUFFIX,hbomax.com,HBO
+  - DOMAIN-SUFFIX,hbonow.com,HBO
+
+  - DOMAIN-SUFFIX,disneyplus.com,Disney
+  - DOMAIN-SUFFIX,disney-plus.net,Disney
+  - DOMAIN-SUFFIX,dssott.com,Disney
+  - DOMAIN-SUFFIX,bamgrid.com,Disney
+
+  - DOMAIN-SUFFIX,bing.com,Bing
+  - DOMAIN-SUFFIX,bingapis.com,Bing
+  - DOMAIN-SUFFIX,msn.com,Bing
+  - DOMAIN-SUFFIX,msedge.net,Bing
+
+  - DOMAIN-SUFFIX,openai.com,OpenAI
+  - DOMAIN-SUFFIX,chatgpt.com,OpenAI
+  - DOMAIN-SUFFIX,oaistatic.com,OpenAI
+  - DOMAIN-SUFFIX,oaiusercontent.com,OpenAI
+  - DOMAIN-SUFFIX,ai.com,OpenAI
+
+  - DOMAIN-SUFFIX,claude.ai,ClaudeAI
+  - DOMAIN-SUFFIX,anthropic.com,ClaudeAI
+
+  - DOMAIN-SUFFIX,github.com,GitHub
+  - DOMAIN-SUFFIX,github.io,GitHub
+  - DOMAIN-SUFFIX,githubassets.com,GitHub
+  - DOMAIN-SUFFIX,githubusercontent.com,GitHub
+  - DOMAIN-SUFFIX,ghcr.io,GitHub
+
+  - DOMAIN-SUFFIX,bilibili.com,国内媒体
+  - DOMAIN-SUFFIX,bilibili.tv,国内媒体
+  - DOMAIN-SUFFIX,iqiyi.com,国内媒体
+  - DOMAIN-SUFFIX,youku.com,国内媒体
+  - DOMAIN-SUFFIX,qq.com,国内媒体
+  - DOMAIN-SUFFIX,kugou.com,国内媒体
+  - DOMAIN-SUFFIX,kuwo.cn,国内媒体
+  - DOMAIN-SUFFIX,migu.cn,国内媒体
+  - DOMAIN-SUFFIX,douyin.com,国内媒体
+  - DOMAIN-SUFFIX,ixigua.com,国内媒体
+  - DOMAIN-SUFFIX,kuaishou.com,国内媒体
+
+  - GEOSITE,cn,本地直连
+  - GEOIP,CN,本地直连,no-resolve
+  - GEOSITE,geolocation-!cn,全球代理
+  - MATCH,漏网之鱼

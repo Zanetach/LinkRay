@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "linkray"
+version = "0.1.0"
+description = "Repeatable Marzban + Xray-core deployment tooling for LinkRay-style multi-node proxy management."
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = []
+
+[project.scripts]
+linkray = "linkray.cli:main"
+
+[tool.setuptools]
+packages = ["linkray"]
+
+[tool.setuptools.package-data]
+linkray = [
+  "assets/templates/marzban/clash/default.yml",
+  "assets/patches/marzban-subscription/current/clash.py",
+  "assets/patches/marzban-dashboard/current/index.html",
+  "assets/patches/marzban-dashboard/current/index.linkray.js",
+  "assets/patches/marzban-dashboard/current/index.original.js",
+]
