@@ -5,7 +5,7 @@ from pathlib import Path
 
 from .api import serve_api
 from .bootstrap import bootstrap_master, bootstrap_node
-from .config import LinkRayConfig, NodeHost, parse_node_host
+from .config import LinkRayConfig, NodeHost, parse_inbound_ports, parse_node_host
 from .doctor import exit_code, run_doctor
 from .egern import serve_egern
 from .install import install_master, install_node
@@ -37,6 +37,11 @@ def add_common_master_args(parser: argparse.ArgumentParser) -> None:
         action="append",
         help="Subscription host entry in name=domain form. Repeat for multi-node setups.",
     )
+    parser.add_argument(
+        "--inbound",
+        action="append",
+        help="Override an inbound port in key=port form, for example vless_tls=28080. Repeat as needed.",
+    )
 
 
 def config_from_args(args: argparse.Namespace) -> LinkRayConfig:
@@ -50,6 +55,7 @@ def config_from_args(args: argparse.Namespace) -> LinkRayConfig:
         reality_short_id=args.reality_short_id,
         grpc_service_name=args.grpc_service_name,
         panel_port=args.panel_port,
+        inbound_ports=parse_inbound_ports(args.inbound),
     )
 
 
@@ -105,6 +111,11 @@ def add_ports_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPar
     )
     ports.add_argument("--output", required=True, type=Path)
     ports.add_argument("--timeout", default=2.0, type=float)
+    ports.add_argument(
+        "--inbound",
+        action="append",
+        help="Override an inbound port in key=port form, for example vless_tls=28080. Repeat as needed.",
+    )
 
 
 def add_api_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -115,6 +126,11 @@ def add_api_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParse
         "--node",
         action="append",
         help="Node entry in name=domain form. Defaults to edge-a=edge-a.example.com and edge-b=edge-b.example.com.",
+    )
+    api.add_argument(
+        "--inbound",
+        action="append",
+        help="Override an inbound port in key=port form, for example vless_tls=28080. Repeat as needed.",
     )
     api.add_argument("--timeout", default=2.0, type=float)
     api.add_argument("--ttl", default=60.0, type=float)
@@ -219,7 +235,12 @@ def main(argv: list[str] | None = None) -> int:
         return exit_code(checks)
 
     if args.command == "ports":
-        output = write_ports_json(parse_nodes(args.node), args.output, timeout=args.timeout)
+        output = write_ports_json(
+            parse_nodes(args.node),
+            args.output,
+            timeout=args.timeout,
+            inbound_ports=parse_inbound_ports(args.inbound),
+        )
         print(output)
         return 0
 
@@ -228,6 +249,7 @@ def main(argv: list[str] | None = None) -> int:
             NodeHost("edge-a", "edge-a.example.com"),
             NodeHost("edge-b", "edge-b.example.com"),
         ]
+        args.inbound_ports = parse_inbound_ports(args.inbound)
         return serve_api(args)
 
     if args.command == "egern":

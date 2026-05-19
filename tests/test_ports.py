@@ -30,6 +30,25 @@ class PortStatusTests(unittest.TestCase):
         self.assertEqual(failed[0]["node"], "edge-a")
         self.assertEqual(failed[0]["port"], 18081)
 
+    def test_probe_ports_accepts_custom_inbound_ports(self):
+        seen_ports = []
+
+        def fake_probe(host, port, timeout):
+            seen_ports.append(port)
+            return "open", 7, None
+
+        with patch("linkray.ports.tcp_probe", side_effect=fake_probe):
+            data = probe_ports(
+                [NodeHost("edge-a", "edge-a.example.com")],
+                timeout=0.1,
+                inbound_ports=(("vless_tls", 28080), ("trojan_grpc_tls", 28091)),
+            )
+
+        self.assertEqual(data["total"], 12)
+        self.assertIn(28080, seen_ports)
+        self.assertIn(28091, seen_ports)
+        self.assertNotIn(18080, seen_ports)
+
     def test_write_ports_json_creates_parent_directory(self):
         with tempfile.TemporaryDirectory() as tmp:
             output = Path(tmp) / "nested/ports.json"

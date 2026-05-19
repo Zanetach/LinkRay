@@ -92,6 +92,19 @@ linkray render master \
 linkray validate --path /tmp/linkray-master
 ```
 
+Override inbound ports when an existing environment does not use the defaults:
+
+```bash
+linkray render master \
+  --domain edge-a.example.com \
+  --node edge-a=edge-a.example.com \
+  --inbound vless_tls=28080 \
+  --inbound vless_reality=28081 \
+  --output /tmp/linkray-master
+```
+
+The same `--inbound key=port` flags are supported by `linkray api` and `linkray ports`, so the dashboard Node Info panel can follow production port changes without code edits.
+
 Deploy a rendered master tree on a prepared server:
 
 ```bash

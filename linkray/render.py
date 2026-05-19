@@ -98,13 +98,14 @@ def xhttp_reality_stream(config: LinkRayConfig, path: str) -> dict:
 
 def xray_config(config: LinkRayConfig) -> dict:
     config.validate()
+    ports = config.port_map()
     return {
         "log": {"loglevel": "warning"},
         "inbounds": [
             {
                 "tag": "VLESS TCP TLS",
                 "listen": "0.0.0.0",
-                "port": DEFAULT_PORTS["vless_tls"],
+                "port": ports["vless_tls"],
                 "protocol": "vless",
                 "settings": {"clients": [], "decryption": "none"},
                 "streamSettings": tls_stream(config),
@@ -112,7 +113,7 @@ def xray_config(config: LinkRayConfig) -> dict:
             {
                 "tag": "VLESS TCP REALITY",
                 "listen": "0.0.0.0",
-                "port": DEFAULT_PORTS["vless_reality"],
+                "port": ports["vless_reality"],
                 "protocol": "vless",
                 "settings": {"clients": [], "decryption": "none"},
                 "streamSettings": reality_stream(config),
@@ -120,7 +121,7 @@ def xray_config(config: LinkRayConfig) -> dict:
             {
                 "tag": "VLESS GRPC REALITY",
                 "listen": "0.0.0.0",
-                "port": DEFAULT_PORTS["vless_grpc_reality"],
+                "port": ports["vless_grpc_reality"],
                 "protocol": "vless",
                 "settings": {"clients": [], "decryption": "none"},
                 "streamSettings": reality_stream(config, network="grpc"),
@@ -128,7 +129,7 @@ def xray_config(config: LinkRayConfig) -> dict:
             {
                 "tag": "Trojan TCP TLS",
                 "listen": "0.0.0.0",
-                "port": DEFAULT_PORTS["trojan_tls"],
+                "port": ports["trojan_tls"],
                 "protocol": "trojan",
                 "settings": {"clients": []},
                 "streamSettings": tls_stream(config),
@@ -136,7 +137,7 @@ def xray_config(config: LinkRayConfig) -> dict:
             {
                 "tag": "VMess TCP TLS",
                 "listen": "0.0.0.0",
-                "port": DEFAULT_PORTS["vmess_tls"],
+                "port": ports["vmess_tls"],
                 "protocol": "vmess",
                 "settings": {"clients": []},
                 "streamSettings": tls_stream(config),
@@ -144,14 +145,14 @@ def xray_config(config: LinkRayConfig) -> dict:
             {
                 "tag": "Shadowsocks TCP UDP",
                 "listen": "0.0.0.0",
-                "port": DEFAULT_PORTS["shadowsocks"],
+                "port": ports["shadowsocks"],
                 "protocol": "shadowsocks",
                 "settings": {"clients": [], "network": "tcp,udp"},
             },
             {
                 "tag": "VLESS WS TLS",
                 "listen": "0.0.0.0",
-                "port": DEFAULT_PORTS["vless_ws_tls"],
+                "port": ports["vless_ws_tls"],
                 "protocol": "vless",
                 "settings": {"clients": [], "decryption": "none"},
                 "streamSettings": ws_tls_stream(config, "/vless-ws"),
@@ -159,7 +160,7 @@ def xray_config(config: LinkRayConfig) -> dict:
             {
                 "tag": "VLESS GRPC TLS",
                 "listen": "0.0.0.0",
-                "port": DEFAULT_PORTS["vless_grpc_tls"],
+                "port": ports["vless_grpc_tls"],
                 "protocol": "vless",
                 "settings": {"clients": [], "decryption": "none"},
                 "streamSettings": grpc_tls_stream(config, config.grpc_service_name),
@@ -167,7 +168,7 @@ def xray_config(config: LinkRayConfig) -> dict:
             {
                 "tag": "VLESS XHTTP REALITY",
                 "listen": "0.0.0.0",
-                "port": DEFAULT_PORTS["vless_xhttp_reality"],
+                "port": ports["vless_xhttp_reality"],
                 "protocol": "vless",
                 "settings": {"clients": [], "decryption": "none"},
                 "streamSettings": xhttp_reality_stream(config, "/vless-xhttp"),
@@ -175,7 +176,7 @@ def xray_config(config: LinkRayConfig) -> dict:
             {
                 "tag": "VMess WS TLS",
                 "listen": "0.0.0.0",
-                "port": DEFAULT_PORTS["vmess_ws_tls"],
+                "port": ports["vmess_ws_tls"],
                 "protocol": "vmess",
                 "settings": {"clients": []},
                 "streamSettings": ws_tls_stream(config, "/vmess-ws"),
@@ -183,7 +184,7 @@ def xray_config(config: LinkRayConfig) -> dict:
             {
                 "tag": "VMess HTTPUpgrade TLS",
                 "listen": "0.0.0.0",
-                "port": DEFAULT_PORTS["vmess_httpupgrade_tls"],
+                "port": ports["vmess_httpupgrade_tls"],
                 "protocol": "vmess",
                 "settings": {"clients": []},
                 "streamSettings": httpupgrade_tls_stream(config, "/vmess-httpupgrade"),
@@ -191,7 +192,7 @@ def xray_config(config: LinkRayConfig) -> dict:
             {
                 "tag": "Trojan GRPC TLS",
                 "listen": "0.0.0.0",
-                "port": DEFAULT_PORTS["trojan_grpc_tls"],
+                "port": ports["trojan_grpc_tls"],
                 "protocol": "trojan",
                 "settings": {"clients": []},
                 "streamSettings": grpc_tls_stream(config, "trojan-grpc"),
@@ -369,8 +370,10 @@ def default_nodes(config: LinkRayConfig) -> list[NodeHost]:
     return [NodeHost("primary", config.domain)]
 
 
-def linkray_api_service(nodes: Sequence[NodeHost]) -> str:
-    flags = " ".join(f"--node {node.name}={node.domain}" for node in nodes)
+def linkray_api_service(nodes: Sequence[NodeHost], config: LinkRayConfig) -> str:
+    node_flags = [f"--node {shlex.quote(f'{node.name}={node.domain}')}" for node in nodes]
+    inbound_flags = [f"--inbound {shlex.quote(f'{key}={port}')}" for key, port in config.inbound_ports]
+    flags = " ".join([*node_flags, *inbound_flags])
     return f"""[Unit]
 Description=LinkRay node status API
 After=network-online.target
@@ -434,6 +437,7 @@ def sql_string(value: object) -> str:
 
 def host_rows(config: LinkRayConfig, nodes: Sequence[NodeHost]) -> list[tuple[object, ...]]:
     rows: list[tuple[object, ...]] = []
+    ports = config.port_map()
     for node in nodes:
         node.validate()
         rows.extend(
@@ -441,7 +445,7 @@ def host_rows(config: LinkRayConfig, nodes: Sequence[NodeHost]) -> list[tuple[ob
                 (
                     f"{node.name}-VLESS_TLS_Vision",
                     node.domain,
-                    DEFAULT_PORTS["vless_tls"],
+                    ports["vless_tls"],
                     "VLESS TCP TLS",
                     node.domain,
                     None,
@@ -460,7 +464,7 @@ def host_rows(config: LinkRayConfig, nodes: Sequence[NodeHost]) -> list[tuple[ob
                 (
                     f"{node.name}-VLESS_Reality_Vision",
                     node.domain,
-                    DEFAULT_PORTS["vless_reality"],
+                    ports["vless_reality"],
                     "VLESS TCP REALITY",
                     config.reality_server_name,
                     None,
@@ -479,7 +483,7 @@ def host_rows(config: LinkRayConfig, nodes: Sequence[NodeHost]) -> list[tuple[ob
                 (
                     f"{node.name}-VLESS_Reality_gRPC",
                     node.domain,
-                    DEFAULT_PORTS["vless_grpc_reality"],
+                    ports["vless_grpc_reality"],
                     "VLESS GRPC REALITY",
                     config.reality_server_name,
                     None,
@@ -498,7 +502,7 @@ def host_rows(config: LinkRayConfig, nodes: Sequence[NodeHost]) -> list[tuple[ob
                 (
                     f"{node.name}-Trojan_TLS",
                     node.domain,
-                    DEFAULT_PORTS["trojan_tls"],
+                    ports["trojan_tls"],
                     "Trojan TCP TLS",
                     node.domain,
                     None,
@@ -517,7 +521,7 @@ def host_rows(config: LinkRayConfig, nodes: Sequence[NodeHost]) -> list[tuple[ob
                 (
                     f"{node.name}-VMess_TLS",
                     node.domain,
-                    DEFAULT_PORTS["vmess_tls"],
+                    ports["vmess_tls"],
                     "VMess TCP TLS",
                     node.domain,
                     None,
@@ -536,7 +540,7 @@ def host_rows(config: LinkRayConfig, nodes: Sequence[NodeHost]) -> list[tuple[ob
                 (
                     f"{node.name}-Shadowsocks",
                     node.domain,
-                    DEFAULT_PORTS["shadowsocks"],
+                    ports["shadowsocks"],
                     "Shadowsocks TCP UDP",
                     None,
                     None,
@@ -555,7 +559,7 @@ def host_rows(config: LinkRayConfig, nodes: Sequence[NodeHost]) -> list[tuple[ob
                 (
                     f"{node.name}-VLESS_WS_TLS",
                     node.domain,
-                    DEFAULT_PORTS["vless_ws_tls"],
+                    ports["vless_ws_tls"],
                     "VLESS WS TLS",
                     node.domain,
                     node.domain,
@@ -574,7 +578,7 @@ def host_rows(config: LinkRayConfig, nodes: Sequence[NodeHost]) -> list[tuple[ob
                 (
                     f"{node.name}-VLESS_gRPC_TLS",
                     node.domain,
-                    DEFAULT_PORTS["vless_grpc_tls"],
+                    ports["vless_grpc_tls"],
                     "VLESS GRPC TLS",
                     node.domain,
                     None,
@@ -593,7 +597,7 @@ def host_rows(config: LinkRayConfig, nodes: Sequence[NodeHost]) -> list[tuple[ob
                 (
                     f"{node.name}-VLESS_XHTTP_Reality",
                     node.domain,
-                    DEFAULT_PORTS["vless_xhttp_reality"],
+                    ports["vless_xhttp_reality"],
                     "VLESS XHTTP REALITY",
                     config.reality_server_name,
                     None,
@@ -612,7 +616,7 @@ def host_rows(config: LinkRayConfig, nodes: Sequence[NodeHost]) -> list[tuple[ob
                 (
                     f"{node.name}-VMess_WS_TLS",
                     node.domain,
-                    DEFAULT_PORTS["vmess_ws_tls"],
+                    ports["vmess_ws_tls"],
                     "VMess WS TLS",
                     node.domain,
                     node.domain,
@@ -631,7 +635,7 @@ def host_rows(config: LinkRayConfig, nodes: Sequence[NodeHost]) -> list[tuple[ob
                 (
                     f"{node.name}-VMess_HTTPUpgrade_TLS",
                     node.domain,
-                    DEFAULT_PORTS["vmess_httpupgrade_tls"],
+                    ports["vmess_httpupgrade_tls"],
                     "VMess HTTPUpgrade TLS",
                     node.domain,
                     node.domain,
@@ -650,7 +654,7 @@ def host_rows(config: LinkRayConfig, nodes: Sequence[NodeHost]) -> list[tuple[ob
                 (
                     f"{node.name}-Trojan_gRPC_TLS",
                     node.domain,
-                    DEFAULT_PORTS["trojan_grpc_tls"],
+                    ports["trojan_grpc_tls"],
                     "Trojan GRPC TLS",
                     node.domain,
                     None,
@@ -731,7 +735,7 @@ def render_master(
         write_text(output / "opt/marzban/.env", marzban_env(config)),
         write_text(output / "opt/marzban/docker-compose.yml", master_compose()),
         write_text(output / "etc/nginx/conf.d/marzban-panel.conf", nginx_panel(config)),
-        write_text(output / "etc/systemd/system/linkray-api.service", linkray_api_service(effective_nodes)),
+        write_text(output / "etc/systemd/system/linkray-api.service", linkray_api_service(effective_nodes, config)),
         write_text(output / "etc/systemd/system/linkray-egern.service", linkray_egern_service(config)),
         write_text(output / "etc/systemd/system/linkray-sub-auto.service", linkray_sub_auto_service(config)),
         write_text(output / "var/lib/marzban/linkray/hosts.sql", hosts_sql(config, effective_nodes)),
@@ -766,9 +770,9 @@ def validate_rendered(path: Path) -> list[str]:
         else:
             inbounds = data.get("inbounds", [])
             ports = {item.get("port") for item in inbounds}
-            expected = set(DEFAULT_PORTS.values())
-            if ports != expected:
-                errors.append(f"{xray_path}: expected ports {sorted(expected)}, got {sorted(ports)}")
+            expected_count = len(DEFAULT_PORTS)
+            if len(inbounds) != expected_count or len(ports) != expected_count:
+                errors.append(f"{xray_path}: expected {expected_count} unique inbound ports, got {sorted(ports)}")
     hosts_sql_path = path / "var/lib/marzban/linkray/hosts.sql"
     if xray_path.exists() and not hosts_sql_path.exists():
         errors.append(f"{path}: missing var/lib/marzban/linkray/hosts.sql")

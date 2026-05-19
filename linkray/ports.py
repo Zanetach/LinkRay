@@ -8,24 +8,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Sequence
 
-from .config import DEFAULT_PORTS, NodeHost
+from .config import DEFAULT_PORTS, PORT_KEYS, NodeHost
 from .render import ACTIVE_INBOUND_TAGS
-
-
-PORT_KEYS = (
-    "vless_tls",
-    "vless_reality",
-    "vless_grpc_reality",
-    "trojan_tls",
-    "vmess_tls",
-    "shadowsocks",
-    "vless_ws_tls",
-    "vless_grpc_tls",
-    "vless_xhttp_reality",
-    "vmess_ws_tls",
-    "vmess_httpupgrade_tls",
-    "trojan_grpc_tls",
-)
 
 
 @dataclass(frozen=True)
@@ -50,6 +34,21 @@ class PortProbeResult:
         }
 
 
+@dataclass(frozen=True)
+class PortSpec:
+    key: str
+    inbound_tag: str
+    port: int
+
+
+def port_specs(inbound_ports: Sequence[tuple[str, int]] | None = None) -> list[PortSpec]:
+    tags = dict(zip(PORT_KEYS, ACTIVE_INBOUND_TAGS))
+    ports = dict(DEFAULT_PORTS)
+    if inbound_ports:
+        ports.update(dict(inbound_ports))
+    return [PortSpec(key=key, inbound_tag=tags[key], port=ports[key]) for key in PORT_KEYS]
+
+
 def tcp_probe(host: str, port: int, timeout: float) -> tuple[str, int | None, str | None]:
     start = time.monotonic()
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -63,20 +62,23 @@ def tcp_probe(host: str, port: int, timeout: float) -> tuple[str, int | None, st
     return "open", max(0, round((time.monotonic() - start) * 1000)), None
 
 
-def probe_ports(nodes: Sequence[NodeHost], timeout: float = 2.0) -> dict[str, object]:
+def probe_ports(
+    nodes: Sequence[NodeHost],
+    timeout: float = 2.0,
+    inbound_ports: Sequence[tuple[str, int]] | None = None,
+) -> dict[str, object]:
     results: list[PortProbeResult] = []
-    tags = dict(zip(PORT_KEYS, ACTIVE_INBOUND_TAGS))
+    specs = port_specs(inbound_ports)
     for node in nodes:
         node.validate()
-        for key in PORT_KEYS:
-            port = DEFAULT_PORTS[key]
-            status, latency_ms, error = tcp_probe(node.domain, port, timeout=timeout)
+        for spec in specs:
+            status, latency_ms, error = tcp_probe(node.domain, spec.port, timeout=timeout)
             results.append(
                 PortProbeResult(
                     node=node.name,
                     domain=node.domain,
-                    inbound_tag=tags[key],
-                    port=port,
+                    inbound_tag=spec.inbound_tag,
+                    port=spec.port,
                     status=status,
                     latency_ms=latency_ms,
                     error=error,
@@ -93,8 +95,13 @@ def probe_ports(nodes: Sequence[NodeHost], timeout: float = 2.0) -> dict[str, ob
     }
 
 
-def write_ports_json(nodes: Sequence[NodeHost], output: Path, timeout: float = 2.0) -> Path:
+def write_ports_json(
+    nodes: Sequence[NodeHost],
+    output: Path,
+    timeout: float = 2.0,
+    inbound_ports: Sequence[tuple[str, int]] | None = None,
+) -> Path:
     output.parent.mkdir(parents=True, exist_ok=True)
-    data = probe_ports(nodes, timeout=timeout)
+    data = probe_ports(nodes, timeout=timeout, inbound_ports=inbound_ports)
     output.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return output

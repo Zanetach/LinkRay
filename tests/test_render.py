@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from linkray.config import DEFAULT_PORTS, LinkRayConfig, NodeHost, parse_node_host
+from linkray.config import DEFAULT_PORTS, LinkRayConfig, NodeHost, parse_inbound_ports, parse_node_host
 from linkray.install import install_master, install_node
 from linkray.render import (
     first_existing_path,
@@ -51,6 +51,28 @@ class RenderTests(unittest.TestCase):
         self.assertEqual(by_tag["VMess HTTPUpgrade TLS"]["streamSettings"]["network"], "httpupgrade")
         self.assertNotIn("host", by_tag["VMess HTTPUpgrade TLS"]["streamSettings"]["httpupgradeSettings"])
         self.assertEqual(by_tag["Trojan GRPC TLS"]["streamSettings"]["network"], "grpc")
+
+    def test_custom_inbound_ports_apply_to_xray_hosts_and_api_service(self):
+        config = LinkRayConfig(
+            domain="edge-a.example.com",
+            inbound_ports=parse_inbound_ports(["vless_tls=28080", "trojan_grpc_tls=28091"]),
+        )
+        data = xray_config(config)
+        by_tag = {item["tag"]: item for item in data["inbounds"]}
+        self.assertEqual(by_tag["VLESS TCP TLS"]["port"], 28080)
+        self.assertEqual(by_tag["Trojan GRPC TLS"]["port"], 28091)
+
+        rows = host_rows(config, [NodeHost("edge-a", "edge-a.example.com")])
+        self.assertIn(28080, [row[2] for row in rows])
+        self.assertIn(28091, [row[2] for row in rows])
+
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp)
+            render_master(config, output, nodes=[NodeHost("edge-a", "edge-a.example.com")])
+            service = (output / "etc/systemd/system/linkray-api.service").read_text()
+            self.assertIn("--inbound vless_tls=28080", service)
+            self.assertIn("--inbound trojan_grpc_tls=28091", service)
+            self.assertEqual(validate_rendered(output), [])
 
     def test_render_master_writes_expected_files(self):
         with tempfile.TemporaryDirectory() as tmp:
