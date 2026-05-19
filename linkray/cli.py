@@ -7,9 +7,11 @@ from .api import serve_api
 from .bootstrap import bootstrap_master, bootstrap_node
 from .config import LinkRayConfig, NodeHost, parse_node_host
 from .doctor import exit_code, run_doctor
+from .egern import serve_egern
 from .install import install_master, install_node
 from .ports import write_ports_json
 from .render import render_master, render_node, validate_rendered
+from .sub_auto import serve_sub_auto
 
 
 def parse_nodes(values: list[str] | None, default_domain: str | None = None) -> list[NodeHost]:
@@ -118,6 +120,21 @@ def add_api_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParse
     api.add_argument("--ttl", default=60.0, type=float)
 
 
+def add_egern_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    egern = subparsers.add_parser("egern", help="Run the Egern subscription adapter")
+    egern.add_argument("--listen", default="127.0.0.1")
+    egern.add_argument("--port", default=61992, type=int)
+    egern.add_argument("--marzban-url", default="http://127.0.0.1:8000")
+
+
+def add_sub_auto_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    sub_auto = subparsers.add_parser("sub-auto", help="Run automatic subscription format routing")
+    sub_auto.add_argument("--listen", default="127.0.0.1")
+    sub_auto.add_argument("--port", default=61993, type=int)
+    sub_auto.add_argument("--marzban-url", default="http://127.0.0.1:8000")
+    sub_auto.add_argument("--egern-url", default="http://127.0.0.1:61992")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="linkray")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -126,6 +143,8 @@ def build_parser() -> argparse.ArgumentParser:
     add_bootstrap_parser(subparsers)
     add_ports_parser(subparsers)
     add_api_parser(subparsers)
+    add_egern_parser(subparsers)
+    add_sub_auto_parser(subparsers)
 
     validate = subparsers.add_parser("validate", help="Validate rendered deployment files")
     validate.add_argument("--path", required=True, type=Path)
@@ -210,6 +229,12 @@ def main(argv: list[str] | None = None) -> int:
             NodeHost("edge-b", "edge-b.example.com"),
         ]
         return serve_api(args)
+
+    if args.command == "egern":
+        return serve_egern(args)
+
+    if args.command == "sub-auto":
+        return serve_sub_auto(args)
 
     if args.command == "bootstrap" and args.role == "master":
         actions = bootstrap_master(

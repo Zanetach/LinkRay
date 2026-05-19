@@ -70,11 +70,14 @@ class RenderTests(unittest.TestCase):
             self.assertIn("opt/marzban/.env", relative)
             self.assertIn("etc/nginx/conf.d/marzban-panel.conf", relative)
             self.assertIn("etc/systemd/system/linkray-api.service", relative)
+            self.assertIn("etc/systemd/system/linkray-egern.service", relative)
+            self.assertIn("etc/systemd/system/linkray-sub-auto.service", relative)
             self.assertIn("var/lib/marzban/linkray/hosts.sql", relative)
             self.assertIn("var/lib/marzban/linkray/patches/clash.py", relative)
             self.assertNotIn("var/lib/marzban/linkray/public/ports.html", relative)
             self.assertNotIn("var/lib/marzban/linkray/public/ports.json", relative)
             self.assertIn("var/lib/marzban/templates/clash/default.yml", relative)
+            self.assertIn("var/lib/marzban/templates/subscription/index.html", relative)
             self.assertIn("var/lib/marzban/dashboard-patches/index.linkray.js", relative)
             self.assertEqual(validate_rendered(output), [])
 
@@ -85,6 +88,11 @@ class RenderTests(unittest.TestCase):
             self.assertIn("/var/lib/marzban/linkray/patches/clash.py:/code/app/subscription/clash.py:ro", compose)
             self.assertIn("index.linkray.js", compose)
             nginx = (output / "etc/nginx/conf.d/marzban-panel.conf").read_text()
+            self.assertIn("location ~ ^/sub/[^/]+/?$", nginx)
+            self.assertIn("proxy_pass http://127.0.0.1:61993", nginx)
+            self.assertIn("location ~ ^/sub/[^/]+/egern/?$", nginx)
+            self.assertIn("proxy_pass http://127.0.0.1:61992", nginx)
+            self.assertIn("location = /statics/index.linkray.js", nginx)
             self.assertIn("location /api/linkray/", nginx)
             self.assertIn("location = /linkray/ports.html", nginx)
             self.assertIn("return 302 /dashboard/", nginx)
@@ -93,6 +101,11 @@ class RenderTests(unittest.TestCase):
             service = (output / "etc/systemd/system/linkray-api.service").read_text()
             self.assertIn("ExecStart=/usr/local/bin/linkray api --listen 127.0.0.1 --port 61990", service)
             self.assertIn("--node edge-a=edge-a.example.com --node edge-b=edge-b.example.com", service)
+            egern_service = (output / "etc/systemd/system/linkray-egern.service").read_text()
+            self.assertIn("ExecStart=/usr/local/bin/linkray egern --listen 127.0.0.1 --port 61992", egern_service)
+            auto_service = (output / "etc/systemd/system/linkray-sub-auto.service").read_text()
+            self.assertIn("ExecStart=/usr/local/bin/linkray sub-auto --listen 127.0.0.1 --port 61993", auto_service)
+            self.assertIn("--egern-url http://127.0.0.1:61992", auto_service)
 
     def test_dashboard_patch_injects_node_info_panel(self):
         for patch_path in [
@@ -108,9 +121,24 @@ class RenderTests(unittest.TestCase):
                 self.assertIn("PAGE_SIZE=10", patch)
                 self.assertIn("下一页", patch)
                 self.assertIn("linkray-node-info-footer", patch)
-                self.assertIn("Clash for Windows", patch)
-                self.assertIn("base+'/clash'", patch)
-                self.assertNotIn("Clash 旧版", patch)
+                self.assertIn("自动识别订阅", patch)
+                self.assertIn("base+'/egern'", patch)
+                self.assertNotIn("Clash" + " for Windows", patch)
+                self.assertNotIn("base+'/clash'", patch)
+                self.assertNotIn("Clash " + "旧版", patch)
+
+    def test_subscription_page_lists_auto_first_and_no_clash_for_windows(self):
+        for page_path in [
+            Path("patches/marzban-subscription-page/current/index.html"),
+            Path("linkray/assets/patches/marzban-subscription-page/current/index.html"),
+        ]:
+            with self.subTest(page=str(page_path)):
+                html = page_path.read_text()
+
+                self.assertIn("自动识别订阅", html)
+                self.assertIn("base + '/egern'", html)
+                self.assertLess(html.index("['自动识别订阅', base]"), html.index("['Clash/Mihomo', base + '/clash-meta']"))
+                self.assertNotIn("Clash" + " for Windows", html)
 
     def test_dashboard_html_adds_protocol_inbound_details_without_touching_app_bundle(self):
         for html_path in [
@@ -128,7 +156,7 @@ class RenderTests(unittest.TestCase):
                 self.assertIn("TCP TLS / Reality / gRPC Reality / WS TLS / gRPC TLS / XHTTP Reality", html)
                 self.assertNotIn("linkrayProtocolCardDetails failed hard", html)
 
-    def test_clash_template_uses_clash_for_windows_compatible_dns_policy(self):
+    def test_clash_template_uses_scalar_dns_policy(self):
         for template_path in [
             Path("templates/marzban/clash/default.yml"),
             Path("linkray/assets/templates/marzban/clash/default.yml"),
@@ -215,6 +243,8 @@ class RenderTests(unittest.TestCase):
             self.assertTrue((root / "var/lib/marzban/xray_config.json").exists())
             self.assertTrue((root / "var/lib/marzban/linkray/hosts.sql").exists())
             self.assertTrue((root / "opt/marzban/.env").exists())
+            self.assertTrue((root / "etc/systemd/system/linkray-egern.service").exists())
+            self.assertTrue((root / "etc/systemd/system/linkray-sub-auto.service").exists())
 
     def test_install_node_apply_copies_compose(self):
         with tempfile.TemporaryDirectory() as tmp:

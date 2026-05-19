@@ -13,13 +13,14 @@ dependencies = []
 [project.scripts]
 linkray = "linkray.cli:main"
 
-[tool.setuptools]
-packages = ["linkray"]
+[tool.setuptools.packages.find]
+include = ["linkray", "linkray.*"]
 
 [tool.setuptools.package-data]
 linkray = [
   "assets/templates/marzban/clash/default.yml",
   "assets/patches/marzban-subscription/current/clash.py",
+  "assets/patches/marzban-subscription-page/current/index.html",
   "assets/patches/marzban-dashboard/current/index.html",
   "assets/patches/marzban-dashboard/current/index.linkray.js",
   "assets/patches/marzban-dashboard/current/index.original.js",

@@ -251,6 +251,44 @@ def nginx_panel(config: LinkRayConfig) -> str:
     ssl_certificate {config.cert_file};
     ssl_certificate_key {config.key_file};
 
+    location = /statics/{DASHBOARD_PATCH_JS} {{
+        alias /var/lib/marzban/dashboard-patches/{DASHBOARD_PATCH_JS};
+        default_type application/javascript;
+        add_header Cache-Control "no-store";
+    }}
+
+    location = /statics/index.a1cce931.js {{
+        alias /var/lib/marzban/dashboard-patches/index.original.js;
+        default_type application/javascript;
+        add_header Cache-Control "no-store";
+    }}
+
+    location ~ ^/sub/[^/]+/?$ {{
+        proxy_pass http://127.0.0.1:61993;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header User-Agent $http_user_agent;
+        proxy_set_header Accept $http_accept;
+        proxy_set_header Accept-Language $http_accept_language;
+        add_header Cache-Control "no-store";
+    }}
+
+    location ~ ^/sub/[^/]+/egern/?$ {{
+        proxy_pass http://127.0.0.1:61992;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header User-Agent $http_user_agent;
+        proxy_set_header Accept $http_accept;
+        proxy_set_header Accept-Language $http_accept_language;
+        add_header Cache-Control "no-store";
+    }}
+
     location / {{
         proxy_pass http://127.0.0.1:{config.marzban_http_port};
         proxy_http_version 1.1;
@@ -341,6 +379,40 @@ Wants=network-online.target
 [Service]
 Type=simple
 ExecStart=/usr/local/bin/linkray api --listen 127.0.0.1 --port 61990 {flags}
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+"""
+
+
+def linkray_egern_service(config: LinkRayConfig) -> str:
+    return f"""[Unit]
+Description=LinkRay Egern subscription adapter
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/linkray egern --listen 127.0.0.1 --port 61992 --marzban-url http://127.0.0.1:{config.marzban_http_port}
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+"""
+
+
+def linkray_sub_auto_service(config: LinkRayConfig) -> str:
+    return f"""[Unit]
+Description=LinkRay automatic subscription format router
+After=network-online.target linkray-egern.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/linkray sub-auto --listen 127.0.0.1 --port 61993 --marzban-url http://127.0.0.1:{config.marzban_http_port} --egern-url http://127.0.0.1:61992
 Restart=always
 RestartSec=3
 
@@ -660,9 +732,15 @@ def render_master(
         write_text(output / "opt/marzban/docker-compose.yml", master_compose()),
         write_text(output / "etc/nginx/conf.d/marzban-panel.conf", nginx_panel(config)),
         write_text(output / "etc/systemd/system/linkray-api.service", linkray_api_service(effective_nodes)),
+        write_text(output / "etc/systemd/system/linkray-egern.service", linkray_egern_service(config)),
+        write_text(output / "etc/systemd/system/linkray-sub-auto.service", linkray_sub_auto_service(config)),
         write_text(output / "var/lib/marzban/linkray/hosts.sql", hosts_sql(config, effective_nodes)),
         copy_file(TEMPLATE_ROOT / "marzban/clash/default.yml", output / "var/lib/marzban/templates/clash/default.yml"),
         copy_file(PATCH_ROOT / "marzban-subscription/current/clash.py", output / "var/lib/marzban/linkray/patches/clash.py"),
+        copy_file(
+            PATCH_ROOT / "marzban-subscription-page/current/index.html",
+            output / "var/lib/marzban/templates/subscription/index.html",
+        ),
         copy_file(PATCH_ROOT / "marzban-dashboard/current/index.html", output / "var/lib/marzban/dashboard-patches/index.html"),
         copy_file(PATCH_ROOT / "marzban-dashboard/current/index.linkray.js", output / f"var/lib/marzban/dashboard-patches/{DASHBOARD_PATCH_JS}"),
         copy_file(PATCH_ROOT / "marzban-dashboard/current/index.original.js", output / "var/lib/marzban/dashboard-patches/index.original.js"),
@@ -694,9 +772,15 @@ def validate_rendered(path: Path) -> list[str]:
     hosts_sql_path = path / "var/lib/marzban/linkray/hosts.sql"
     if xray_path.exists() and not hosts_sql_path.exists():
         errors.append(f"{path}: missing var/lib/marzban/linkray/hosts.sql")
-    api_service_path = path / "etc/systemd/system/linkray-api.service"
-    if (path / "opt/marzban/docker-compose.yml").exists() and not api_service_path.exists():
-        errors.append(f"{path}: missing etc/systemd/system/linkray-api.service")
+    service_paths = [
+        path / "etc/systemd/system/linkray-api.service",
+        path / "etc/systemd/system/linkray-egern.service",
+        path / "etc/systemd/system/linkray-sub-auto.service",
+    ]
+    if (path / "opt/marzban/docker-compose.yml").exists():
+        for service_path in service_paths:
+            if not service_path.exists():
+                errors.append(f"{path}: missing {service_path.relative_to(path)}")
     clash_patch_path = path / "var/lib/marzban/linkray/patches/clash.py"
     if (path / "opt/marzban/docker-compose.yml").exists() and not clash_patch_path.exists():
         errors.append(f"{path}: missing var/lib/marzban/linkray/patches/clash.py")

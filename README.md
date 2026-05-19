@@ -24,13 +24,20 @@ LinkRay targets this baseline:
   - VMess HTTPUpgrade TLS
   - Trojan gRPC TLS
 - Clash/Mihomo template with policy groups and routing rules.
+- Subscription format routing:
+  - `/sub/<token>` is an automatic entrypoint that keeps browser, Egern, Clash/Mihomo, sing-box, and generic Base64 clients on the right response format when their client headers are identifiable
+  - `/sub/<token>/egern` exposes an Egern-specific proxy resource for clients that do not identify themselves reliably
 - Marzban dashboard patch:
-  - the user Link button shows Clash/Mihomo, sing-box, Base64, v2ray-json, and Clash for Windows subscription links
+  - the user Link button shows 自动识别订阅 first, then Clash/Mihomo, Egern, sing-box, and v2ray-json links
   - Create User protocol cards show the concrete LinkRay inbound forms under Vmess, Vless, Trojan, and Shadowsocks
   - Users page embeds Node Info backed by `linkray api`, with 10 rows per page and manual refresh
 - Compatibility routes:
   - `/linkray/ports.html` redirects to `/dashboard/`
   - `/linkray/ports.json` proxies to `/api/linkray/nodes`
+- Sidecar services:
+  - `linkray-api.service` reports node port status
+  - `linkray-egern.service` converts Marzban subscriptions into Egern YAML
+  - `linkray-sub-auto.service` routes the base subscription URL to the best available format
 
 sing-box, Hysteria2, TUIC, and AnyTLS are intentionally out of scope for v1. They need a separate stats and subscription integration layer before they can fit the Marzban-first model.
 

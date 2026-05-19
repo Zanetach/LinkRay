@@ -93,7 +93,11 @@ def linkray_api_commands() -> list[str]:
         "rm -f /var/lib/marzban/linkray/public/ports.html /var/lib/marzban/linkray/public/ports.json",
         "systemctl daemon-reload",
         "systemctl enable --now linkray-api",
+        "systemctl enable --now linkray-egern",
+        "systemctl enable --now linkray-sub-auto",
         "systemctl restart linkray-api",
+        "systemctl restart linkray-egern",
+        "systemctl restart linkray-sub-auto",
     ]
 
 

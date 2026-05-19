@@ -19,8 +19,13 @@ class InstallerTests(unittest.TestCase):
         self.assertNotIn("index.linkray.20260518061008.js", script)
         self.assertIn("var/lib/marzban/linkray/hosts.sql", script)
         self.assertIn("var/lib/marzban/linkray/patches/clash.py", script)
+        self.assertIn("var/lib/marzban/templates/subscription/index.html", script)
         self.assertIn("etc/systemd/system/linkray-api.service", script)
+        self.assertIn("etc/systemd/system/linkray-egern.service", script)
+        self.assertIn("etc/systemd/system/linkray-sub-auto.service", script)
         self.assertIn("systemctl enable --now linkray-api", script)
+        self.assertIn("systemctl enable --now linkray-egern", script)
+        self.assertIn("systemctl enable --now linkray-sub-auto", script)
 
 
 if __name__ == "__main__":
