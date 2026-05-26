@@ -200,6 +200,8 @@ class RenderTests(unittest.TestCase):
                 text = patch_path.read_text()
                 self.assertIn("def proxy_server_domains", text)
                 self.assertIn('"proxy_server_domains": self.proxy_server_domains()', text)
+                self.assertIn("def resolve_proxy_server", text)
+                self.assertIn('"conf": self.resolved_proxy_data()', text)
 
     def test_marzban_env_contains_directly_usable_defaults(self):
         env = marzban_env(

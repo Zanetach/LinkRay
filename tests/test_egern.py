@@ -1,8 +1,9 @@
 import base64
 import json
 import unittest
+from unittest.mock import patch
 
-from linkray.egern import build_egern_yaml, convert_link
+from linkray.egern import build_egern_yaml, convert_link, resolve_server_address
 
 
 def b64(value: str) -> str:
@@ -10,6 +11,15 @@ def b64(value: str) -> str:
 
 
 class EgernTests(unittest.TestCase):
+    def test_resolve_server_address_prefers_ipv4_address(self):
+        with patch("linkray.egern.socket.getaddrinfo", return_value=[(None, None, None, None, ("203.0.113.10", 0))]):
+            self.assertEqual(resolve_server_address("edge.example.com"), "203.0.113.10")
+
+    def test_resolve_server_address_keeps_ip_literals(self):
+        with patch("linkray.egern.socket.getaddrinfo") as getaddrinfo:
+            self.assertEqual(resolve_server_address("198.51.100.20"), "198.51.100.20")
+            getaddrinfo.assert_not_called()
+
     def test_build_egern_yaml_filters_unsupported_protocols(self):
         vmess = {
             "ps": "vmess-ws",
@@ -33,9 +43,11 @@ class EgernTests(unittest.TestCase):
         )
         payload = base64.b64encode(links.encode())
 
-        output = build_egern_yaml(payload)
+        with patch("linkray.egern.socket.getaddrinfo", return_value=[(None, None, None, None, ("203.0.113.10", 0))]):
+            output = build_egern_yaml(payload)
 
         self.assertIn("proxies:", output)
+        self.assertIn('server: "203.0.113.10"', output)
         self.assertIn("- vless:", output)
         self.assertIn("- trojan:", output)
         self.assertIn("- vmess:", output)

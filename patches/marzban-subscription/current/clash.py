@@ -1,6 +1,7 @@
 import copy
 import ipaddress
 import json
+import socket
 from random import choice
 from uuid import UUID
 
@@ -52,7 +53,7 @@ class ClashConfiguration(object):
                 render_template(
                     CLASH_SUBSCRIPTION_TEMPLATE,
                     {
-                        "conf": self.data,
+                        "conf": self.resolved_proxy_data(),
                         "proxy_remarks": self.proxy_remarks,
                         "proxy_server_domains": self.proxy_server_domains(),
                     }
@@ -94,6 +95,25 @@ class ClashConfiguration(object):
             if server not in domains:
                 domains.append(server)
         return domains
+
+    def resolve_proxy_server(self, server):
+        try:
+            ipaddress.ip_address(server)
+            return server
+        except ValueError:
+            pass
+        try:
+            return socket.gethostbyname(server)
+        except OSError:
+            return server
+
+    def resolved_proxy_data(self):
+        data = copy.deepcopy(self.data)
+        for proxy in data.get('proxies', []):
+            server = proxy.get('server') if isinstance(proxy, dict) else None
+            if isinstance(server, str) and server:
+                proxy['server'] = self.resolve_proxy_server(server)
+        return data
 
     def http_config(
             self,

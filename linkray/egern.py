@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import argparse
 import base64
+import ipaddress
 import json
 import re
+import socket
 from collections.abc import Mapping
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
@@ -84,10 +86,26 @@ def first_query_value(query: Mapping[str, list[str]], *names: str) -> str | None
     return None
 
 
+def resolve_server_address(host: str) -> str:
+    try:
+        ipaddress.ip_address(host)
+        return host
+    except ValueError:
+        pass
+    try:
+        for item in socket.getaddrinfo(host, None, socket.AF_INET, socket.SOCK_STREAM):
+            address = item[4][0]
+            if address:
+                return address
+    except OSError:
+        return host
+    return host
+
+
 def base_proxy(name: str, host: str, port: int) -> dict[str, Any]:
     return {
         "name": name,
-        "server": host,
+        "server": resolve_server_address(host),
         "port": port,
         "tfo": False,
         "udp_relay": True,
