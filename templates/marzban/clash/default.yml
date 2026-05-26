@@ -9,6 +9,12 @@ ipv6: false
 unified-delay: true
 tcp-concurrent: true
 
+tun:
+  route-exclude-address:
+{% for address in proxy_server_addresses | default([]) %}
+    - "{{ address }}"
+{% endfor %}
+
 profile:
   store-selected: true
   store-fake-ip: false

@@ -56,6 +56,7 @@ class ClashConfiguration(object):
                         "conf": self.resolved_proxy_data(),
                         "proxy_remarks": self.proxy_remarks,
                         "proxy_server_domains": self.proxy_server_domains(),
+                        "proxy_server_addresses": self.proxy_server_addresses(),
                     }
                 ),
                 Loader=yaml.SafeLoader
@@ -96,6 +97,22 @@ class ClashConfiguration(object):
                 domains.append(server)
         return domains
 
+    def proxy_server_addresses(self):
+        addresses = []
+        for proxy in self.data.get('proxies', []):
+            server = proxy.get('server') if isinstance(proxy, dict) else None
+            if not isinstance(server, str) or not server:
+                continue
+            resolved = self.resolve_proxy_server(server)
+            try:
+                ip = ipaddress.ip_address(resolved)
+            except ValueError:
+                continue
+            route_prefix = f"{resolved}/32" if ip.version == 4 else f"{resolved}/128"
+            if route_prefix not in addresses:
+                addresses.append(route_prefix)
+        return addresses
+
     def resolve_proxy_server(self, server):
         try:
             ipaddress.ip_address(server)
@@ -109,10 +126,18 @@ class ClashConfiguration(object):
 
     def resolved_proxy_data(self):
         data = copy.deepcopy(self.data)
+        primary_server = None
+        primary_name = None
         for proxy in data.get('proxies', []):
             server = proxy.get('server') if isinstance(proxy, dict) else None
             if isinstance(server, str) and server:
-                proxy['server'] = self.resolve_proxy_server(server)
+                resolved = self.resolve_proxy_server(server)
+                proxy['server'] = resolved
+                if primary_server is None:
+                    primary_server = resolved
+                    primary_name = proxy.get('name')
+                elif resolved != primary_server and primary_name and 'dialer-proxy' not in proxy:
+                    proxy['dialer-proxy'] = primary_name
         return data
 
     def http_config(

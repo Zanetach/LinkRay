@@ -188,6 +188,8 @@ class RenderTests(unittest.TestCase):
                 self.assertIn('"geosite:cn,private": https://dns.alidns.com/dns-query', text)
                 self.assertNotIn('"geosite:cn,private":\n      -', text)
                 self.assertIn("proxy_server_domains", text)
+                self.assertIn("proxy_server_addresses", text)
+                self.assertIn("route-exclude-address", text)
                 self.assertIn("store-fake-ip: false", text)
                 self.assertNotIn("store-fake-ip: true", text)
 
@@ -200,8 +202,12 @@ class RenderTests(unittest.TestCase):
                 text = patch_path.read_text()
                 self.assertIn("def proxy_server_domains", text)
                 self.assertIn('"proxy_server_domains": self.proxy_server_domains()', text)
+                self.assertIn("def proxy_server_addresses", text)
+                self.assertIn('"proxy_server_addresses": self.proxy_server_addresses()', text)
                 self.assertIn("def resolve_proxy_server", text)
                 self.assertIn('"conf": self.resolved_proxy_data()', text)
+                self.assertIn("'dialer-proxy'", text)
+                self.assertIn("primary_server", text)
 
     def test_marzban_env_contains_directly_usable_defaults(self):
         env = marzban_env(
