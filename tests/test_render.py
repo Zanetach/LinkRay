@@ -188,6 +188,8 @@ class RenderTests(unittest.TestCase):
                 self.assertIn('"geosite:cn,private": https://dns.alidns.com/dns-query', text)
                 self.assertNotIn('"geosite:cn,private":\n      -', text)
                 self.assertIn("proxy_server_domains", text)
+                self.assertIn("store-fake-ip: false", text)
+                self.assertNotIn("store-fake-ip: true", text)
 
     def test_clash_patch_exposes_proxy_server_domains(self):
         for patch_path in [

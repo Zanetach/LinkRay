@@ -41,7 +41,9 @@ class EgernTests(unittest.TestCase):
         self.assertIn("- vmess:", output)
         self.assertIn("- shadowsocks:", output)
         self.assertIn("vless-tls", output)
+        self.assertIn("tfo: false", output)
         self.assertNotIn("vless-reality", output)
+        self.assertNotIn("tfo: true", output)
 
     def test_convert_link_skips_vmess_httpupgrade(self):
         vmess = {

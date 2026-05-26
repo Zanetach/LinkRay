@@ -89,7 +89,7 @@ def base_proxy(name: str, host: str, port: int) -> dict[str, Any]:
         "name": name,
         "server": host,
         "port": port,
-        "tfo": True,
+        "tfo": False,
         "udp_relay": True,
     }
 
