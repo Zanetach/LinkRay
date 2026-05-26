@@ -88,6 +88,9 @@ def runtime_checks(role: str, runner: Runner) -> list[Check]:
     checks.append(service_check("xray", "inactive", runner))
     if role == "master":
         checks.append(service_check("linkray-api", "active", runner))
+        checks.append(service_check("linkray-egern", "active", runner))
+        checks.append(service_check("linkray-sub-auto", "active", runner))
+        checks.append(service_check("linkray-relay", "active", runner))
     checks.append(
         Check(
             "PASS" if has_process(ps_output, "/usr/local/bin/xray run -config stdin:") else "FAIL",
@@ -124,6 +127,9 @@ def file_checks(role: str, root: Path) -> list[Check]:
             "var/lib/marzban/templates/clash/default.yml",
             "etc/nginx/conf.d/marzban-panel.conf",
             "etc/systemd/system/linkray-api.service",
+            "etc/systemd/system/linkray-egern.service",
+            "etc/systemd/system/linkray-sub-auto.service",
+            "etc/systemd/system/linkray-relay.service",
         ]
         recommended = ["var/lib/marzban/linkray/hosts.sql"]
     else:

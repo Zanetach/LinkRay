@@ -23,9 +23,11 @@ class InstallerTests(unittest.TestCase):
         self.assertIn("etc/systemd/system/linkray-api.service", script)
         self.assertIn("etc/systemd/system/linkray-egern.service", script)
         self.assertIn("etc/systemd/system/linkray-sub-auto.service", script)
+        self.assertIn("etc/systemd/system/linkray-relay.service", script)
         self.assertIn("systemctl enable --now linkray-api", script)
         self.assertIn("systemctl enable --now linkray-egern", script)
         self.assertIn("systemctl enable --now linkray-sub-auto", script)
+        self.assertIn("systemctl enable --now linkray-relay", script)
 
 
 if __name__ == "__main__":

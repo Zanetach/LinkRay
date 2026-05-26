@@ -6,7 +6,7 @@ import shlex
 from collections.abc import Sequence
 from pathlib import Path
 
-from .config import DEFAULT_PORTS, LinkRayConfig, NodeHost, RenderResult
+from .config import DEFAULT_PORTS, RELAY_PORT_OFFSET, LinkRayConfig, NodeHost, RenderResult, relay_port
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -424,6 +424,30 @@ WantedBy=multi-user.target
 """
 
 
+def linkray_relay_service(nodes: Sequence[NodeHost], config: LinkRayConfig) -> str:
+    relay_nodes = list(nodes[1:])
+    node_flags = [
+        f"--node {shlex.quote(f'{node.name}={node.domain}:{RELAY_PORT_OFFSET}')}"
+        for node in relay_nodes
+    ]
+    inbound_flags = [f"--inbound {shlex.quote(f'{key}={port}')}" for key, port in config.inbound_ports]
+    flags = " ".join([*node_flags, *inbound_flags])
+    return f"""[Unit]
+Description=LinkRay TCP relay for secondary nodes
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/linkray relay --listen 0.0.0.0 {flags}
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+"""
+
+
 def sql_string(value: object) -> str:
     if value is None:
         return "NULL"
@@ -438,14 +462,17 @@ def sql_string(value: object) -> str:
 def host_rows(config: LinkRayConfig, nodes: Sequence[NodeHost]) -> list[tuple[object, ...]]:
     rows: list[tuple[object, ...]] = []
     ports = config.port_map()
-    for node in nodes:
+    for node_index, node in enumerate(nodes):
         node.validate()
+        address = node.domain if node_index == 0 else config.domain
+        def public_port(key: str) -> int:
+            return relay_port(ports[key], node_index)
         rows.extend(
             [
                 (
                     f"{node.name}-VLESS_TLS_Vision",
-                    node.domain,
-                    ports["vless_tls"],
+                    address,
+                    public_port("vless_tls"),
                     "VLESS TCP TLS",
                     node.domain,
                     None,
@@ -463,8 +490,8 @@ def host_rows(config: LinkRayConfig, nodes: Sequence[NodeHost]) -> list[tuple[ob
                 ),
                 (
                     f"{node.name}-VLESS_Reality_Vision",
-                    node.domain,
-                    ports["vless_reality"],
+                    address,
+                    public_port("vless_reality"),
                     "VLESS TCP REALITY",
                     config.reality_server_name,
                     None,
@@ -482,8 +509,8 @@ def host_rows(config: LinkRayConfig, nodes: Sequence[NodeHost]) -> list[tuple[ob
                 ),
                 (
                     f"{node.name}-VLESS_Reality_gRPC",
-                    node.domain,
-                    ports["vless_grpc_reality"],
+                    address,
+                    public_port("vless_grpc_reality"),
                     "VLESS GRPC REALITY",
                     config.reality_server_name,
                     None,
@@ -501,8 +528,8 @@ def host_rows(config: LinkRayConfig, nodes: Sequence[NodeHost]) -> list[tuple[ob
                 ),
                 (
                     f"{node.name}-Trojan_TLS",
-                    node.domain,
-                    ports["trojan_tls"],
+                    address,
+                    public_port("trojan_tls"),
                     "Trojan TCP TLS",
                     node.domain,
                     None,
@@ -520,8 +547,8 @@ def host_rows(config: LinkRayConfig, nodes: Sequence[NodeHost]) -> list[tuple[ob
                 ),
                 (
                     f"{node.name}-VMess_TLS",
-                    node.domain,
-                    ports["vmess_tls"],
+                    address,
+                    public_port("vmess_tls"),
                     "VMess TCP TLS",
                     node.domain,
                     None,
@@ -539,8 +566,8 @@ def host_rows(config: LinkRayConfig, nodes: Sequence[NodeHost]) -> list[tuple[ob
                 ),
                 (
                     f"{node.name}-Shadowsocks",
-                    node.domain,
-                    ports["shadowsocks"],
+                    address,
+                    public_port("shadowsocks"),
                     "Shadowsocks TCP UDP",
                     None,
                     None,
@@ -558,8 +585,8 @@ def host_rows(config: LinkRayConfig, nodes: Sequence[NodeHost]) -> list[tuple[ob
                 ),
                 (
                     f"{node.name}-VLESS_WS_TLS",
-                    node.domain,
-                    ports["vless_ws_tls"],
+                    address,
+                    public_port("vless_ws_tls"),
                     "VLESS WS TLS",
                     node.domain,
                     node.domain,
@@ -577,8 +604,8 @@ def host_rows(config: LinkRayConfig, nodes: Sequence[NodeHost]) -> list[tuple[ob
                 ),
                 (
                     f"{node.name}-VLESS_gRPC_TLS",
-                    node.domain,
-                    ports["vless_grpc_tls"],
+                    address,
+                    public_port("vless_grpc_tls"),
                     "VLESS GRPC TLS",
                     node.domain,
                     None,
@@ -596,8 +623,8 @@ def host_rows(config: LinkRayConfig, nodes: Sequence[NodeHost]) -> list[tuple[ob
                 ),
                 (
                     f"{node.name}-VLESS_XHTTP_Reality",
-                    node.domain,
-                    ports["vless_xhttp_reality"],
+                    address,
+                    public_port("vless_xhttp_reality"),
                     "VLESS XHTTP REALITY",
                     config.reality_server_name,
                     None,
@@ -615,8 +642,8 @@ def host_rows(config: LinkRayConfig, nodes: Sequence[NodeHost]) -> list[tuple[ob
                 ),
                 (
                     f"{node.name}-VMess_WS_TLS",
-                    node.domain,
-                    ports["vmess_ws_tls"],
+                    address,
+                    public_port("vmess_ws_tls"),
                     "VMess WS TLS",
                     node.domain,
                     node.domain,
@@ -634,8 +661,8 @@ def host_rows(config: LinkRayConfig, nodes: Sequence[NodeHost]) -> list[tuple[ob
                 ),
                 (
                     f"{node.name}-VMess_HTTPUpgrade_TLS",
-                    node.domain,
-                    ports["vmess_httpupgrade_tls"],
+                    address,
+                    public_port("vmess_httpupgrade_tls"),
                     "VMess HTTPUpgrade TLS",
                     node.domain,
                     node.domain,
@@ -653,8 +680,8 @@ def host_rows(config: LinkRayConfig, nodes: Sequence[NodeHost]) -> list[tuple[ob
                 ),
                 (
                     f"{node.name}-Trojan_gRPC_TLS",
-                    node.domain,
-                    ports["trojan_grpc_tls"],
+                    address,
+                    public_port("trojan_grpc_tls"),
                     "Trojan GRPC TLS",
                     node.domain,
                     None,
@@ -738,6 +765,7 @@ def render_master(
         write_text(output / "etc/systemd/system/linkray-api.service", linkray_api_service(effective_nodes, config)),
         write_text(output / "etc/systemd/system/linkray-egern.service", linkray_egern_service(config)),
         write_text(output / "etc/systemd/system/linkray-sub-auto.service", linkray_sub_auto_service(config)),
+        write_text(output / "etc/systemd/system/linkray-relay.service", linkray_relay_service(effective_nodes, config)),
         write_text(output / "var/lib/marzban/linkray/hosts.sql", hosts_sql(config, effective_nodes)),
         copy_file(TEMPLATE_ROOT / "marzban/clash/default.yml", output / "var/lib/marzban/templates/clash/default.yml"),
         copy_file(PATCH_ROOT / "marzban-subscription/current/clash.py", output / "var/lib/marzban/linkray/patches/clash.py"),

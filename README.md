@@ -38,6 +38,7 @@ LinkRay targets this baseline:
   - `linkray-api.service` reports node port status
   - `linkray-egern.service` converts Marzban subscriptions into Egern YAML
   - `linkray-sub-auto.service` routes the base subscription URL to the best available format
+  - `linkray-relay.service` exposes secondary-node TCP relay ports on the master so mobile clients do not need client-side proxy chaining
 
 sing-box, Hysteria2, TUIC, and AnyTLS are intentionally out of scope for v1. They need a separate stats and subscription integration layer before they can fit the Marzban-first model.
 
@@ -104,6 +105,8 @@ linkray render master \
 ```
 
 The same `--inbound key=port` flags are supported by `linkray api` and `linkray ports`, so the dashboard Node Info panel can follow production port changes without code edits.
+
+For multi-node installs, LinkRay publishes secondary nodes through master relay ports by default. The first secondary node uses each inbound port plus `100` for its public subscription port, while TLS SNI and WebSocket Host still point at the real secondary-node domain. For example, a secondary node inbound on `32080` is advertised as `<master-domain>:32180` and relayed to `<secondary-domain>:32080`.
 
 Deploy a rendered master tree on a prepared server:
 

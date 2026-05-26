@@ -10,6 +10,7 @@ from .doctor import exit_code, run_doctor
 from .egern import serve_egern
 from .install import install_master, install_node
 from .ports import write_ports_json
+from .relay import serve_relay
 from .render import render_master, render_node, validate_rendered
 from .sub_auto import serve_sub_auto
 
@@ -151,6 +152,23 @@ def add_sub_auto_parser(subparsers: argparse._SubParsersAction[argparse.Argument
     sub_auto.add_argument("--egern-url", default="http://127.0.0.1:61992")
 
 
+def add_relay_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    relay = subparsers.add_parser("relay", help="Run TCP relays for secondary nodes")
+    relay.add_argument("--listen", default="0.0.0.0")
+    relay.add_argument(
+        "--node",
+        action="append",
+        help="Relay target in name=domain[:offset] form. The second node normally uses offset 100.",
+    )
+    relay.add_argument(
+        "--inbound",
+        action="append",
+        help="Override an inbound port in key=port form, for example vless_tls=28080. Repeat as needed.",
+    )
+    relay.add_argument("--timeout", default=5.0, type=float)
+    relay.add_argument("--log-level", default="info")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="linkray")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -161,6 +179,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_api_parser(subparsers)
     add_egern_parser(subparsers)
     add_sub_auto_parser(subparsers)
+    add_relay_parser(subparsers)
 
     validate = subparsers.add_parser("validate", help="Validate rendered deployment files")
     validate.add_argument("--path", required=True, type=Path)
@@ -257,6 +276,10 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "sub-auto":
         return serve_sub_auto(args)
+
+    if args.command == "relay":
+        args.inbound_ports = parse_inbound_ports(args.inbound)
+        return serve_relay(args)
 
     if args.command == "bootstrap" and args.role == "master":
         actions = bootstrap_master(

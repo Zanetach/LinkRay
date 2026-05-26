@@ -20,6 +20,7 @@ DEFAULT_PORTS = {
 }
 
 PORT_KEYS = tuple(DEFAULT_PORTS.keys())
+RELAY_PORT_OFFSET = 100
 
 
 @dataclass(frozen=True)
@@ -95,6 +96,14 @@ def parse_inbound_ports(values: list[str] | None) -> tuple[tuple[str, int], ...]
     if duplicates:
         raise ValueError(f"duplicate inbound port key(s): {', '.join(duplicates)}")
     return tuple(parsed)
+
+
+def relay_port(port: int, node_index: int, offset: int = RELAY_PORT_OFFSET) -> int:
+    if node_index < 1:
+        return port
+    value = port + (offset * node_index)
+    validate_port(value)
+    return value
 
 
 @dataclass(frozen=True)

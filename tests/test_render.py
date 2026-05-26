@@ -94,6 +94,7 @@ class RenderTests(unittest.TestCase):
             self.assertIn("etc/systemd/system/linkray-api.service", relative)
             self.assertIn("etc/systemd/system/linkray-egern.service", relative)
             self.assertIn("etc/systemd/system/linkray-sub-auto.service", relative)
+            self.assertIn("etc/systemd/system/linkray-relay.service", relative)
             self.assertIn("var/lib/marzban/linkray/hosts.sql", relative)
             self.assertIn("var/lib/marzban/linkray/patches/clash.py", relative)
             self.assertNotIn("var/lib/marzban/linkray/public/ports.html", relative)
@@ -128,6 +129,8 @@ class RenderTests(unittest.TestCase):
             auto_service = (output / "etc/systemd/system/linkray-sub-auto.service").read_text()
             self.assertIn("ExecStart=/usr/local/bin/linkray sub-auto --listen 127.0.0.1 --port 61993", auto_service)
             self.assertIn("--egern-url http://127.0.0.1:61992", auto_service)
+            relay_service = (output / "etc/systemd/system/linkray-relay.service").read_text()
+            self.assertIn("ExecStart=/usr/local/bin/linkray relay --listen 0.0.0.0 --node edge-b=edge-b.example.com:100", relay_service)
 
     def test_dashboard_patch_injects_node_info_panel(self):
         for patch_path in [
@@ -249,6 +252,8 @@ class RenderTests(unittest.TestCase):
         self.assertIn("edge-a-VMess_HTTPUpgrade_TLS", sql)
         self.assertIn("edge-a-Trojan_gRPC_TLS", sql)
         self.assertIn("edge-b-Shadowsocks", sql)
+        self.assertIn("'edge-a.example.com', 18180, 'VLESS TCP TLS'", sql)
+        self.assertIn("'edge-a.example.com', 18191, 'Trojan GRPC TLS'", sql)
         self.assertIn("'VLESS TCP REALITY'", sql)
         self.assertIn("'www.microsoft.com'", sql)
         self.assertIn("'/vless-ws'", sql)
@@ -292,6 +297,7 @@ class RenderTests(unittest.TestCase):
             self.assertTrue((root / "opt/marzban/.env").exists())
             self.assertTrue((root / "etc/systemd/system/linkray-egern.service").exists())
             self.assertTrue((root / "etc/systemd/system/linkray-sub-auto.service").exists())
+            self.assertTrue((root / "etc/systemd/system/linkray-relay.service").exists())
 
     def test_install_node_apply_copies_compose(self):
         with tempfile.TemporaryDirectory() as tmp:

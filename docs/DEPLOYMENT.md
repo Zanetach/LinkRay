@@ -71,6 +71,9 @@ The rendered master tree contains:
 - `opt/marzban/docker-compose.yml`
 - `etc/nginx/conf.d/marzban-panel.conf`
 - `etc/systemd/system/linkray-api.service`
+- `etc/systemd/system/linkray-egern.service`
+- `etc/systemd/system/linkray-sub-auto.service`
+- `etc/systemd/system/linkray-relay.service`
 
 ## Node Render
 
@@ -90,7 +93,7 @@ The rendered node tree contains:
 3. Copy rendered `/tmp/linkray-master/var/lib/marzban/*` into `/var/lib/marzban/`.
 4. Copy rendered `/tmp/linkray-master/opt/marzban/docker-compose.yml` into `/opt/marzban/docker-compose.yml`.
 5. Copy rendered `/tmp/linkray-master/etc/nginx/conf.d/marzban-panel.conf` into `/etc/nginx/conf.d/marzban-panel.conf`.
-6. Copy rendered `/tmp/linkray-master/etc/systemd/system/linkray-api.service` into `/etc/systemd/system/linkray-api.service`.
+6. Copy rendered `/tmp/linkray-master/etc/systemd/system/linkray-*.service` into `/etc/systemd/system/`.
 7. Review and apply `/var/lib/marzban/linkray/hosts.sql`:
 
 ```bash
@@ -103,7 +106,13 @@ sqlite3 /var/lib/marzban/db.sqlite3 < /var/lib/marzban/linkray/hosts.sql
 cd /opt/marzban && docker compose up -d
 systemctl daemon-reload
 systemctl enable --now linkray-api
+systemctl enable --now linkray-egern
+systemctl enable --now linkray-sub-auto
+systemctl enable --now linkray-relay
 systemctl restart linkray-api
+systemctl restart linkray-egern
+systemctl restart linkray-sub-auto
+systemctl restart linkray-relay
 nginx -t
 systemctl reload nginx
 ```
@@ -160,6 +169,10 @@ linkray doctor --role node
 - Standalone `xray.service` is inactive.
 - Marzban-managed Xray process exists.
 - Expected LinkRay ports are listening.
+
+## Secondary Node Relay
+
+For two-node deployments, LinkRay advertises the second node through master-side relay ports so clients that cannot directly reach the second node still see normal, non-chained proxy entries. The first secondary node uses `inbound_port + 100`; for example, `32080` becomes `32180` on the master and relays to the secondary node's `32080`. TLS SNI and WebSocket Host remain the secondary node domain, so Xray protocol handshakes still terminate on the secondary node.
 
 ## Node Deployment Shape
 
