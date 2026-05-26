@@ -85,7 +85,7 @@
   <main class="panel">
     <h1>客户端订阅链接</h1>
     <div class="list" id="links"></div>
-    <p class="hint">优先使用对应客户端专用链接；自动识别订阅会按客户端返回 Egern、Clash/Mihomo、sing-box 或通用 Base64；识别失败时使用上方专用链接；v2rayN/v2rayNG 可用 v2ray-json。</p>
+    <p class="hint">优先使用自动识别订阅；移动端会按客户端返回 Egern 或 Shadowrocket 可用格式；识别失败时使用上方专用链接；v2rayN/v2rayNG 可用 v2ray-json。</p>
     <div class="qr" id="qr"></div>
   </main>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -94,6 +94,7 @@
     const rows = [
       ['自动识别订阅', base],
       ['Clash/Mihomo', base + '/clash-meta'],
+      ['Shadowrocket', base + '/clash-meta'],
       ['Egern', base + '/egern'],
       ['sing-box', base + '/sing-box'],
       ['v2ray-json', base + '/v2ray-json'],

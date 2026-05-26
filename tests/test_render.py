@@ -144,7 +144,9 @@ class RenderTests(unittest.TestCase):
                 self.assertIn("下一页", patch)
                 self.assertIn("linkray-node-info-footer", patch)
                 self.assertIn("自动识别订阅", patch)
+                self.assertIn("Shadowrocket", patch)
                 self.assertIn("base+'/egern'", patch)
+                self.assertIn("base+'/clash-meta'", patch)
                 self.assertNotIn("Clash" + " for Windows", patch)
                 self.assertNotIn("base+'/clash'", patch)
                 self.assertNotIn("Clash " + "旧版", patch)
@@ -158,8 +160,10 @@ class RenderTests(unittest.TestCase):
                 html = page_path.read_text()
 
                 self.assertIn("自动识别订阅", html)
+                self.assertIn("Shadowrocket", html)
                 self.assertIn("base + '/egern'", html)
                 self.assertLess(html.index("['自动识别订阅', base]"), html.index("['Clash/Mihomo', base + '/clash-meta']"))
+                self.assertLess(html.index("['Clash/Mihomo', base + '/clash-meta']"), html.index("['Shadowrocket', base + '/clash-meta']"))
                 self.assertNotIn("Clash" + " for Windows", html)
 
     def test_dashboard_html_adds_protocol_inbound_details_without_touching_app_bundle(self):
