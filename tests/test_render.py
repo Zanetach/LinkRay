@@ -187,6 +187,17 @@ class RenderTests(unittest.TestCase):
                 text = template_path.read_text()
                 self.assertIn('"geosite:cn,private": https://dns.alidns.com/dns-query', text)
                 self.assertNotIn('"geosite:cn,private":\n      -', text)
+                self.assertIn("proxy_server_domains", text)
+
+    def test_clash_patch_exposes_proxy_server_domains(self):
+        for patch_path in [
+            Path("patches/marzban-subscription/current/clash.py"),
+            Path("linkray/assets/patches/marzban-subscription/current/clash.py"),
+        ]:
+            with self.subTest(patch=str(patch_path)):
+                text = patch_path.read_text()
+                self.assertIn("def proxy_server_domains", text)
+                self.assertIn('"proxy_server_domains": self.proxy_server_domains()', text)
 
     def test_marzban_env_contains_directly_usable_defaults(self):
         env = marzban_env(

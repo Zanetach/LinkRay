@@ -1,4 +1,5 @@
 import copy
+import ipaddress
 import json
 from random import choice
 from uuid import UUID
@@ -50,7 +51,11 @@ class ClashConfiguration(object):
             yaml.load(
                 render_template(
                     CLASH_SUBSCRIPTION_TEMPLATE,
-                    {"conf": self.data, "proxy_remarks": self.proxy_remarks}
+                    {
+                        "conf": self.data,
+                        "proxy_remarks": self.proxy_remarks,
+                        "proxy_server_domains": self.proxy_server_domains(),
+                    }
                 ),
                 Loader=yaml.SafeLoader
 
@@ -74,6 +79,21 @@ class ClashConfiguration(object):
             if not new in self.proxy_remarks:
                 return new
             c += 1
+
+    def proxy_server_domains(self):
+        domains = []
+        for proxy in self.data.get('proxies', []):
+            server = proxy.get('server') if isinstance(proxy, dict) else None
+            if not isinstance(server, str) or not server or '.' not in server:
+                continue
+            try:
+                ipaddress.ip_address(server)
+                continue
+            except ValueError:
+                pass
+            if server not in domains:
+                domains.append(server)
+        return domains
 
     def http_config(
             self,

@@ -46,6 +46,9 @@ dns:
     - "dns.google"
     - "time.*.com"
     - "ntp.*.com"
+{% for domain in proxy_server_domains | default([]) %}
+    - "{{ domain }}"
+{% endfor %}
   use-hosts: true
   default-nameserver:
     - 223.5.5.5
@@ -59,6 +62,9 @@ dns:
     - 119.29.29.29
   nameserver-policy:
     "geosite:cn,private": https://dns.alidns.com/dns-query
+{% for domain in proxy_server_domains | default([]) %}
+    "{{ domain }}": 223.5.5.5
+{% endfor %}
 
 {{ conf | except("proxy-groups", "port", "mode", "rules") | yaml }}
 
