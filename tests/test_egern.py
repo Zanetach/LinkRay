@@ -70,6 +70,21 @@ class EgernTests(unittest.TestCase):
 
         self.assertIsNone(convert_link(f"vmess://{b64(json.dumps(vmess))}"))
 
+    def test_build_egern_yaml_adds_prev_hop_for_secondary_servers(self):
+        links = "\n".join(
+            [
+                "vless://11111111-1111-1111-1111-111111111111@107.172.216.169:32080?security=tls&type=tcp&sni=ca.cyclelink.org&flow=xtls-rprx-vision#ca-VLESS_TLS_Vision",
+                "vless://11111111-1111-1111-1111-111111111111@69.63.198.100:32080?security=tls&type=tcp&sni=la.cyclelink.org&flow=xtls-rprx-vision#la-VLESS_TLS_Vision",
+                "trojan://password@69.63.198.100:32083?security=tls&type=tcp&sni=la.cyclelink.org#la-Trojan_TLS",
+            ]
+        )
+
+        output = build_egern_yaml(base64.b64encode(links.encode()))
+
+        self.assertIn('flow: "xtls-rprx-vision"', output)
+        self.assertEqual(output.count('prev_hop: "ca-VLESS_TLS_Vision"'), 2)
+        self.assertLess(output.index('name: "ca-VLESS_TLS_Vision"'), output.index('prev_hop: "ca-VLESS_TLS_Vision"'))
+
 
 if __name__ == "__main__":
     unittest.main()

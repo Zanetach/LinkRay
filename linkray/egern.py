@@ -154,6 +154,9 @@ def vless_to_egern(link: str) -> dict[str, dict[str, Any]] | None:
         return None
     item = base_proxy(unquote(parsed.fragment) or host, host, port)
     item["user_id"] = unquote(parsed.username)
+    flow = first_query_value(query, "flow")
+    if flow:
+        item["flow"] = flow
     if network == "ws":
         item["transport"] = ws_transport(query, host)
     elif network == "tcp" and security == "tls":
@@ -251,6 +254,28 @@ def convert_link(link: str) -> dict[str, dict[str, Any]] | None:
     return None
 
 
+def proxy_payload(proxy: dict[str, dict[str, Any]]) -> dict[str, Any] | None:
+    if not proxy:
+        return None
+    return next(iter(proxy.values()))
+
+
+def apply_prev_hops(proxies: list[dict[str, dict[str, Any]]]) -> None:
+    primary = proxy_payload(proxies[0]) if proxies else None
+    if not primary:
+        return
+    primary_name = primary.get("name")
+    primary_server = primary.get("server")
+    if not primary_name or not primary_server:
+        return
+    for proxy in proxies[1:]:
+        item = proxy_payload(proxy)
+        if not item:
+            continue
+        if item.get("server") != primary_server and "prev_hop" not in item:
+            item["prev_hop"] = primary_name
+
+
 def build_egern_yaml(subscription_payload: bytes) -> str:
     proxies = []
     seen = set()
@@ -263,6 +288,7 @@ def build_egern_yaml(subscription_payload: bytes) -> str:
             continue
         seen.add(name)
         proxies.append(converted)
+    apply_prev_hops(proxies)
     return dump_egern_yaml(proxies)
 
 
