@@ -115,6 +115,22 @@ proxy-groups:
 {{ proxy_remarks | yaml | indent(6, true) }}
       - DIRECT
 
+  - name: Facebook
+    type: select
+    proxies:
+      - 全球代理
+      - 自动选择
+      - 手动切换
+{{ proxy_remarks | yaml | indent(6, true) }}
+
+  - name: X
+    type: select
+    proxies:
+      - 全球代理
+      - 自动选择
+      - 手动切换
+{{ proxy_remarks | yaml | indent(6, true) }}
+
   - name: DNS_Proxy
     type: select
     proxies:
@@ -291,6 +307,25 @@ rules:
   - DOMAIN-SUFFIX,bytegecko-i18n.com,TikTok
   - DOMAIN-SUFFIX,snssdk.com,TikTok
   - DOMAIN-KEYWORD,tiktok,TikTok
+
+  - DOMAIN-SUFFIX,facebook.com,Facebook
+  - DOMAIN-SUFFIX,fb.com,Facebook
+  - DOMAIN-SUFFIX,fbcdn.net,Facebook
+  - DOMAIN-SUFFIX,fbsbx.com,Facebook
+  - DOMAIN-SUFFIX,messenger.com,Facebook
+  - DOMAIN-SUFFIX,m.me,Facebook
+  - DOMAIN-SUFFIX,instagram.com,Facebook
+  - DOMAIN-SUFFIX,cdninstagram.com,Facebook
+  - DOMAIN-SUFFIX,whatsapp.com,Facebook
+  - DOMAIN-SUFFIX,whatsapp.net,Facebook
+
+  - DOMAIN-SUFFIX,x.com,X
+  - DOMAIN-SUFFIX,twitter.com,X
+  - DOMAIN-SUFFIX,t.co,X
+  - DOMAIN-SUFFIX,twimg.com,X
+  - DOMAIN-SUFFIX,tweetdeck.com,X
+  - DOMAIN-SUFFIX,pscp.tv,X
+  - DOMAIN-SUFFIX,periscope.tv,X
 
   - DOMAIN-SUFFIX,google.com,Google
   - DOMAIN-SUFFIX,gstatic.com,Google

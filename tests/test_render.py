@@ -206,6 +206,10 @@ class RenderTests(unittest.TestCase):
                 self.assertIn("name: TikTok", text)
                 self.assertIn("DOMAIN-SUFFIX,tiktok.com,TikTok", text)
                 self.assertIn("DOMAIN-KEYWORD,tiktok,TikTok", text)
+                self.assertIn("name: Facebook", text)
+                self.assertIn("DOMAIN-SUFFIX,facebook.com,Facebook", text)
+                self.assertIn("name: X", text)
+                self.assertIn("DOMAIN-SUFFIX,x.com,X", text)
                 self.assertNotIn("store-fake-ip: true", text)
 
     def test_clash_patch_exposes_proxy_server_domains(self):
