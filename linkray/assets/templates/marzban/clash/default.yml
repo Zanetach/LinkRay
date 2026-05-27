@@ -237,6 +237,17 @@ proxy-groups:
       - 自动选择
       - 手动切换
 
+  - name: 国内站点
+    type: select
+    proxies:
+{% if proxy_remarks %}
+{{ [proxy_remarks[0]] | yaml | indent(6, true) }}
+{% endif %}
+      - DIRECT
+      - 手动切换
+      - 全球代理
+      - 自动选择
+
   - name: 本地直连
     type: select
     proxies:
@@ -260,6 +271,17 @@ rules:
   - IP-CIDR,127.0.0.0/8,本地直连,no-resolve
   - IP-CIDR,169.254.0.0/16,本地直连,no-resolve
   - IP-CIDR,224.0.0.0/4,本地直连,no-resolve
+
+  - IP-CIDR,106.52.0.0/15,国内站点,no-resolve
+  - IP-CIDR,106.54.0.0/16,国内站点,no-resolve
+  - DOMAIN-SUFFIX,tencentcloud.com,国内站点
+  - DOMAIN-SUFFIX,qcloud.com,国内站点
+  - DOMAIN-SUFFIX,myqcloud.com,国内站点
+  - DOMAIN-SUFFIX,gtimg.com,国内站点
+  - DOMAIN-SUFFIX,gtimg.cn,国内站点
+  - DOMAIN-SUFFIX,qq.com,国内站点
+  - DOMAIN-SUFFIX,weixin.qq.com,国内站点
+  - DOMAIN-SUFFIX,wechat.com,国内站点
 
   - DOMAIN-SUFFIX,dns.google,DNS_Proxy
   - DOMAIN-SUFFIX,cloudflare-dns.com,DNS_Proxy

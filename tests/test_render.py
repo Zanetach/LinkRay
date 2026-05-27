@@ -213,6 +213,11 @@ class RenderTests(unittest.TestCase):
                 self.assertIn("DOMAIN-SUFFIX,facebook.com,Facebook", text)
                 self.assertIn("name: X", text)
                 self.assertIn("DOMAIN-SUFFIX,x.com,X", text)
+                self.assertIn("name: 国内站点", text)
+                self.assertIn("[proxy_remarks[0]]", text)
+                self.assertIn("IP-CIDR,106.52.0.0/15,国内站点,no-resolve", text)
+                self.assertIn("IP-CIDR,106.54.0.0/16,国内站点,no-resolve", text)
+                self.assertIn("DOMAIN-SUFFIX,tencentcloud.com,国内站点", text)
                 self.assertNotIn("store-fake-ip: true", text)
 
     def test_clash_patch_exposes_proxy_server_domains(self):
