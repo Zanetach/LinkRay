@@ -31,7 +31,9 @@ def choose_suffix(user_agent: str, accept: str) -> tuple[str, dict[str, str]]:
         return "/egern", {"Accept": "text/yaml"}
     if any(name in ua for name in ("sing-box", "sfa", "sfi", "sfm")):
         return "/sing-box", {"Accept": "application/json"}
-    if any(name in ua for name in ("mihomo", "clash", "flclash", "clash.meta", "stash", "shadowrocket")):
+    if "shadowrocket" in ua:
+        return "", {"Accept": "text/plain"}
+    if any(name in ua for name in ("mihomo", "clash", "flclash", "clash.meta", "stash")):
         return "/clash-meta", {"Accept": "text/yaml"}
     return "", {}
 
