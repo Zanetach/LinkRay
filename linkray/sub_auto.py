@@ -7,6 +7,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
+from .native import build_stable_native_subscription
+
 
 PASS_HEADERS = {
     "content-disposition",
@@ -32,10 +34,10 @@ def choose_suffix(user_agent: str, accept: str) -> tuple[str, dict[str, str]]:
     if any(name in ua for name in ("sing-box", "sfa", "sfi", "sfm")):
         return "/sing-box", {"Accept": "application/json"}
     if "shadowrocket" in ua:
-        return "", {"Accept": "text/plain"}
+        return "/native", {"Accept": "text/plain"}
     if any(name in ua for name in ("mihomo", "clash", "flclash", "clash.meta", "stash")):
         return "/clash-meta", {"Accept": "text/yaml"}
-    return "", {}
+    return "/native", {"Accept": "text/plain"}
 
 
 def parse_token(path: str) -> str | None:
@@ -80,10 +82,15 @@ class SubAutoHandler(BaseHTTPRequestHandler):
         suffix, extra = choose_suffix(self.headers.get("User-Agent", ""), self.headers.get("Accept", ""))
         if suffix == "/egern":
             url = f"{self.egern_url.rstrip('/')}/sub/{token}/egern"
+        elif suffix == "/native":
+            url = f"{self.marzban_url.rstrip('/')}/sub/{token}"
         else:
             url = f"{self.marzban_url.rstrip('/')}/sub/{token}{suffix}"
         try:
             status, headers, body = fetch(url, request_headers(self.headers, extra))
+            if suffix == "/native" and status == 200:
+                body = build_stable_native_subscription(body)
+                headers["Content-Type"] = "text/plain; charset=utf-8"
         except HTTPError as exc:
             self.send_bytes(exc.code, dict(exc.headers.items()), exc.read() or b"upstream error\n")
             return
