@@ -92,8 +92,8 @@ proxy-groups:
   - name: 全球代理
     type: select
     proxies:
-      - 自动选择
       - 手动切换
+      - 自动选择
 {{ proxy_remarks | yaml | indent(6, true) }}
 
   - name: 流媒体

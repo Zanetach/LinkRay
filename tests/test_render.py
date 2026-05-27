@@ -198,6 +198,9 @@ class RenderTests(unittest.TestCase):
                 self.assertIn("proxy_server_addresses", text)
                 self.assertIn("route-exclude-address", text)
                 self.assertIn("store-fake-ip: false", text)
+                self.assertLess(text.index("- name: 全球代理"), text.index("- name: 流媒体"))
+                global_block = text[text.index("- name: 全球代理"):text.index("- name: 流媒体")]
+                self.assertLess(global_block.index("- 手动切换"), global_block.index("- 自动选择"))
                 self.assertIn("name: TikTok", text)
                 self.assertIn("DOMAIN-SUFFIX,tiktok.com,TikTok", text)
                 self.assertIn("DOMAIN-KEYWORD,tiktok,TikTok", text)
