@@ -194,8 +194,11 @@ class RenderTests(unittest.TestCase):
         ]:
             with self.subTest(template=str(template_path)):
                 text = template_path.read_text()
-                self.assertIn('"geosite:cn,private": https://dns.alidns.com/dns-query', text)
-                self.assertNotIn('"geosite:cn,private":\n      -', text)
+                self.assertNotIn("GEOSITE,", text)
+                self.assertNotIn("GEOIP,", text)
+                self.assertNotIn("geox-url:", text)
+                self.assertNotIn("geo-auto-update:", text)
+                self.assertNotIn("geosite:", text)
                 self.assertIn("proxy_server_domains", text)
                 self.assertIn("proxy_server_addresses", text)
                 self.assertIn("route-exclude-address", text)

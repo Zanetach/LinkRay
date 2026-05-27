@@ -28,16 +28,6 @@ sniffer:
     HTTP:
       ports: [80]
 
-geodata-mode: false
-geodata-loader: memconservative
-geo-auto-update: true
-geo-update-interval: 24
-
-geox-url:
-  geoip: "https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.dat"
-  geosite: "https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geosite.dat"
-  mmdb: "https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.metadb"
-
 dns:
   enable: true
   listen: 0.0.0.0:1053
@@ -67,7 +57,6 @@ dns:
     - 223.5.5.5
     - 119.29.29.29
   nameserver-policy:
-    "geosite:cn,private": https://dns.alidns.com/dns-query
 {% for domain in proxy_server_domains | default([]) %}
     "{{ domain }}": 223.5.5.5
 {% endfor %}
@@ -386,7 +375,4 @@ rules:
   - DOMAIN-SUFFIX,ixigua.com,国内媒体
   - DOMAIN-SUFFIX,kuaishou.com,国内媒体
 
-  - GEOSITE,cn,本地直连
-  - GEOIP,CN,本地直连,no-resolve
-  - GEOSITE,geolocation-!cn,全球代理
   - MATCH,漏网之鱼
