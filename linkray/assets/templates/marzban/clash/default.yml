@@ -274,6 +274,7 @@ rules:
 
   - IP-CIDR,106.52.0.0/15,国内站点,no-resolve
   - IP-CIDR,106.54.0.0/16,国内站点,no-resolve
+  - 'DOMAIN-REGEX,^\d{1,3}(\.\d{1,3}){3}$,国内站点'
   - DOMAIN-SUFFIX,cn,国内站点
   - DOMAIN-SUFFIX,中国,国内站点
   - DOMAIN-SUFFIX,公司,国内站点
@@ -425,6 +426,4 @@ rules:
   - DOMAIN-SUFFIX,ixigua.com,国内媒体
   - DOMAIN-SUFFIX,kuaishou.com,国内媒体
 
-  - IP-CIDR,0.0.0.0/0,国内站点,no-resolve
-  - IP-CIDR6,::/0,国内站点,no-resolve
   - MATCH,漏网之鱼

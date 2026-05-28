@@ -219,14 +219,15 @@ class RenderTests(unittest.TestCase):
                 self.assertLess(domestic_block.index("- DIRECT"), domestic_block.index("[proxy_remarks[0]]"))
                 self.assertIn("IP-CIDR,106.52.0.0/15,国内站点,no-resolve", text)
                 self.assertIn("IP-CIDR,106.54.0.0/16,国内站点,no-resolve", text)
+                self.assertIn("'DOMAIN-REGEX,^\\d{1,3}(\\.\\d{1,3}){3}$,国内站点'", text)
                 self.assertIn("DOMAIN-SUFFIX,cn,国内站点", text)
                 self.assertIn("DOMAIN-SUFFIX,baidu.com,国内站点", text)
                 self.assertIn("DOMAIN-SUFFIX,taobao.com,国内站点", text)
                 self.assertIn("DOMAIN-SUFFIX,jd.com,国内站点", text)
                 self.assertIn("DOMAIN-SUFFIX,xiaohongshu.com,国内站点", text)
                 self.assertIn("DOMAIN-SUFFIX,tencentcloud.com,国内站点", text)
-                self.assertIn("IP-CIDR,0.0.0.0/0,国内站点,no-resolve", text)
-                self.assertIn("IP-CIDR6,::/0,国内站点,no-resolve", text)
+                self.assertNotIn("IP-CIDR,0.0.0.0/0,国内站点,no-resolve", text)
+                self.assertNotIn("IP-CIDR6,::/0,国内站点,no-resolve", text)
                 self.assertNotIn("store-fake-ip: true", text)
 
     def test_clash_patch_exposes_proxy_server_domains(self):
