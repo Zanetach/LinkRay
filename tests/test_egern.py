@@ -4,6 +4,7 @@ import unittest
 from unittest.mock import patch
 
 from linkray.egern import build_egern_yaml, convert_link, resolve_server_address
+from linkray.rules import RouteRules
 
 
 def b64(value: str) -> str:
@@ -84,6 +85,30 @@ class EgernTests(unittest.TestCase):
         self.assertIn('flow: "xtls-rprx-vision"', output)
         self.assertEqual(output.count('prev_hop: "ca-VLESS_TLS_Vision"'), 2)
         self.assertLess(output.index('name: "ca-VLESS_TLS_Vision"'), output.index('prev_hop: "ca-VLESS_TLS_Vision"'))
+
+    def test_build_egern_yaml_adds_policy_groups_and_route_rules(self):
+        links = "\n".join(
+            [
+                "vless://11111111-1111-1111-1111-111111111111@107.172.216.169:32080?security=tls&type=tcp&sni=ca.cyclelink.org&flow=xtls-rprx-vision#ca-VLESS_TLS_Vision",
+                "trojan://password@107.172.216.169:32083?security=tls&type=tcp&sni=ca.cyclelink.org#ca-Trojan_TLS",
+            ]
+        )
+
+        output = build_egern_yaml(
+            base64.b64encode(links.encode()),
+            route_rules=RouteRules(cn_domain_suffixes=["cn", "baidu.com"], cn_ip_cidrs=["106.52.0.0/15"]),
+        )
+
+        self.assertIn("policy_groups:", output)
+        self.assertIn('name: "全球代理"', output)
+        self.assertIn('name: "国内站点"', output)
+        self.assertIn("rules:", output)
+        self.assertIn("domain_suffix:", output)
+        self.assertIn('match: "baidu.com"', output)
+        self.assertIn("ip_cidr:", output)
+        self.assertIn('match: "106.52.0.0/15"', output)
+        self.assertIn("final:", output)
+        self.assertIn('policy: "漏网之鱼"', output)
 
 
 if __name__ == "__main__":

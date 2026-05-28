@@ -12,6 +12,7 @@ from .install import install_master, install_node
 from .ports import write_ports_json
 from .relay import serve_relay
 from .render import render_master, render_node, validate_rendered
+from .rules import DEFAULT_RULE_DIR, update_route_rules
 from .sub_auto import serve_sub_auto
 
 
@@ -152,6 +153,14 @@ def add_sub_auto_parser(subparsers: argparse._SubParsersAction[argparse.Argument
     sub_auto.add_argument("--egern-url", default="http://127.0.0.1:61992")
 
 
+def add_rules_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    rules = subparsers.add_parser("rules", help="Manage LinkRay route rules")
+    rules_sub = rules.add_subparsers(dest="action", required=True)
+    update = rules_sub.add_parser("update", help="Update CN domain and IP CIDR route rules")
+    update.add_argument("--output", type=Path, default=DEFAULT_RULE_DIR)
+    update.add_argument("--timeout", type=float, default=20.0)
+
+
 def add_relay_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     relay = subparsers.add_parser("relay", help="Run TCP relays for secondary nodes")
     relay.add_argument("--listen", default="0.0.0.0")
@@ -179,6 +188,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_api_parser(subparsers)
     add_egern_parser(subparsers)
     add_sub_auto_parser(subparsers)
+    add_rules_parser(subparsers)
     add_relay_parser(subparsers)
 
     validate = subparsers.add_parser("validate", help="Validate rendered deployment files")
@@ -276,6 +286,12 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "sub-auto":
         return serve_sub_auto(args)
+
+    if args.command == "rules" and args.action == "update":
+        rules = update_route_rules(output=args.output, timeout=args.timeout)
+        print(f"{args.output}/cn-domains.txt: {len(rules.cn_domain_suffixes)} domain suffixes")
+        print(f"{args.output}/cn-ip-cidrs.txt: {len(rules.cn_ip_cidrs)} CIDRs")
+        return 0
 
     if args.command == "relay":
         args.inbound_ports = parse_inbound_ports(args.inbound)

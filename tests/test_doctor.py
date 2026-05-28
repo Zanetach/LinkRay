@@ -55,6 +55,7 @@ class DoctorTests(unittest.TestCase):
                 ("systemctl", "is-active", "linkray-api"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "linkray-egern"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "linkray-sub-auto"): CommandResult(0, "active\n"),
+                ("systemctl", "is-active", "linkray-rules-update.timer"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "linkray-relay"): CommandResult(0, "active\n"),
                 ("docker", "ps", "--format", "{{.Names}}|{{.Status}}"): CommandResult(0, "marzban-marzban-1|Up 1 hour\n"),
             }

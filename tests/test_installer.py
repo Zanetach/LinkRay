@@ -24,10 +24,15 @@ class InstallerTests(unittest.TestCase):
         self.assertIn("etc/systemd/system/linkray-egern.service", script)
         self.assertIn("etc/systemd/system/linkray-sub-auto.service", script)
         self.assertIn("etc/systemd/system/linkray-relay.service", script)
+        self.assertIn("etc/systemd/system/linkray-rules-update.service", script)
+        self.assertIn("etc/systemd/system/linkray-rules-update.timer", script)
+        self.assertIn("var/lib/marzban/linkray/rules/cn-domains.txt", script)
+        self.assertIn("var/lib/marzban/linkray/rules/cn-ip-cidrs.txt", script)
         self.assertIn("systemctl enable --now linkray-api", script)
         self.assertIn("systemctl enable --now linkray-egern", script)
         self.assertIn("systemctl enable --now linkray-sub-auto", script)
         self.assertIn("systemctl enable --now linkray-relay", script)
+        self.assertIn("systemctl enable --now linkray-rules-update.timer", script)
 
 
 if __name__ == "__main__":

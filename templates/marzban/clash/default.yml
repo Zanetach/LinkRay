@@ -272,46 +272,6 @@ rules:
   - IP-CIDR,169.254.0.0/16,本地直连,no-resolve
   - IP-CIDR,224.0.0.0/4,本地直连,no-resolve
 
-  - IP-CIDR,106.52.0.0/15,国内站点,no-resolve
-  - IP-CIDR,106.54.0.0/16,国内站点,no-resolve
-  - 'DOMAIN-REGEX,^\d{1,3}(\.\d{1,3}){3}$,国内站点'
-  - DOMAIN-SUFFIX,cn,国内站点
-  - DOMAIN-SUFFIX,中国,国内站点
-  - DOMAIN-SUFFIX,公司,国内站点
-  - DOMAIN-SUFFIX,网络,国内站点
-  - DOMAIN-SUFFIX,tencentcloud.com,国内站点
-  - DOMAIN-SUFFIX,qcloud.com,国内站点
-  - DOMAIN-SUFFIX,myqcloud.com,国内站点
-  - DOMAIN-SUFFIX,gtimg.com,国内站点
-  - DOMAIN-SUFFIX,gtimg.cn,国内站点
-  - DOMAIN-SUFFIX,qq.com,国内站点
-  - DOMAIN-SUFFIX,weixin.qq.com,国内站点
-  - DOMAIN-SUFFIX,wechat.com,国内站点
-  - DOMAIN-SUFFIX,baidu.com,国内站点
-  - DOMAIN-SUFFIX,bdimg.com,国内站点
-  - DOMAIN-SUFFIX,bdstatic.com,国内站点
-  - DOMAIN-SUFFIX,alicdn.com,国内站点
-  - DOMAIN-SUFFIX,aliyun.com,国内站点
-  - DOMAIN-SUFFIX,aliyuncs.com,国内站点
-  - DOMAIN-SUFFIX,taobao.com,国内站点
-  - DOMAIN-SUFFIX,tmall.com,国内站点
-  - DOMAIN-SUFFIX,alipay.com,国内站点
-  - DOMAIN-SUFFIX,jd.com,国内站点
-  - DOMAIN-SUFFIX,360buyimg.com,国内站点
-  - DOMAIN-SUFFIX,mi.com,国内站点
-  - DOMAIN-SUFFIX,xiaomi.com,国内站点
-  - DOMAIN-SUFFIX,huawei.com,国内站点
-  - DOMAIN-SUFFIX,huaweicloud.com,国内站点
-  - DOMAIN-SUFFIX,meituan.com,国内站点
-  - DOMAIN-SUFFIX,dianping.com,国内站点
-  - DOMAIN-SUFFIX,amap.com,国内站点
-  - DOMAIN-SUFFIX,autonavi.com,国内站点
-  - DOMAIN-SUFFIX,zhihu.com,国内站点
-  - DOMAIN-SUFFIX,zhimg.com,国内站点
-  - DOMAIN-SUFFIX,douban.com,国内站点
-  - DOMAIN-SUFFIX,xiaohongshu.com,国内站点
-  - DOMAIN-SUFFIX,xhscdn.com,国内站点
-
   - DOMAIN-SUFFIX,dns.google,DNS_Proxy
   - DOMAIN-SUFFIX,cloudflare-dns.com,DNS_Proxy
   - DOMAIN-SUFFIX,one.one.one.one,DNS_Proxy
@@ -413,6 +373,17 @@ rules:
   - DOMAIN-SUFFIX,githubassets.com,GitHub
   - DOMAIN-SUFFIX,githubusercontent.com,GitHub
   - DOMAIN-SUFFIX,ghcr.io,GitHub
+
+{% for cidr in domestic_ip_rules | default([]) %}
+{% if ":" in cidr %}
+  - IP-CIDR6,{{ cidr }},国内站点,no-resolve
+{% else %}
+  - IP-CIDR,{{ cidr }},国内站点,no-resolve
+{% endif %}
+{% endfor %}
+{% for domain in domestic_domain_rules | default([]) %}
+  - DOMAIN-SUFFIX,{{ domain }},国内站点
+{% endfor %}
 
   - DOMAIN-SUFFIX,bilibili.com,国内媒体
   - DOMAIN-SUFFIX,bilibili.tv,国内媒体

@@ -90,6 +90,7 @@ def runtime_checks(role: str, runner: Runner) -> list[Check]:
         checks.append(service_check("linkray-api", "active", runner))
         checks.append(service_check("linkray-egern", "active", runner))
         checks.append(service_check("linkray-sub-auto", "active", runner))
+        checks.append(service_check("linkray-rules-update.timer", "active", runner))
         checks.append(service_check("linkray-relay", "active", runner))
     checks.append(
         Check(
@@ -129,7 +130,11 @@ def file_checks(role: str, root: Path) -> list[Check]:
             "etc/systemd/system/linkray-api.service",
             "etc/systemd/system/linkray-egern.service",
             "etc/systemd/system/linkray-sub-auto.service",
+            "etc/systemd/system/linkray-rules-update.service",
+            "etc/systemd/system/linkray-rules-update.timer",
             "etc/systemd/system/linkray-relay.service",
+            "var/lib/marzban/linkray/rules/cn-domains.txt",
+            "var/lib/marzban/linkray/rules/cn-ip-cidrs.txt",
         ]
         recommended = ["var/lib/marzban/linkray/hosts.sql"]
     else:

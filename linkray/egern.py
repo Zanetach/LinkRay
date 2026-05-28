@@ -13,6 +13,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, unquote, urlparse
 from urllib.request import Request, urlopen
 
+from .rules import RouteRules, load_route_rules
+
 
 TOKEN_RE = re.compile(r"^/sub/([^/]+)/egern/?$")
 PASS_HEADERS = {
@@ -74,8 +76,51 @@ def yaml_lines(value: Any, indent: int = 0) -> list[str]:
     return [f"{prefix}{yaml_scalar(value)}"]
 
 
-def dump_egern_yaml(proxies: list[dict[str, dict[str, Any]]]) -> str:
-    return "\n".join(yaml_lines({"proxies": proxies})) + "\n"
+FOREIGN_DOMAIN_SUFFIXES = (
+    "dns.google",
+    "cloudflare-dns.com",
+    "telegram.org",
+    "t.me",
+    "youtube.com",
+    "youtu.be",
+    "googlevideo.com",
+    "tiktok.com",
+    "tiktokv.com",
+    "tiktokcdn.com",
+    "facebook.com",
+    "fb.com",
+    "fbcdn.net",
+    "instagram.com",
+    "whatsapp.com",
+    "x.com",
+    "twitter.com",
+    "t.co",
+    "google.com",
+    "gstatic.com",
+    "googleapis.com",
+    "googleusercontent.com",
+    "openai.com",
+    "chatgpt.com",
+    "oaistatic.com",
+    "oaiusercontent.com",
+    "anthropic.com",
+    "claude.ai",
+    "github.com",
+    "githubusercontent.com",
+)
+
+
+def dump_egern_yaml(
+    proxies: list[dict[str, dict[str, Any]]],
+    policy_groups: list[dict[str, dict[str, Any]]] | None = None,
+    rules: list[dict[str, dict[str, Any]]] | None = None,
+) -> str:
+    data: dict[str, Any] = {"proxies": proxies}
+    if policy_groups is not None:
+        data["policy_groups"] = policy_groups
+    if rules is not None:
+        data["rules"] = rules
+    return "\n".join(yaml_lines(data)) + "\n"
 
 
 def first_query_value(query: Mapping[str, list[str]], *names: str) -> str | None:
@@ -260,6 +305,47 @@ def proxy_payload(proxy: dict[str, dict[str, Any]]) -> dict[str, Any] | None:
     return next(iter(proxy.values()))
 
 
+def proxy_names(proxies: list[dict[str, dict[str, Any]]]) -> list[str]:
+    names: list[str] = []
+    for proxy in proxies:
+        item = proxy_payload(proxy)
+        if item and item.get("name"):
+            names.append(str(item["name"]))
+    return names
+
+
+def build_policy_groups(proxies: list[dict[str, dict[str, Any]]]) -> list[dict[str, dict[str, Any]]]:
+    names = proxy_names(proxies)
+    if not names:
+        return []
+    return [
+        {"select": {"name": "手动切换", "policies": names}},
+        {
+            "url_test": {
+                "name": "自动选择",
+                "policies": names,
+                "url": "https://www.gstatic.com/generate_204",
+                "interval": 300,
+            }
+        },
+        {"select": {"name": "全球代理", "policies": ["手动切换", "自动选择", *names]}},
+        {"select": {"name": "国内站点", "policies": ["DIRECT", "全球代理"]}},
+        {"select": {"name": "漏网之鱼", "policies": ["全球代理", "自动选择", "手动切换", "DIRECT"]}},
+    ]
+
+
+def build_route_rules(route_rules: RouteRules) -> list[dict[str, dict[str, Any]]]:
+    rules: list[dict[str, dict[str, Any]]] = []
+    for domain in FOREIGN_DOMAIN_SUFFIXES:
+        rules.append({"domain_suffix": {"match": domain, "policy": "全球代理"}})
+    for domain in route_rules.cn_domain_suffixes:
+        rules.append({"domain_suffix": {"match": domain, "policy": "国内站点"}})
+    for cidr in route_rules.cn_ip_cidrs:
+        rules.append({"ip_cidr": {"match": cidr, "policy": "国内站点", "no_resolve": True}})
+    rules.append({"final": {"policy": "漏网之鱼"}})
+    return rules
+
+
 def apply_prev_hops(proxies: list[dict[str, dict[str, Any]]]) -> None:
     primary = proxy_payload(proxies[0]) if proxies else None
     if not primary:
@@ -276,7 +362,7 @@ def apply_prev_hops(proxies: list[dict[str, dict[str, Any]]]) -> None:
             item["prev_hop"] = primary_name
 
 
-def build_egern_yaml(subscription_payload: bytes) -> str:
+def build_egern_yaml(subscription_payload: bytes, route_rules: RouteRules | None = None) -> str:
     proxies = []
     seen = set()
     for link in decode_subscription_links(subscription_payload):
@@ -289,7 +375,12 @@ def build_egern_yaml(subscription_payload: bytes) -> str:
         seen.add(name)
         proxies.append(converted)
     apply_prev_hops(proxies)
-    return dump_egern_yaml(proxies)
+    effective_rules = route_rules or load_route_rules()
+    return dump_egern_yaml(
+        proxies,
+        policy_groups=build_policy_groups(proxies),
+        rules=build_route_rules(effective_rules),
+    )
 
 
 def fetch_upstream(marzban_url: str, token: str, headers: Mapping[str, str]) -> tuple[int, dict[str, str], bytes]:

@@ -19,6 +19,77 @@ from config import (
 )
 
 
+LINKRAY_RULE_DIR = "/var/lib/marzban/linkray/rules"
+BUILTIN_CN_DOMAIN_SUFFIXES = [
+    "cn",
+    "com.cn",
+    "net.cn",
+    "org.cn",
+    "xn--fiqs8s",
+    "xn--55qx5d",
+    "xn--io0a7i",
+    "tencentcloud.com",
+    "qcloud.com",
+    "myqcloud.com",
+    "gtimg.com",
+    "gtimg.cn",
+    "qq.com",
+    "weixin.qq.com",
+    "wechat.com",
+    "baidu.com",
+    "bdimg.com",
+    "bdstatic.com",
+    "alicdn.com",
+    "aliyun.com",
+    "aliyuncs.com",
+    "taobao.com",
+    "tmall.com",
+    "alipay.com",
+    "jd.com",
+    "360buyimg.com",
+    "mi.com",
+    "xiaomi.com",
+    "huawei.com",
+    "huaweicloud.com",
+    "meituan.com",
+    "dianping.com",
+    "amap.com",
+    "autonavi.com",
+    "zhihu.com",
+    "zhimg.com",
+    "douban.com",
+    "xiaohongshu.com",
+    "xhscdn.com",
+    "bilibili.com",
+    "bilibili.tv",
+    "iqiyi.com",
+    "youku.com",
+    "kugou.com",
+    "kuwo.cn",
+    "migu.cn",
+    "douyin.com",
+    "ixigua.com",
+    "kuaishou.com",
+]
+BUILTIN_CN_IP_CIDRS = [
+    "106.52.0.0/15",
+    "106.54.0.0/16",
+]
+
+
+def read_rule_file(name, fallback):
+    try:
+        with open(f"{LINKRAY_RULE_DIR}/{name}", "r", encoding="utf-8") as file:
+            values = [
+                line.strip()
+                for line in file
+                if line.strip() and not line.strip().startswith("#")
+            ]
+    except OSError:
+        values = []
+    return sorted(set(values or fallback))
+
+
 class ClashConfiguration(object):
     def __init__(self):
         self.data = {
@@ -57,6 +128,8 @@ class ClashConfiguration(object):
                         "proxy_remarks": self.proxy_remarks,
                         "proxy_server_domains": self.proxy_server_domains(),
                         "proxy_server_addresses": self.proxy_server_addresses(),
+                        "domestic_domain_rules": self.domestic_domain_rules(),
+                        "domestic_ip_rules": self.domestic_ip_rules(),
                     }
                 ),
                 Loader=yaml.SafeLoader
@@ -96,6 +169,12 @@ class ClashConfiguration(object):
             if server not in domains:
                 domains.append(server)
         return domains
+
+    def domestic_domain_rules(self):
+        return read_rule_file("cn-domains.txt", BUILTIN_CN_DOMAIN_SUFFIXES)
+
+    def domestic_ip_rules(self):
+        return read_rule_file("cn-ip-cidrs.txt", BUILTIN_CN_IP_CIDRS)
 
     def proxy_server_addresses(self):
         addresses = []

@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from .config import DEFAULT_PORTS, RELAY_PORT_OFFSET, LinkRayConfig, NodeHost, RenderResult, relay_port
+from .rules import BUILTIN_CN_DOMAIN_SUFFIXES, BUILTIN_CN_IP_CIDRS, RouteRules, write_route_rules
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -424,6 +425,31 @@ WantedBy=multi-user.target
 """
 
 
+def linkray_rules_update_service() -> str:
+    return """[Unit]
+Description=LinkRay CN route rule updater
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/linkray rules update --output /var/lib/marzban/linkray/rules
+"""
+
+
+def linkray_rules_update_timer() -> str:
+    return """[Unit]
+Description=Refresh LinkRay CN route rules daily
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+"""
+
+
 def linkray_relay_service(nodes: Sequence[NodeHost], config: LinkRayConfig) -> str:
     relay_nodes = list(nodes[1:])
     node_flags = [
@@ -757,6 +783,13 @@ def render_master(
     nodes: Sequence[NodeHost] | None = None,
 ) -> RenderResult:
     effective_nodes = list(nodes) if nodes else default_nodes(config)
+    write_route_rules(
+        output / "var/lib/marzban/linkray/rules",
+        RouteRules(
+            cn_domain_suffixes=list(BUILTIN_CN_DOMAIN_SUFFIXES),
+            cn_ip_cidrs=list(BUILTIN_CN_IP_CIDRS),
+        ),
+    )
     files = [
         write_text(output / "var/lib/marzban/xray_config.json", json.dumps(xray_config(config), indent=2) + "\n"),
         write_text(output / "opt/marzban/.env", marzban_env(config)),
@@ -765,8 +798,12 @@ def render_master(
         write_text(output / "etc/systemd/system/linkray-api.service", linkray_api_service(effective_nodes, config)),
         write_text(output / "etc/systemd/system/linkray-egern.service", linkray_egern_service(config)),
         write_text(output / "etc/systemd/system/linkray-sub-auto.service", linkray_sub_auto_service(config)),
+        write_text(output / "etc/systemd/system/linkray-rules-update.service", linkray_rules_update_service()),
+        write_text(output / "etc/systemd/system/linkray-rules-update.timer", linkray_rules_update_timer()),
         write_text(output / "etc/systemd/system/linkray-relay.service", linkray_relay_service(effective_nodes, config)),
         write_text(output / "var/lib/marzban/linkray/hosts.sql", hosts_sql(config, effective_nodes)),
+        output / "var/lib/marzban/linkray/rules/cn-domains.txt",
+        output / "var/lib/marzban/linkray/rules/cn-ip-cidrs.txt",
         copy_file(TEMPLATE_ROOT / "marzban/clash/default.yml", output / "var/lib/marzban/templates/clash/default.yml"),
         copy_file(PATCH_ROOT / "marzban-subscription/current/clash.py", output / "var/lib/marzban/linkray/patches/clash.py"),
         copy_file(
@@ -808,6 +845,8 @@ def validate_rendered(path: Path) -> list[str]:
         path / "etc/systemd/system/linkray-api.service",
         path / "etc/systemd/system/linkray-egern.service",
         path / "etc/systemd/system/linkray-sub-auto.service",
+        path / "etc/systemd/system/linkray-rules-update.service",
+        path / "etc/systemd/system/linkray-rules-update.timer",
     ]
     if (path / "opt/marzban/docker-compose.yml").exists():
         for service_path in service_paths:
