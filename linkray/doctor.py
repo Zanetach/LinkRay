@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 from dataclasses import dataclass
@@ -77,7 +78,23 @@ def docker_check(container: str, runner: Runner) -> Check:
     return Check("FAIL", f"container {container}", "not running")
 
 
-def runtime_checks(role: str, runner: Runner) -> list[Check]:
+def rendered_xray_ports(root: Path) -> list[int]:
+    path = root / "var/lib/marzban/xray_config.json"
+    if not path.exists():
+        return list(DEFAULT_PORTS.values())
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return list(DEFAULT_PORTS.values())
+    ports = []
+    for inbound in data.get("inbounds", []):
+        port = inbound.get("port") if isinstance(inbound, dict) else None
+        if isinstance(port, int):
+            ports.append(port)
+    return ports or list(DEFAULT_PORTS.values())
+
+
+def runtime_checks(role: str, runner: Runner, root: Path = Path("/")) -> list[Check]:
     checks: list[Check] = []
     ss_result = runner.run(["ss", "-lntup"])
     ss_output = ss_result.stdout
@@ -99,7 +116,7 @@ def runtime_checks(role: str, runner: Runner) -> list[Check]:
             "running" if has_process(ps_output, "/usr/local/bin/xray run -config stdin:") else "not found",
         )
     )
-    expected_ports = list(DEFAULT_PORTS.values())
+    expected_ports = rendered_xray_ports(root)
     if role == "master":
         expected_ports = [8000, 9443, 61990, *expected_ports]
         checks.append(docker_check("marzban-marzban-1", runner))
@@ -153,7 +170,7 @@ def run_doctor(
 ) -> list[Check]:
     checks = file_checks(role, root)
     if runtime:
-        checks.extend(runtime_checks(role, runner or SubprocessRunner()))
+        checks.extend(runtime_checks(role, runner or SubprocessRunner(), root=root))
     return checks
 
 

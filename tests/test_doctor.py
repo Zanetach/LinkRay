@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from linkray.config import DEFAULT_PORTS, LinkRayConfig
+from linkray.config import DEFAULT_PORTS, LinkRayConfig, parse_inbound_ports
 from linkray.doctor import CommandResult, docker_has_container, exit_code, has_listening_port, run_doctor
 from linkray.install import install_master, install_node
 
@@ -63,6 +63,33 @@ class DoctorTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             install_master(LinkRayConfig(domain="edge-a.example.com"), root=root, apply=True)
+            checks = run_doctor("master", root=root, runtime=True, runner=runner)
+        self.assertEqual(exit_code(checks), 0)
+
+    def test_runtime_doctor_master_uses_rendered_custom_xray_ports(self):
+        custom_ports = parse_inbound_ports(["vless_tls=32080", "trojan_grpc_tls=32091"])
+        expected_ports = {**DEFAULT_PORTS, **dict(custom_ports)}
+        ss_ports = "\n".join(
+            f'tcp LISTEN 0 4096 *:{port} *:* users:(("xray",pid=1,fd=3))'
+            for port in [8000, 9443, 61990, *expected_ports.values()]
+        )
+        runner = FakeRunner(
+            {
+                ("ss", "-lntup"): CommandResult(0, ss_ports),
+                ("ps", "-eo", "pid,ppid,cmd"): CommandResult(0, "1 0 /usr/local/bin/xray run -config stdin:\n"),
+                ("systemctl", "is-active", "nginx"): CommandResult(0, "active\n"),
+                ("systemctl", "is-active", "xray"): CommandResult(3, "inactive\n"),
+                ("systemctl", "is-active", "linkray-api"): CommandResult(0, "active\n"),
+                ("systemctl", "is-active", "linkray-egern"): CommandResult(0, "active\n"),
+                ("systemctl", "is-active", "linkray-sub-auto"): CommandResult(0, "active\n"),
+                ("systemctl", "is-active", "linkray-rules-update.timer"): CommandResult(0, "active\n"),
+                ("systemctl", "is-active", "linkray-relay"): CommandResult(0, "active\n"),
+                ("docker", "ps", "--format", "{{.Names}}|{{.Status}}"): CommandResult(0, "marzban-marzban-1|Up 1 hour\n"),
+            }
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            install_master(LinkRayConfig(domain="edge-a.example.com", inbound_ports=custom_ports), root=root, apply=True)
             checks = run_doctor("master", root=root, runtime=True, runner=runner)
         self.assertEqual(exit_code(checks), 0)
 
