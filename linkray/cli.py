@@ -13,6 +13,7 @@ from .ports import write_ports_json
 from .relay import serve_relay
 from .render import render_master, render_node, validate_rendered
 from .rules import DEFAULT_RULE_DIR, update_route_rules
+from .shadowrocket import serve_shadowrocket
 from .sub_auto import serve_sub_auto
 
 
@@ -145,12 +146,20 @@ def add_egern_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPar
     egern.add_argument("--marzban-url", default="http://127.0.0.1:8000")
 
 
+def add_shadowrocket_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    shadowrocket = subparsers.add_parser("shadowrocket", help="Run the Shadowrocket subscription adapter")
+    shadowrocket.add_argument("--listen", default="127.0.0.1")
+    shadowrocket.add_argument("--port", default=61994, type=int)
+    shadowrocket.add_argument("--marzban-url", default="http://127.0.0.1:8000")
+
+
 def add_sub_auto_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     sub_auto = subparsers.add_parser("sub-auto", help="Run automatic subscription format routing")
     sub_auto.add_argument("--listen", default="127.0.0.1")
     sub_auto.add_argument("--port", default=61993, type=int)
     sub_auto.add_argument("--marzban-url", default="http://127.0.0.1:8000")
     sub_auto.add_argument("--egern-url", default="http://127.0.0.1:61992")
+    sub_auto.add_argument("--shadowrocket-url", default="http://127.0.0.1:61994")
 
 
 def add_rules_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -187,6 +196,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_ports_parser(subparsers)
     add_api_parser(subparsers)
     add_egern_parser(subparsers)
+    add_shadowrocket_parser(subparsers)
     add_sub_auto_parser(subparsers)
     add_rules_parser(subparsers)
     add_relay_parser(subparsers)
@@ -283,6 +293,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "egern":
         return serve_egern(args)
+
+    if args.command == "shadowrocket":
+        return serve_shadowrocket(args)
 
     if args.command == "sub-auto":
         return serve_sub_auto(args)

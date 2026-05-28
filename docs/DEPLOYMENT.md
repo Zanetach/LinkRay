@@ -72,6 +72,7 @@ The rendered master tree contains:
 - `etc/nginx/conf.d/marzban-panel.conf`
 - `etc/systemd/system/linkray-api.service`
 - `etc/systemd/system/linkray-egern.service`
+- `etc/systemd/system/linkray-shadowrocket.service`
 - `etc/systemd/system/linkray-sub-auto.service`
 - `etc/systemd/system/linkray-relay.service`
 
@@ -107,10 +108,12 @@ cd /opt/marzban && docker compose up -d
 systemctl daemon-reload
 systemctl enable --now linkray-api
 systemctl enable --now linkray-egern
+systemctl enable --now linkray-shadowrocket
 systemctl enable --now linkray-sub-auto
 systemctl enable --now linkray-relay
 systemctl restart linkray-api
 systemctl restart linkray-egern
+systemctl restart linkray-shadowrocket
 systemctl restart linkray-sub-auto
 systemctl restart linkray-relay
 nginx -t
@@ -172,7 +175,7 @@ linkray doctor --role node
 
 ## Secondary Node Relay
 
-For two-node deployments, LinkRay advertises the second node through master-side relay ports so clients that cannot directly reach the second node still see normal, non-chained proxy entries. The first secondary node uses `inbound_port + 100`; for example, `32080` becomes `32180` on the master and relays to the secondary node's `32080`. TLS SNI and WebSocket Host remain the secondary node domain, so Xray protocol handshakes still terminate on the secondary node.
+For two-node deployments, LinkRay advertises the second node through master-side relay ports so clients that cannot directly reach the second node still see normal, non-chained proxy entries. The first secondary node uses `inbound_port + 100`; for example, `18080` becomes `18180` on the master and relays to the secondary node's `18080`. TLS SNI and WebSocket Host remain the secondary node domain, so Xray protocol handshakes still terminate on the secondary node.
 
 ## Node Deployment Shape
 
@@ -199,6 +202,7 @@ Check subscription from a client machine:
 ```bash
 curl -ksS '<marzban-subscription-url>/clash-meta' -o /tmp/linkray.yaml
 mihomo -t -f /tmp/linkray.yaml
+curl -ksS '<marzban-subscription-url>/shadowrocket' -o /tmp/linkray-shadowrocket.conf
 ```
 
 Expected result for a two-node deployment:

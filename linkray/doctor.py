@@ -106,6 +106,7 @@ def runtime_checks(role: str, runner: Runner, root: Path = Path("/")) -> list[Ch
     if role == "master":
         checks.append(service_check("linkray-api", "active", runner))
         checks.append(service_check("linkray-egern", "active", runner))
+        checks.append(service_check("linkray-shadowrocket", "active", runner))
         checks.append(service_check("linkray-sub-auto", "active", runner))
         checks.append(service_check("linkray-rules-update.timer", "active", runner))
         checks.append(service_check("linkray-relay", "active", runner))
@@ -146,6 +147,7 @@ def file_checks(role: str, root: Path) -> list[Check]:
             "etc/nginx/conf.d/marzban-panel.conf",
             "etc/systemd/system/linkray-api.service",
             "etc/systemd/system/linkray-egern.service",
+            "etc/systemd/system/linkray-shadowrocket.service",
             "etc/systemd/system/linkray-sub-auto.service",
             "etc/systemd/system/linkray-rules-update.service",
             "etc/systemd/system/linkray-rules-update.timer",

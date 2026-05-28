@@ -74,23 +74,23 @@ class EgernTests(unittest.TestCase):
     def test_build_egern_yaml_adds_prev_hop_for_secondary_servers(self):
         links = "\n".join(
             [
-                "vless://11111111-1111-1111-1111-111111111111@107.172.216.169:32080?security=tls&type=tcp&sni=ca.cyclelink.org&flow=xtls-rprx-vision#ca-VLESS_TLS_Vision",
-                "vless://11111111-1111-1111-1111-111111111111@69.63.198.100:32080?security=tls&type=tcp&sni=la.cyclelink.org&flow=xtls-rprx-vision#la-VLESS_TLS_Vision",
-                "trojan://password@69.63.198.100:32083?security=tls&type=tcp&sni=la.cyclelink.org#la-Trojan_TLS",
+                "vless://11111111-1111-1111-1111-111111111111@198.51.100.10:18080?security=tls&type=tcp&sni=edge-a.example.com&flow=xtls-rprx-vision#edge-a-VLESS_TLS_Vision",
+                "vless://11111111-1111-1111-1111-111111111111@203.0.113.20:18080?security=tls&type=tcp&sni=edge-b.example.com&flow=xtls-rprx-vision#edge-b-VLESS_TLS_Vision",
+                "trojan://password@203.0.113.20:18083?security=tls&type=tcp&sni=edge-b.example.com#edge-b-Trojan_TLS",
             ]
         )
 
         output = build_egern_yaml(base64.b64encode(links.encode()))
 
         self.assertIn('flow: "xtls-rprx-vision"', output)
-        self.assertEqual(output.count('prev_hop: "ca-VLESS_TLS_Vision"'), 2)
-        self.assertLess(output.index('name: "ca-VLESS_TLS_Vision"'), output.index('prev_hop: "ca-VLESS_TLS_Vision"'))
+        self.assertEqual(output.count('prev_hop: "edge-a-VLESS_TLS_Vision"'), 2)
+        self.assertLess(output.index('name: "edge-a-VLESS_TLS_Vision"'), output.index('prev_hop: "edge-a-VLESS_TLS_Vision"'))
 
     def test_build_egern_yaml_adds_policy_groups_and_route_rules(self):
         links = "\n".join(
             [
-                "vless://11111111-1111-1111-1111-111111111111@107.172.216.169:32080?security=tls&type=tcp&sni=ca.cyclelink.org&flow=xtls-rprx-vision#ca-VLESS_TLS_Vision",
-                "trojan://password@107.172.216.169:32083?security=tls&type=tcp&sni=ca.cyclelink.org#ca-Trojan_TLS",
+                "vless://11111111-1111-1111-1111-111111111111@edge-a.example.com:18080?security=tls&type=tcp&sni=edge-a.example.com&flow=xtls-rprx-vision#edge-a-VLESS_TLS_Vision",
+                "trojan://password@edge-a.example.com:18083?security=tls&type=tcp&sni=edge-a.example.com#edge-a-Trojan_TLS",
             ]
         )
 

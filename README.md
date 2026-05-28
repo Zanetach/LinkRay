@@ -27,6 +27,7 @@ LinkRay targets this baseline:
 - Subscription format routing:
   - `/sub/<token>` is an automatic entrypoint that keeps browser, Egern, Shadowrocket, Clash/Mihomo, sing-box, and generic Base64 clients on the right response format when their client headers are identifiable
   - `/sub/<token>/egern` exposes an Egern-specific proxy resource for clients that do not identify themselves reliably
+  - `/sub/<token>/shadowrocket` exposes a Shadowrocket `.conf` resource with compatible stable proxies, policy groups, and domestic direct rules
 - Marzban dashboard patch:
   - the user Link button shows 自动识别订阅 first, then Clash/Mihomo, Shadowrocket, Egern, sing-box, and v2ray-json links
   - Create User protocol cards show the concrete LinkRay inbound forms under Vmess, Vless, Trojan, and Shadowsocks
@@ -37,6 +38,7 @@ LinkRay targets this baseline:
 - Sidecar services:
   - `linkray-api.service` reports node port status
   - `linkray-egern.service` converts Marzban subscriptions into Egern YAML
+  - `linkray-shadowrocket.service` converts Marzban subscriptions into Shadowrocket config
   - `linkray-sub-auto.service` routes the base subscription URL to the best available format
   - `linkray-relay.service` exposes secondary-node TCP relay ports on the master so mobile clients do not need client-side proxy chaining
 
@@ -106,7 +108,7 @@ linkray render master \
 
 The same `--inbound key=port` flags are supported by `linkray api` and `linkray ports`, so the dashboard Node Info panel can follow production port changes without code edits.
 
-For multi-node installs, LinkRay publishes secondary nodes through master relay ports by default. The first secondary node uses each inbound port plus `100` for its public subscription port, while TLS SNI and WebSocket Host still point at the real secondary-node domain. For example, a secondary node inbound on `32080` is advertised as `<master-domain>:32180` and relayed to `<secondary-domain>:32080`.
+For multi-node installs, LinkRay publishes secondary nodes through master relay ports by default. The first secondary node uses each inbound port plus `100` for its public subscription port, while TLS SNI and WebSocket Host still point at the real secondary-node domain. For example, a secondary node inbound on `18080` is advertised as `<master-domain>:18180` and relayed to `<secondary-domain>:18080`.
 
 Deploy a rendered master tree on a prepared server:
 

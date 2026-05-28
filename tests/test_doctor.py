@@ -54,6 +54,7 @@ class DoctorTests(unittest.TestCase):
                 ("systemctl", "is-active", "xray"): CommandResult(3, "inactive\n"),
                 ("systemctl", "is-active", "linkray-api"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "linkray-egern"): CommandResult(0, "active\n"),
+                ("systemctl", "is-active", "linkray-shadowrocket"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "linkray-sub-auto"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "linkray-rules-update.timer"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "linkray-relay"): CommandResult(0, "active\n"),
@@ -67,7 +68,7 @@ class DoctorTests(unittest.TestCase):
         self.assertEqual(exit_code(checks), 0)
 
     def test_runtime_doctor_master_uses_rendered_custom_xray_ports(self):
-        custom_ports = parse_inbound_ports(["vless_tls=32080", "trojan_grpc_tls=32091"])
+        custom_ports = parse_inbound_ports(["vless_tls=28080", "trojan_grpc_tls=28091"])
         expected_ports = {**DEFAULT_PORTS, **dict(custom_ports)}
         ss_ports = "\n".join(
             f'tcp LISTEN 0 4096 *:{port} *:* users:(("xray",pid=1,fd=3))'
@@ -81,6 +82,7 @@ class DoctorTests(unittest.TestCase):
                 ("systemctl", "is-active", "xray"): CommandResult(3, "inactive\n"),
                 ("systemctl", "is-active", "linkray-api"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "linkray-egern"): CommandResult(0, "active\n"),
+                ("systemctl", "is-active", "linkray-shadowrocket"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "linkray-sub-auto"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "linkray-rules-update.timer"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "linkray-relay"): CommandResult(0, "active\n"),
