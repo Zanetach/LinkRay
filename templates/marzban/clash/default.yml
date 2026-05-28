@@ -240,10 +240,10 @@ proxy-groups:
   - name: 国内站点
     type: select
     proxies:
+      - DIRECT
 {% if proxy_remarks %}
 {{ [proxy_remarks[0]] | yaml | indent(6, true) }}
 {% endif %}
-      - DIRECT
       - 手动切换
       - 全球代理
       - 自动选择
@@ -274,6 +274,10 @@ rules:
 
   - IP-CIDR,106.52.0.0/15,国内站点,no-resolve
   - IP-CIDR,106.54.0.0/16,国内站点,no-resolve
+  - DOMAIN-SUFFIX,cn,国内站点
+  - DOMAIN-SUFFIX,中国,国内站点
+  - DOMAIN-SUFFIX,公司,国内站点
+  - DOMAIN-SUFFIX,网络,国内站点
   - DOMAIN-SUFFIX,tencentcloud.com,国内站点
   - DOMAIN-SUFFIX,qcloud.com,国内站点
   - DOMAIN-SUFFIX,myqcloud.com,国内站点
@@ -282,6 +286,30 @@ rules:
   - DOMAIN-SUFFIX,qq.com,国内站点
   - DOMAIN-SUFFIX,weixin.qq.com,国内站点
   - DOMAIN-SUFFIX,wechat.com,国内站点
+  - DOMAIN-SUFFIX,baidu.com,国内站点
+  - DOMAIN-SUFFIX,bdimg.com,国内站点
+  - DOMAIN-SUFFIX,bdstatic.com,国内站点
+  - DOMAIN-SUFFIX,alicdn.com,国内站点
+  - DOMAIN-SUFFIX,aliyun.com,国内站点
+  - DOMAIN-SUFFIX,aliyuncs.com,国内站点
+  - DOMAIN-SUFFIX,taobao.com,国内站点
+  - DOMAIN-SUFFIX,tmall.com,国内站点
+  - DOMAIN-SUFFIX,alipay.com,国内站点
+  - DOMAIN-SUFFIX,jd.com,国内站点
+  - DOMAIN-SUFFIX,360buyimg.com,国内站点
+  - DOMAIN-SUFFIX,mi.com,国内站点
+  - DOMAIN-SUFFIX,xiaomi.com,国内站点
+  - DOMAIN-SUFFIX,huawei.com,国内站点
+  - DOMAIN-SUFFIX,huaweicloud.com,国内站点
+  - DOMAIN-SUFFIX,meituan.com,国内站点
+  - DOMAIN-SUFFIX,dianping.com,国内站点
+  - DOMAIN-SUFFIX,amap.com,国内站点
+  - DOMAIN-SUFFIX,autonavi.com,国内站点
+  - DOMAIN-SUFFIX,zhihu.com,国内站点
+  - DOMAIN-SUFFIX,zhimg.com,国内站点
+  - DOMAIN-SUFFIX,douban.com,国内站点
+  - DOMAIN-SUFFIX,xiaohongshu.com,国内站点
+  - DOMAIN-SUFFIX,xhscdn.com,国内站点
 
   - DOMAIN-SUFFIX,dns.google,DNS_Proxy
   - DOMAIN-SUFFIX,cloudflare-dns.com,DNS_Proxy
@@ -397,4 +425,6 @@ rules:
   - DOMAIN-SUFFIX,ixigua.com,国内媒体
   - DOMAIN-SUFFIX,kuaishou.com,国内媒体
 
+  - IP-CIDR,0.0.0.0/0,国内站点,no-resolve
+  - IP-CIDR6,::/0,国内站点,no-resolve
   - MATCH,漏网之鱼
