@@ -217,6 +217,16 @@ class RenderTests(unittest.TestCase):
                 self.assertIn("proxy_server_addresses", text)
                 self.assertIn("route-exclude-address", text)
                 self.assertIn("store-fake-ip: false", text)
+                self.assertIn("respect-rules: true", text)
+                self.assertIn("direct-nameserver:", text)
+                self.assertIn("https://doh.pub/dns-query", text)
+                self.assertIn("https://dns.alidns.com/dns-query", text)
+                self.assertNotIn("https://1.1.1.1/dns-query", text)
+                self.assertNotIn("https://8.8.8.8/dns-query", text)
+                self.assertIn(
+                    '{{ conf | except("proxy-groups", "listeners", "sub-rules", "rule-providers", "proxy-providers", "port", "socks-port", "redir-port", "tproxy-port", "mixed-port", "mode", "rules", "dns", "tun", "profile", "sniffer", "allow-lan", "bind-address", "log-level", "ipv6", "unified-delay", "tcp-concurrent", "geox-url", "geo-auto-update", "geodata-mode", "geosite-matcher") | yaml }}',
+                    text,
+                )
                 self.assertLess(text.index("- name: 全球代理"), text.index("- name: 流媒体"))
                 global_block = text[text.index("- name: 全球代理"):text.index("- name: 流媒体")]
                 self.assertLess(global_block.index("- 手动切换"), global_block.index("- 自动选择"))

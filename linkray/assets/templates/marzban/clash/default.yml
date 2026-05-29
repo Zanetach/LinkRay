@@ -32,6 +32,8 @@ dns:
   enable: true
   listen: 0.0.0.0:1053
   ipv6: false
+  respect-rules: true
+  prefer-h3: false
   enhanced-mode: fake-ip
   fake-ip-range: 198.18.0.1/16
   fake-ip-filter:
@@ -50,9 +52,15 @@ dns:
     - 223.5.5.5
     - 119.29.29.29
   nameserver:
-    - https://1.1.1.1/dns-query
-    - https://8.8.8.8/dns-query
-    - tls://1.1.1.1
+    - https://doh.pub/dns-query
+    - https://dns.alidns.com/dns-query
+    - 223.5.5.5
+    - 119.29.29.29
+  direct-nameserver:
+    - https://doh.pub/dns-query
+    - https://dns.alidns.com/dns-query
+    - 223.5.5.5
+    - 119.29.29.29
   proxy-server-nameserver:
     - 223.5.5.5
     - 119.29.29.29
@@ -61,7 +69,7 @@ dns:
     "{{ domain }}": 223.5.5.5
 {% endfor %}
 
-{{ conf | except("proxy-groups", "port", "mode", "rules") | yaml }}
+{{ conf | except("proxy-groups", "listeners", "sub-rules", "rule-providers", "proxy-providers", "port", "socks-port", "redir-port", "tproxy-port", "mixed-port", "mode", "rules", "dns", "tun", "profile", "sniffer", "allow-lan", "bind-address", "log-level", "ipv6", "unified-delay", "tcp-concurrent", "geox-url", "geo-auto-update", "geodata-mode", "geosite-matcher") | yaml }}
 
 proxy-groups:
   - name: 手动切换
