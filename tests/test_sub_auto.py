@@ -1,6 +1,6 @@
 import unittest
 
-from linkray.sub_auto import choose_suffix, parse_token
+from linkray.sub_auto import PASS_HEADERS, choose_suffix, parse_token
 
 
 class SubAutoTests(unittest.TestCase):
@@ -17,6 +17,9 @@ class SubAutoTests(unittest.TestCase):
         self.assertEqual(parse_token("/sub/abc/"), "abc")
         self.assertIsNone(parse_token("/sub/abc/egern"))
         self.assertIsNone(parse_token("/api/sub/abc"))
+
+    def test_forwarded_headers_do_not_expose_internal_profile_url(self):
+        self.assertNotIn("profile-web-page-url", PASS_HEADERS)
 
 
 if __name__ == "__main__":

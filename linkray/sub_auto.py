@@ -12,7 +12,6 @@ from .native import build_stable_native_subscription
 
 PASS_HEADERS = {
     "content-disposition",
-    "profile-web-page-url",
     "support-url",
     "profile-title",
     "profile-update-interval",

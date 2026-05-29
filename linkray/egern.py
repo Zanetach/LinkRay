@@ -13,13 +13,12 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, unquote, urlparse
 from urllib.request import Request, urlopen
 
-from .rules import RouteRules, load_route_rules
+from .rules import BUILTIN_CN_DOMAIN_SUFFIXES, RouteRules, load_route_rules
 
 
 TOKEN_RE = re.compile(r"^/sub/([^/]+)/egern/?$")
 PASS_HEADERS = {
     "content-disposition",
-    "profile-web-page-url",
     "support-url",
     "profile-title",
     "profile-update-interval",
@@ -321,11 +320,13 @@ def build_policy_groups(proxies: list[dict[str, dict[str, Any]]]) -> list[dict[s
     return [
         {"select": {"name": "手动切换", "policies": names}},
         {
-            "url_test": {
+            "auto_test": {
                 "name": "自动选择",
                 "policies": names,
                 "url": "https://www.gstatic.com/generate_204",
                 "interval": 300,
+                "tolerance": 50,
+                "timeout": 5,
             }
         },
         {"select": {"name": "全球代理", "policies": ["手动切换", "自动选择", *names]}},
@@ -336,13 +337,17 @@ def build_policy_groups(proxies: list[dict[str, dict[str, Any]]]) -> list[dict[s
 
 def build_route_rules(route_rules: RouteRules) -> list[dict[str, dict[str, Any]]]:
     rules: list[dict[str, dict[str, Any]]] = []
+    for domain in ("local", "lan"):
+        rules.append({"domain_suffix": {"match": domain, "policy": "国内站点"}})
+    for cidr in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "127.0.0.0/8", "169.254.0.0/16"):
+        rules.append({"ip_cidr": {"match": cidr, "policy": "国内站点"}})
     for domain in FOREIGN_DOMAIN_SUFFIXES:
         rules.append({"domain_suffix": {"match": domain, "policy": "全球代理"}})
-    for domain in route_rules.cn_domain_suffixes:
+    compact_cn_domains = sorted(set(BUILTIN_CN_DOMAIN_SUFFIXES) | {"dns.pub", "doh.pub", "alidns.com"})
+    for domain in compact_cn_domains:
         rules.append({"domain_suffix": {"match": domain, "policy": "国内站点"}})
-    for cidr in route_rules.cn_ip_cidrs:
-        rules.append({"ip_cidr": {"match": cidr, "policy": "国内站点"}})
-    rules.append({"final": {"policy": "漏网之鱼"}})
+    rules.append({"geoip": {"match": "CN", "policy": "国内站点"}})
+    rules.append({"default": {"policy": "漏网之鱼"}})
     return rules
 
 

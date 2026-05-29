@@ -81,6 +81,11 @@ class ShadowrocketTests(unittest.TestCase):
         self.assertNotIn("example-119999.cn", output)
         self.assertNotIn("10.31.63.0/24", output)
 
+    def test_forwarded_headers_do_not_expose_internal_profile_url(self):
+        module = self.shadowrocket_module()
+
+        self.assertNotIn("profile-web-page-url", module.PASS_HEADERS)
+
 
 if __name__ == "__main__":
     unittest.main()

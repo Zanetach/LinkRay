@@ -18,7 +18,6 @@ from .rules import BUILTIN_CN_DOMAIN_SUFFIXES, RouteRules, load_route_rules
 TOKEN_RE = re.compile(r"^/sub/([^/]+)/shadowrocket/?$")
 PASS_HEADERS = {
     "content-disposition",
-    "profile-web-page-url",
     "support-url",
     "profile-title",
     "profile-update-interval",

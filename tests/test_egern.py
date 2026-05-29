@@ -3,7 +3,7 @@ import json
 import unittest
 from unittest.mock import patch
 
-from linkray.egern import build_egern_yaml, convert_link, resolve_server_address
+from linkray.egern import PASS_HEADERS, build_egern_yaml, convert_link, resolve_server_address
 from linkray.rules import RouteRules
 
 
@@ -102,13 +102,38 @@ class EgernTests(unittest.TestCase):
         self.assertIn("policy_groups:", output)
         self.assertIn('name: "全球代理"', output)
         self.assertIn('name: "国内站点"', output)
+        self.assertIn("auto_test:", output)
+        self.assertNotIn("url_test:", output)
         self.assertIn("rules:", output)
         self.assertIn("domain_suffix:", output)
         self.assertIn('match: "baidu.com"', output)
-        self.assertIn("ip_cidr:", output)
-        self.assertIn('match: "106.52.0.0/15"', output)
-        self.assertIn("final:", output)
+        self.assertIn("geoip:", output)
+        self.assertIn('match: "CN"', output)
+        self.assertNotIn('match: "106.52.0.0/15"', output)
+        self.assertIn("default:", output)
+        self.assertNotIn("final:", output)
         self.assertIn('policy: "漏网之鱼"', output)
+
+    def test_build_egern_yaml_keeps_large_cn_rule_sets_compact(self):
+        links = "trojan://password@edge-a.example.com:18083?security=tls&type=tcp&sni=edge-a.example.com#edge-a-Trojan_TLS"
+        output = build_egern_yaml(
+            base64.b64encode(links.encode()),
+            route_rules=RouteRules(
+                cn_domain_suffixes=[f"example-{index}.cn" for index in range(120000)],
+                cn_ip_cidrs=[f"10.{index // 256}.{index % 256}.0/24" for index in range(8000)],
+            ),
+        )
+
+        self.assertLess(len(output), 12000)
+        self.assertIn("domain_suffix:", output)
+        self.assertIn('match: "cn"', output)
+        self.assertIn("geoip:", output)
+        self.assertIn('match: "CN"', output)
+        self.assertNotIn("example-119999.cn", output)
+        self.assertNotIn("10.31.63.0/24", output)
+
+    def test_forwarded_headers_do_not_expose_internal_profile_url(self):
+        self.assertNotIn("profile-web-page-url", PASS_HEADERS)
 
 
 if __name__ == "__main__":
