@@ -60,9 +60,26 @@ class ShadowrocketTests(unittest.TestCase):
         self.assertIn("全球代理 = select,手动切换,自动选择", output)
         self.assertIn("DOMAIN-SUFFIX,google.com,全球代理", output)
         self.assertIn("DOMAIN-SUFFIX,baidu.com,国内站点", output)
-        self.assertIn("IP-CIDR,106.52.0.0/15,国内站点", output)
-        self.assertNotIn("IP-CIDR,106.52.0.0/15,国内站点,no-resolve", output)
+        self.assertIn("GEOIP,CN,国内站点", output)
+        self.assertNotIn("IP-CIDR,106.52.0.0/15,国内站点", output)
         self.assertIn("FINAL,漏网之鱼", output)
+
+    def test_build_shadowrocket_conf_keeps_large_cn_rule_sets_compact(self):
+        module = self.shadowrocket_module()
+        links = "trojan://password@edge-a.example.com:18083?security=tls&type=tcp&sni=edge-a.example.com#edge-a-Trojan_TLS"
+        output = module.build_shadowrocket_conf(
+            base64.b64encode(links.encode()),
+            route_rules=RouteRules(
+                cn_domain_suffixes=[f"example-{index}.cn" for index in range(120000)],
+                cn_ip_cidrs=[f"10.{index // 256}.{index % 256}.0/24" for index in range(8000)],
+            ),
+        )
+
+        self.assertLess(len(output), 12000)
+        self.assertIn("DOMAIN-SUFFIX,cn,国内站点", output)
+        self.assertIn("GEOIP,CN,国内站点", output)
+        self.assertNotIn("example-119999.cn", output)
+        self.assertNotIn("10.31.63.0/24", output)
 
 
 if __name__ == "__main__":

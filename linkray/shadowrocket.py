@@ -12,7 +12,7 @@ from urllib.request import Request, urlopen
 
 from .egern import FOREIGN_DOMAIN_SUFFIXES
 from .native import b64decode_text, decode_subscription_links
-from .rules import RouteRules, load_route_rules
+from .rules import BUILTIN_CN_DOMAIN_SUFFIXES, RouteRules, load_route_rules
 
 
 TOKEN_RE = re.compile(r"^/sub/([^/]+)/shadowrocket/?$")
@@ -230,12 +230,23 @@ def build_policy_groups(names: list[str]) -> list[str]:
 
 def build_rules(route_rules: RouteRules) -> list[str]:
     lines: list[str] = []
+    lines.extend(
+        [
+            "DOMAIN-SUFFIX,local,国内站点",
+            "DOMAIN-SUFFIX,lan,国内站点",
+            "IP-CIDR,10.0.0.0/8,国内站点",
+            "IP-CIDR,172.16.0.0/12,国内站点",
+            "IP-CIDR,192.168.0.0/16,国内站点",
+            "IP-CIDR,127.0.0.0/8,国内站点",
+            "IP-CIDR,169.254.0.0/16,国内站点",
+        ]
+    )
     for domain in FOREIGN_DOMAIN_SUFFIXES:
         lines.append(f"DOMAIN-SUFFIX,{domain},全球代理")
-    for domain in route_rules.cn_domain_suffixes:
+    compact_cn_domains = sorted(set(BUILTIN_CN_DOMAIN_SUFFIXES) | {"dns.pub", "doh.pub", "alidns.com"})
+    for domain in compact_cn_domains:
         lines.append(f"DOMAIN-SUFFIX,{domain},国内站点")
-    for cidr in route_rules.cn_ip_cidrs:
-        lines.append(f"IP-CIDR,{cidr},国内站点")
+    lines.append("GEOIP,CN,国内站点")
     lines.append("FINAL,漏网之鱼")
     return lines
 
