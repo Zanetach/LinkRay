@@ -81,6 +81,39 @@ class ShadowrocketTests(unittest.TestCase):
         self.assertNotIn("example-119999.cn", output)
         self.assertNotIn("10.31.63.0/24", output)
 
+    def test_build_shadowrocket_subscription_returns_node_links_not_conf(self):
+        module = self.shadowrocket_module()
+        vmess = {
+            "ps": "edge-a-VMess_WS_TLS",
+            "add": "edge-a.example.com",
+            "port": "18089",
+            "id": "00000000-0000-0000-0000-000000000000",
+            "aid": "0",
+            "net": "ws",
+            "path": "/vmess-ws",
+            "host": "edge-a.example.com",
+            "tls": "tls",
+            "scy": "auto",
+        }
+        links = "\n".join(
+            [
+                "vless://11111111-1111-1111-1111-111111111111@edge-a.example.com:18080?security=tls&type=tcp&sni=edge-a.example.com#edge-a-VLESS_TLS_Vision",
+                "vless://11111111-1111-1111-1111-111111111111@edge-a.example.com:18081?security=reality&type=tcp&sni=www.microsoft.com#edge-a-VLESS_Reality_Vision",
+                "trojan://password@edge-a.example.com:18083?security=tls&type=tcp&sni=edge-a.example.com#edge-a-Trojan_TLS",
+                f"vmess://{b64(json.dumps(vmess))}",
+            ]
+        )
+
+        output = module.build_shadowrocket_subscription(base64.b64encode(links.encode()))
+        decoded = base64.b64decode(output).decode()
+
+        self.assertNotIn("[General]", decoded)
+        self.assertNotIn("[Proxy]", decoded)
+        self.assertIn("edge-a-VLESS_TLS_Vision", decoded)
+        self.assertIn("edge-a-Trojan_TLS", decoded)
+        self.assertIn("vmess://", decoded)
+        self.assertNotIn("edge-a-VLESS_Reality_Vision", decoded)
+
     def test_forwarded_headers_do_not_expose_internal_profile_url(self):
         module = self.shadowrocket_module()
 

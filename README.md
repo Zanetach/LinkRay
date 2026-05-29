@@ -178,7 +178,7 @@ The same `--inbound key=port` flags are supported by `linkray api` and `linkray 
 |---|---|
 | `/sub/<token>` | Automatic format routing for identifiable clients |
 | `/sub/<token>/egern` | Egern-specific proxy resource |
-| `/sub/<token>/shadowrocket` | Shadowrocket `.conf` resource |
+| `/sub/<token>/shadowrocket` | Shadowrocket node subscription |
 | `/linkray/ports.html` | Compatibility redirect to `/dashboard/` |
 | `/linkray/ports.json` | Proxy to `/api/linkray/nodes` |
 

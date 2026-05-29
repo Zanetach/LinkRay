@@ -202,7 +202,7 @@ Check subscription from a client machine:
 ```bash
 curl -ksS '<marzban-subscription-url>/clash-meta' -o /tmp/linkray.yaml
 mihomo -t -f /tmp/linkray.yaml
-curl -ksS '<marzban-subscription-url>/shadowrocket' -o /tmp/linkray-shadowrocket.conf
+curl -ksS '<marzban-subscription-url>/shadowrocket' -o /tmp/linkray-shadowrocket.txt
 ```
 
 Expected result for a two-node deployment:

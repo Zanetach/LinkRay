@@ -11,7 +11,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 from urllib.request import Request, urlopen
 
 from .egern import FOREIGN_DOMAIN_SUFFIXES
-from .native import b64decode_text, decode_subscription_links
+from .native import b64decode_text, build_stable_native_subscription, decode_subscription_links
 from .rules import BUILTIN_CN_DOMAIN_SUFFIXES, RouteRules, load_route_rules
 
 
@@ -286,6 +286,10 @@ def build_shadowrocket_conf(subscription_payload: bytes, route_rules: RouteRules
     return "\n".join(sections)
 
 
+def build_shadowrocket_subscription(subscription_payload: bytes) -> bytes:
+    return build_stable_native_subscription(subscription_payload)
+
+
 def fetch_upstream(marzban_url: str, token: str, headers: Mapping[str, str]) -> tuple[int, dict[str, str], bytes]:
     url = f"{marzban_url.rstrip('/')}/sub/{token}"
     req = Request(url, headers={k: v for k, v in headers.items() if v})
@@ -311,7 +315,7 @@ class ShadowrocketHandler(BaseHTTPRequestHandler):
         token = match.group(1)
         try:
             _, upstream_headers, raw = fetch_upstream(self.marzban_url, token, {"Accept": "text/plain"})
-            body = build_shadowrocket_conf(raw).encode("utf-8")
+            body = build_shadowrocket_subscription(raw)
         except HTTPError as exc:
             self.send_bytes(exc.code, dict(exc.headers.items()), exc.read() or b"upstream error\n")
             return
