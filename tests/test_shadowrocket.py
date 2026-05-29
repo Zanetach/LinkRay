@@ -60,7 +60,8 @@ class ShadowrocketTests(unittest.TestCase):
         self.assertIn("全球代理 = select,手动切换,自动选择", output)
         self.assertIn("DOMAIN-SUFFIX,google.com,全球代理", output)
         self.assertIn("DOMAIN-SUFFIX,baidu.com,国内站点", output)
-        self.assertIn("IP-CIDR,106.52.0.0/15,国内站点,no-resolve", output)
+        self.assertIn("IP-CIDR,106.52.0.0/15,国内站点", output)
+        self.assertNotIn("IP-CIDR,106.52.0.0/15,国内站点,no-resolve", output)
         self.assertIn("FINAL,漏网之鱼", output)
 
 

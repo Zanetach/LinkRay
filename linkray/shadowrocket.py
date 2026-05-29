@@ -235,7 +235,7 @@ def build_rules(route_rules: RouteRules) -> list[str]:
     for domain in route_rules.cn_domain_suffixes:
         lines.append(f"DOMAIN-SUFFIX,{domain},国内站点")
     for cidr in route_rules.cn_ip_cidrs:
-        lines.append(f"IP-CIDR,{cidr},国内站点,no-resolve")
+        lines.append(f"IP-CIDR,{cidr},国内站点")
     lines.append("FINAL,漏网之鱼")
     return lines
 

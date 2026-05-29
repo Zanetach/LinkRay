@@ -341,7 +341,7 @@ def build_route_rules(route_rules: RouteRules) -> list[dict[str, dict[str, Any]]
     for domain in route_rules.cn_domain_suffixes:
         rules.append({"domain_suffix": {"match": domain, "policy": "国内站点"}})
     for cidr in route_rules.cn_ip_cidrs:
-        rules.append({"ip_cidr": {"match": cidr, "policy": "国内站点", "no_resolve": True}})
+        rules.append({"ip_cidr": {"match": cidr, "policy": "国内站点"}})
     rules.append({"final": {"policy": "漏网之鱼"}})
     return rules
 
