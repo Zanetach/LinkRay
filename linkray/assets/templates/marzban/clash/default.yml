@@ -382,17 +382,6 @@ rules:
   - DOMAIN-SUFFIX,githubusercontent.com,GitHub
   - DOMAIN-SUFFIX,ghcr.io,GitHub
 
-{% for cidr in domestic_ip_rules | default([]) %}
-{% if ":" in cidr %}
-  - IP-CIDR6,{{ cidr }},国内站点,no-resolve
-{% else %}
-  - IP-CIDR,{{ cidr }},国内站点,no-resolve
-{% endif %}
-{% endfor %}
-{% for domain in domestic_domain_rules | default([]) %}
-  - DOMAIN-SUFFIX,{{ domain }},国内站点
-{% endfor %}
-
   - DOMAIN-SUFFIX,bilibili.com,国内媒体
   - DOMAIN-SUFFIX,bilibili.tv,国内媒体
   - DOMAIN-SUFFIX,iqiyi.com,国内媒体
@@ -404,5 +393,16 @@ rules:
   - DOMAIN-SUFFIX,douyin.com,国内媒体
   - DOMAIN-SUFFIX,ixigua.com,国内媒体
   - DOMAIN-SUFFIX,kuaishou.com,国内媒体
+
+{% for domain in domestic_domain_rules | default([]) %}
+  - DOMAIN-SUFFIX,{{ domain }},国内站点
+{% endfor %}
+{% for cidr in domestic_ip_rules | default([]) %}
+{% if ":" in cidr %}
+  - IP-CIDR6,{{ cidr }},国内站点
+{% else %}
+  - IP-CIDR,{{ cidr }},国内站点
+{% endif %}
+{% endfor %}
 
   - MATCH,漏网之鱼
