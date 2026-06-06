@@ -22,7 +22,7 @@ The goal is simple: stop hand-editing live container files as the primary workfl
 | Master render | Marzban Docker Compose, Nginx config, Xray config, SQL host initialization, dashboard patches, subscription templates, sidecar systemd units |
 | Node render | Marzban Node Docker Compose and install shape |
 | Inbound set | 12 Xray-core inbound protocol families with overridable ports |
-| Subscription routing | Browser/client-aware `/sub/<token>` routing plus Egern and Shadowrocket adapters |
+| Subscription routing | Browser/client-aware `/sub/<token>` routing plus Egern, Shadowrocket, and sing-box adapters |
 | Dashboard patch | User link ordering, concrete protocol card labels, and Node Info backed by `linkray api` |
 | Multi-node relay | Master-side TCP relay ports for secondary nodes, avoiding client-side proxy chaining |
 | Runtime checks | `linkray doctor` file and runtime health checks for master and node roles |
@@ -46,7 +46,7 @@ LinkRay renders these inbound families for every node:
 | VMess HTTPUpgrade TLS | HTTPUpgrade + TLS |
 | Trojan gRPC TLS | gRPC + TLS |
 
-sing-box, Hysteria2, TUIC, and AnyTLS are intentionally out of scope for v1. They need a separate stats and subscription integration layer before they can fit the Marzban-first model.
+sing-box is supported as a client subscription format through a LinkRay sidecar. LinkRay still uses Marzban-managed Xray-core as the proxy runtime. Hysteria2, TUIC, and AnyTLS remain out of scope for v1 because they need a separate stats and subscription integration layer before they can fit the Marzban-first model.
 
 ## Install
 
@@ -168,6 +168,7 @@ The same `--inbound key=port` flags are supported by `linkray api` and `linkray 
 | `linkray api` | Serve node status JSON for the dashboard patch |
 | `linkray egern` | Convert Marzban subscriptions into Egern YAML |
 | `linkray shadowrocket` | Convert Marzban subscriptions into Shadowrocket config |
+| `linkray sing-box` | Convert Marzban subscriptions into compact sing-box JSON |
 | `linkray sub-auto` | Route the base subscription URL to the best identifiable format |
 | `linkray relay` | Expose master-side relay ports for secondary nodes |
 | `linkray rules update` | Refresh CN domain and IP CIDR routing rule files |
@@ -178,7 +179,9 @@ The same `--inbound key=port` flags are supported by `linkray api` and `linkray 
 |---|---|
 | `/sub/<token>` | Automatic format routing for identifiable clients |
 | `/sub/<token>/egern` | Egern-specific proxy resource |
-| `/sub/<token>/shadowrocket` | Shadowrocket node subscription |
+| `/sub/<token>/shadowrocket-conf` | Shadowrocket config with LinkRay route rules |
+| `/sub/<token>/shadowrocket` | Shadowrocket node subscription fallback |
+| `/sub/<token>/sing-box` | LinkRay-generated sing-box JSON |
 | `/linkray/ports.html` | Compatibility redirect to `/dashboard/` |
 | `/linkray/ports.json` | Proxy to `/api/linkray/nodes` |
 
@@ -191,6 +194,7 @@ Rendered master deployments include these LinkRay-managed systemd units:
 | `linkray-api.service` | Reports node port status |
 | `linkray-egern.service` | Converts Marzban subscriptions into Egern YAML |
 | `linkray-shadowrocket.service` | Converts Marzban subscriptions into Shadowrocket config |
+| `linkray-singbox.service` | Converts Marzban subscriptions into compact sing-box JSON |
 | `linkray-sub-auto.service` | Routes base subscription URLs by client headers |
 | `linkray-rules-update.service` | Refreshes route rule files |
 | `linkray-rules-update.timer` | Schedules route rule refreshes |

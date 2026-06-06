@@ -95,6 +95,7 @@ def linkray_api_commands() -> list[str]:
         "systemctl enable --now linkray-api",
         "systemctl enable --now linkray-egern",
         "systemctl enable --now linkray-shadowrocket",
+        "systemctl enable --now linkray-singbox",
         "systemctl enable --now linkray-sub-auto",
         "systemctl enable --now linkray-rules-update.timer",
         "systemctl start linkray-rules-update.service || true",
@@ -102,6 +103,7 @@ def linkray_api_commands() -> list[str]:
         "systemctl restart linkray-api",
         "systemctl restart linkray-egern",
         "systemctl restart linkray-shadowrocket",
+        "systemctl restart linkray-singbox",
         "systemctl restart linkray-sub-auto",
         "systemctl restart linkray-relay",
     ]

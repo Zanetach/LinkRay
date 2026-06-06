@@ -13,6 +13,7 @@ test -f "$src/etc/nginx/conf.d/marzban-panel.conf"
 test -f "$src/etc/systemd/system/linkray-api.service"
 test -f "$src/etc/systemd/system/linkray-egern.service"
 test -f "$src/etc/systemd/system/linkray-shadowrocket.service"
+test -f "$src/etc/systemd/system/linkray-singbox.service"
 test -f "$src/etc/systemd/system/linkray-sub-auto.service"
 test -f "$src/etc/systemd/system/linkray-relay.service"
 test -f "$src/etc/systemd/system/linkray-rules-update.service"
@@ -49,6 +50,7 @@ install -m 0644 "$src/etc/nginx/conf.d/marzban-panel.conf" /etc/nginx/conf.d/mar
 install -m 0644 "$src/etc/systemd/system/linkray-api.service" /etc/systemd/system/linkray-api.service
 install -m 0644 "$src/etc/systemd/system/linkray-egern.service" /etc/systemd/system/linkray-egern.service
 install -m 0644 "$src/etc/systemd/system/linkray-shadowrocket.service" /etc/systemd/system/linkray-shadowrocket.service
+install -m 0644 "$src/etc/systemd/system/linkray-singbox.service" /etc/systemd/system/linkray-singbox.service
 install -m 0644 "$src/etc/systemd/system/linkray-sub-auto.service" /etc/systemd/system/linkray-sub-auto.service
 install -m 0644 "$src/etc/systemd/system/linkray-relay.service" /etc/systemd/system/linkray-relay.service
 install -m 0644 "$src/etc/systemd/system/linkray-rules-update.service" /etc/systemd/system/linkray-rules-update.service
@@ -61,6 +63,7 @@ systemctl daemon-reload
 systemctl enable --now linkray-api
 systemctl enable --now linkray-egern
 systemctl enable --now linkray-shadowrocket
+systemctl enable --now linkray-singbox
 systemctl enable --now linkray-sub-auto
 systemctl enable --now linkray-rules-update.timer
 systemctl start linkray-rules-update.service || true
@@ -68,6 +71,7 @@ systemctl enable --now linkray-relay
 systemctl restart linkray-api
 systemctl restart linkray-egern
 systemctl restart linkray-shadowrocket
+systemctl restart linkray-singbox
 systemctl restart linkray-sub-auto
 systemctl restart linkray-relay
 nginx -t

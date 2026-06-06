@@ -44,7 +44,7 @@ class DoctorTests(unittest.TestCase):
     def test_runtime_doctor_master_detects_healthy_runtime(self):
         ss_ports = "\n".join(
             f'tcp LISTEN 0 4096 *:{port} *:* users:(("xray",pid=1,fd=3))'
-            for port in [8000, 9443, 61990, *DEFAULT_PORTS.values()]
+            for port in [8000, 9443, 61990, 61992, 61993, 61994, 61995, *DEFAULT_PORTS.values()]
         )
         runner = FakeRunner(
             {
@@ -55,6 +55,7 @@ class DoctorTests(unittest.TestCase):
                 ("systemctl", "is-active", "linkray-api"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "linkray-egern"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "linkray-shadowrocket"): CommandResult(0, "active\n"),
+                ("systemctl", "is-active", "linkray-singbox"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "linkray-sub-auto"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "linkray-rules-update.timer"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "linkray-relay"): CommandResult(0, "active\n"),
@@ -72,7 +73,7 @@ class DoctorTests(unittest.TestCase):
         expected_ports = {**DEFAULT_PORTS, **dict(custom_ports)}
         ss_ports = "\n".join(
             f'tcp LISTEN 0 4096 *:{port} *:* users:(("xray",pid=1,fd=3))'
-            for port in [8000, 9443, 61990, *expected_ports.values()]
+            for port in [8000, 9443, 61990, 61992, 61993, 61994, 61995, *expected_ports.values()]
         )
         runner = FakeRunner(
             {
@@ -83,6 +84,7 @@ class DoctorTests(unittest.TestCase):
                 ("systemctl", "is-active", "linkray-api"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "linkray-egern"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "linkray-shadowrocket"): CommandResult(0, "active\n"),
+                ("systemctl", "is-active", "linkray-singbox"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "linkray-sub-auto"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "linkray-rules-update.timer"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "linkray-relay"): CommandResult(0, "active\n"),

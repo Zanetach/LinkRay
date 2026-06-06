@@ -291,8 +291,21 @@ def nginx_panel(config: LinkRayConfig) -> str:
         add_header Cache-Control "no-store";
     }}
 
-    location ~ ^/sub/[^/]+/shadowrocket/?$ {{
+    location ~ ^/sub/[^/]+/(shadowrocket|shadowrocket-conf)/?$ {{
         proxy_pass http://127.0.0.1:61994;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header User-Agent $http_user_agent;
+        proxy_set_header Accept $http_accept;
+        proxy_set_header Accept-Language $http_accept_language;
+        add_header Cache-Control "no-store";
+    }}
+
+    location ~ ^/sub/[^/]+/sing-box/?$ {{
+        proxy_pass http://127.0.0.1:61995;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -438,15 +451,32 @@ WantedBy=multi-user.target
 """
 
 
-def linkray_sub_auto_service(config: LinkRayConfig) -> str:
+def linkray_singbox_service(config: LinkRayConfig) -> str:
     return f"""[Unit]
-Description=LinkRay automatic subscription format router
-After=network-online.target linkray-egern.service linkray-shadowrocket.service
+Description=LinkRay sing-box subscription adapter
+After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/linkray sub-auto --listen 127.0.0.1 --port 61993 --marzban-url http://127.0.0.1:{config.marzban_http_port} --egern-url http://127.0.0.1:61992 --shadowrocket-url http://127.0.0.1:61994
+ExecStart=/usr/local/bin/linkray sing-box --listen 127.0.0.1 --port 61995 --marzban-url http://127.0.0.1:{config.marzban_http_port}
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+"""
+
+
+def linkray_sub_auto_service(config: LinkRayConfig) -> str:
+    return f"""[Unit]
+Description=LinkRay automatic subscription format router
+After=network-online.target linkray-egern.service linkray-shadowrocket.service linkray-singbox.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/linkray sub-auto --listen 127.0.0.1 --port 61993 --marzban-url http://127.0.0.1:{config.marzban_http_port} --egern-url http://127.0.0.1:61992 --shadowrocket-url http://127.0.0.1:61994 --singbox-url http://127.0.0.1:61995
 Restart=always
 RestartSec=3
 
@@ -828,6 +858,7 @@ def render_master(
         write_text(output / "etc/systemd/system/linkray-api.service", linkray_api_service(effective_nodes, config)),
         write_text(output / "etc/systemd/system/linkray-egern.service", linkray_egern_service(config)),
         write_text(output / "etc/systemd/system/linkray-shadowrocket.service", linkray_shadowrocket_service(config)),
+        write_text(output / "etc/systemd/system/linkray-singbox.service", linkray_singbox_service(config)),
         write_text(output / "etc/systemd/system/linkray-sub-auto.service", linkray_sub_auto_service(config)),
         write_text(output / "etc/systemd/system/linkray-rules-update.service", linkray_rules_update_service()),
         write_text(output / "etc/systemd/system/linkray-rules-update.timer", linkray_rules_update_timer()),
@@ -876,6 +907,7 @@ def validate_rendered(path: Path) -> list[str]:
         path / "etc/systemd/system/linkray-api.service",
         path / "etc/systemd/system/linkray-egern.service",
         path / "etc/systemd/system/linkray-shadowrocket.service",
+        path / "etc/systemd/system/linkray-singbox.service",
         path / "etc/systemd/system/linkray-sub-auto.service",
         path / "etc/systemd/system/linkray-rules-update.service",
         path / "etc/systemd/system/linkray-rules-update.timer",

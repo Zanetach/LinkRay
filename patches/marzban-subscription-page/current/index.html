@@ -85,16 +85,17 @@
   <main class="panel">
     <h1>客户端订阅链接</h1>
     <div class="list" id="links"></div>
-    <p class="hint">优先使用自动识别订阅；移动端会按客户端返回 Egern 或 Shadowrocket 可用格式；识别失败时使用上方专用链接；v2rayN/v2rayNG 可用 v2ray-json。</p>
+    <p class="hint">优先使用自动识别订阅；Shadowrocket 建议使用配置链接以保留国内直连规则，节点链接仅作备用；Egern 使用 Egern 链接；v2rayN/v2rayNG 可用 v2ray-json。</p>
     <div class="qr" id="qr"></div>
   </main>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <script>
-    const base = location.href.replace(/\/(clash-meta|shadowrocket|egern|sing-box|v2ray-json|clash)\/?$/, '').replace(/\/$/, '');
+    const base = location.href.replace(/\/(clash-meta|shadowrocket|shadowrocket-conf|egern|sing-box|v2ray-json|clash)\/?$/, '').replace(/\/$/, '');
     const rows = [
       ['自动识别订阅', base],
       ['Clash/Mihomo', base + '/clash-meta'],
-      ['Shadowrocket', base + '/shadowrocket'],
+      ['Shadowrocket 配置', base + '/shadowrocket-conf'],
+      ['Shadowrocket 节点', base + '/shadowrocket'],
       ['Egern', base + '/egern'],
       ['sing-box', base + '/sing-box'],
       ['v2ray-json', base + '/v2ray-json'],

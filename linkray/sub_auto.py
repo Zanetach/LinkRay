@@ -31,7 +31,7 @@ def choose_suffix(user_agent: str, accept: str) -> tuple[str, dict[str, str]]:
     if "egern" in ua:
         return "/egern", {"Accept": "text/yaml"}
     if "shadowrocket" in ua:
-        return "/shadowrocket", {"Accept": "text/plain"}
+        return "/shadowrocket-conf", {"Accept": "text/plain"}
     if any(name in ua for name in ("sing-box", "sfa", "sfi", "sfm")):
         return "/sing-box", {"Accept": "application/json"}
     if any(name in ua for name in ("mihomo", "clash", "flclash", "clash.meta", "stash")):
@@ -66,6 +66,7 @@ class SubAutoHandler(BaseHTTPRequestHandler):
     marzban_url: str
     egern_url: str
     shadowrocket_url: str
+    singbox_url: str
 
     def log_message(self, format: str, *args: object) -> None:
         return
@@ -82,8 +83,12 @@ class SubAutoHandler(BaseHTTPRequestHandler):
         suffix, extra = choose_suffix(self.headers.get("User-Agent", ""), self.headers.get("Accept", ""))
         if suffix == "/egern":
             url = f"{self.egern_url.rstrip('/')}/sub/{token}/egern"
-        elif suffix == "/shadowrocket":
+        elif suffix in {"/shadowrocket", "/shadowrocket-conf"}:
             url = f"{self.shadowrocket_url.rstrip('/')}/sub/{token}/shadowrocket"
+            if suffix == "/shadowrocket-conf":
+                url = f"{self.shadowrocket_url.rstrip('/')}/sub/{token}/shadowrocket-conf"
+        elif suffix == "/sing-box":
+            url = f"{self.singbox_url.rstrip('/')}/sub/{token}/sing-box"
         elif suffix == "/native":
             url = f"{self.marzban_url.rstrip('/')}/sub/{token}"
         else:
@@ -120,6 +125,7 @@ def make_sub_auto_server(
     marzban_url: str,
     egern_url: str,
     shadowrocket_url: str,
+    singbox_url: str,
 ) -> ThreadingHTTPServer:
     class Handler(SubAutoHandler):
         pass
@@ -127,11 +133,12 @@ def make_sub_auto_server(
     Handler.marzban_url = marzban_url
     Handler.egern_url = egern_url
     Handler.shadowrocket_url = shadowrocket_url
+    Handler.singbox_url = singbox_url
     return ThreadingHTTPServer((listen, port), Handler)
 
 
 def serve_sub_auto(args: argparse.Namespace) -> int:
-    server = make_sub_auto_server(args.listen, args.port, args.marzban_url, args.egern_url, args.shadowrocket_url)
+    server = make_sub_auto_server(args.listen, args.port, args.marzban_url, args.egern_url, args.shadowrocket_url, args.singbox_url)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

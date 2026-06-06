@@ -15,7 +15,7 @@ from .native import b64decode_text, build_stable_native_subscription, decode_sub
 from .rules import BUILTIN_CN_DOMAIN_SUFFIXES, RouteRules, load_route_rules
 
 
-TOKEN_RE = re.compile(r"^/sub/([^/]+)/shadowrocket/?$")
+TOKEN_RE = re.compile(r"^/sub/([^/]+)/(shadowrocket|shadowrocket-conf)/?$")
 PASS_HEADERS = {
     "content-disposition",
     "support-url",
@@ -313,9 +313,13 @@ class ShadowrocketHandler(BaseHTTPRequestHandler):
             self.send_bytes(404, {"Content-Type": "text/plain"}, b"not found\n")
             return
         token = match.group(1)
+        mode = match.group(2)
         try:
             _, upstream_headers, raw = fetch_upstream(self.marzban_url, token, {"Accept": "text/plain"})
-            body = build_shadowrocket_subscription(raw)
+            if mode == "shadowrocket-conf":
+                body = build_shadowrocket_conf(raw).encode("utf-8")
+            else:
+                body = build_shadowrocket_subscription(raw)
         except HTTPError as exc:
             self.send_bytes(exc.code, dict(exc.headers.items()), exc.read() or b"upstream error\n")
             return

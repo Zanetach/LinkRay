@@ -65,6 +65,27 @@ class RouteRuleTests(unittest.TestCase):
         self.assertEqual(loaded.cn_domain_suffixes, sorted(set(BUILTIN_CN_DOMAIN_SUFFIXES)))
         self.assertEqual(loaded.cn_ip_cidrs, sorted(set(BUILTIN_CN_IP_CIDRS)))
 
+    def test_builtin_rules_force_wechat_and_tencent_traffic_direct(self):
+        expected = {
+            "qq.com",
+            "weixin.qq.com",
+            "wechat.com",
+            "wx.qq.com",
+            "weixinbridge.com",
+            "servicewechat.com",
+            "qlogo.cn",
+            "qpic.cn",
+            "tenpay.com",
+            "qqmail.com",
+            "imqq.com",
+            "myapp.com",
+            "tencent.com",
+            "tencent-cloud.com",
+            "smtcdns.com",
+        }
+
+        self.assertTrue(expected.issubset(set(BUILTIN_CN_DOMAIN_SUFFIXES)))
+
 
 if __name__ == "__main__":
     unittest.main()

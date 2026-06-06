@@ -73,6 +73,7 @@ The rendered master tree contains:
 - `etc/systemd/system/linkray-api.service`
 - `etc/systemd/system/linkray-egern.service`
 - `etc/systemd/system/linkray-shadowrocket.service`
+- `etc/systemd/system/linkray-singbox.service`
 - `etc/systemd/system/linkray-sub-auto.service`
 - `etc/systemd/system/linkray-relay.service`
 
@@ -109,11 +110,13 @@ systemctl daemon-reload
 systemctl enable --now linkray-api
 systemctl enable --now linkray-egern
 systemctl enable --now linkray-shadowrocket
+systemctl enable --now linkray-singbox
 systemctl enable --now linkray-sub-auto
 systemctl enable --now linkray-relay
 systemctl restart linkray-api
 systemctl restart linkray-egern
 systemctl restart linkray-shadowrocket
+systemctl restart linkray-singbox
 systemctl restart linkray-sub-auto
 systemctl restart linkray-relay
 nginx -t
@@ -202,7 +205,9 @@ Check subscription from a client machine:
 ```bash
 curl -ksS '<marzban-subscription-url>/clash-meta' -o /tmp/linkray.yaml
 mihomo -t -f /tmp/linkray.yaml
+curl -ksS '<marzban-subscription-url>/shadowrocket-conf' -o /tmp/linkray-shadowrocket.conf
 curl -ksS '<marzban-subscription-url>/shadowrocket' -o /tmp/linkray-shadowrocket.txt
+curl -ksS '<marzban-subscription-url>/sing-box' -o /tmp/linkray-sing-box.json
 ```
 
 Expected result for a two-node deployment:

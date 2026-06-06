@@ -59,6 +59,8 @@ class ShadowrocketTests(unittest.TestCase):
         self.assertNotIn("edge-a-VLESS_Reality_Vision", output)
         self.assertIn("全球代理 = select,手动切换,自动选择", output)
         self.assertIn("DOMAIN-SUFFIX,google.com,全球代理", output)
+        self.assertIn("DOMAIN-SUFFIX,weixinbridge.com,国内站点", output)
+        self.assertIn("DOMAIN-SUFFIX,servicewechat.com,国内站点", output)
         self.assertIn("DOMAIN-SUFFIX,baidu.com,国内站点", output)
         self.assertIn("GEOIP,CN,国内站点", output)
         self.assertNotIn("IP-CIDR,106.52.0.0/15,国内站点", output)
@@ -113,6 +115,12 @@ class ShadowrocketTests(unittest.TestCase):
         self.assertIn("edge-a-Trojan_TLS", decoded)
         self.assertIn("vmess://", decoded)
         self.assertNotIn("edge-a-VLESS_Reality_Vision", decoded)
+
+    def test_shadowrocket_token_regex_accepts_config_subscription(self):
+        module = self.shadowrocket_module()
+
+        self.assertIsNotNone(module.TOKEN_RE.match("/sub/token/shadowrocket"))
+        self.assertIsNotNone(module.TOKEN_RE.match("/sub/token/shadowrocket-conf"))
 
     def test_forwarded_headers_do_not_expose_internal_profile_url(self):
         module = self.shadowrocket_module()

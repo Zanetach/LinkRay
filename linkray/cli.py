@@ -14,6 +14,7 @@ from .relay import serve_relay
 from .render import render_master, render_node, validate_rendered
 from .rules import DEFAULT_RULE_DIR, update_route_rules
 from .shadowrocket import serve_shadowrocket
+from .singbox import serve_singbox
 from .sub_auto import serve_sub_auto
 
 
@@ -153,6 +154,13 @@ def add_shadowrocket_parser(subparsers: argparse._SubParsersAction[argparse.Argu
     shadowrocket.add_argument("--marzban-url", default="http://127.0.0.1:8000")
 
 
+def add_singbox_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    singbox = subparsers.add_parser("sing-box", help="Run the sing-box subscription adapter")
+    singbox.add_argument("--listen", default="127.0.0.1")
+    singbox.add_argument("--port", default=61995, type=int)
+    singbox.add_argument("--marzban-url", default="http://127.0.0.1:8000")
+
+
 def add_sub_auto_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     sub_auto = subparsers.add_parser("sub-auto", help="Run automatic subscription format routing")
     sub_auto.add_argument("--listen", default="127.0.0.1")
@@ -160,6 +168,7 @@ def add_sub_auto_parser(subparsers: argparse._SubParsersAction[argparse.Argument
     sub_auto.add_argument("--marzban-url", default="http://127.0.0.1:8000")
     sub_auto.add_argument("--egern-url", default="http://127.0.0.1:61992")
     sub_auto.add_argument("--shadowrocket-url", default="http://127.0.0.1:61994")
+    sub_auto.add_argument("--singbox-url", default="http://127.0.0.1:61995")
 
 
 def add_rules_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -197,6 +206,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_api_parser(subparsers)
     add_egern_parser(subparsers)
     add_shadowrocket_parser(subparsers)
+    add_singbox_parser(subparsers)
     add_sub_auto_parser(subparsers)
     add_rules_parser(subparsers)
     add_relay_parser(subparsers)
@@ -296,6 +306,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "shadowrocket":
         return serve_shadowrocket(args)
+
+    if args.command == "sing-box":
+        return serve_singbox(args)
 
     if args.command == "sub-auto":
         return serve_sub_auto(args)
