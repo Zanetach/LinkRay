@@ -75,6 +75,9 @@ BUILTIN_CN_IP_CIDRS = [
     "106.52.0.0/15",
     "106.54.0.0/16",
 ]
+COMPACT_CN_DOMAIN_SUFFIXES = sorted(
+    set(BUILTIN_CN_DOMAIN_SUFFIXES + ["dns.pub", "doh.pub", "alidns.com"])
+)
 
 
 def read_rule_file(name, fallback):
@@ -171,10 +174,10 @@ class ClashConfiguration(object):
         return domains
 
     def domestic_domain_rules(self):
-        return read_rule_file("cn-domains.txt", BUILTIN_CN_DOMAIN_SUFFIXES)
+        return COMPACT_CN_DOMAIN_SUFFIXES
 
     def domestic_ip_rules(self):
-        return read_rule_file("cn-ip-cidrs.txt", BUILTIN_CN_IP_CIDRS)
+        return []
 
     def proxy_server_addresses(self):
         addresses = []

@@ -404,5 +404,6 @@ rules:
   - IP-CIDR,{{ cidr }},国内站点
 {% endif %}
 {% endfor %}
+  - GEOIP,CN,国内站点
 
   - MATCH,漏网之鱼
