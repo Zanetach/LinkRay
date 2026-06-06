@@ -28,7 +28,7 @@
     .list { display: grid; gap: 12px; }
     .row {
       display: grid;
-      grid-template-columns: 150px minmax(0, 1fr) auto auto;
+      grid-template-columns: 170px minmax(0, 1fr) auto auto;
       gap: 8px;
       align-items: center;
       border: 1px solid #e5e7eb;
@@ -37,6 +37,13 @@
       background: #fbfdff;
     }
     .label { font-size: 14px; font-weight: 800; }
+    .path {
+      display: block;
+      margin-top: 4px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #64748b;
+    }
     input {
       width: 100%;
       min-width: 0;
@@ -85,7 +92,7 @@
   <main class="panel">
     <h1>客户端订阅链接</h1>
     <div class="list" id="links"></div>
-    <p class="hint">优先使用自动识别订阅；Shadowrocket 建议使用配置链接以保留国内直连规则，节点链接仅作备用；Egern 使用 Egern 链接；v2rayN/v2rayNG 可用 v2ray-json。</p>
+    <p class="hint">优先使用自动识别订阅；Shadowrocket 使用 Shadowrocket 链接；Egern 使用 Egern 链接；v2rayN/v2rayNG 可用 v2ray-json。</p>
     <div class="qr" id="qr"></div>
   </main>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -94,19 +101,19 @@
     const rows = [
       ['自动识别订阅', base],
       ['Clash/Mihomo', base + '/clash-meta'],
-      ['Shadowrocket 配置', base + '/shadowrocket-conf'],
-      ['Shadowrocket 节点', base + '/shadowrocket'],
+      ['Shadowrocket', base + '/shadowrocket-conf', '/shadowrocket-conf'],
       ['Egern', base + '/egern'],
       ['sing-box', base + '/sing-box'],
       ['v2ray-json', base + '/v2ray-json'],
     ];
     const root = document.getElementById('links');
     const qr = document.getElementById('qr');
-    rows.forEach(([name, url]) => {
+    rows.forEach(([name, url, path]) => {
       const row = document.createElement('div');
       row.className = 'row';
-      row.innerHTML = `<div class="label">${name}</div><input readonly value="${url.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"><button type="button" class="copy">复制</button><button type="button" class="secondary qrcode">二维码</button>`;
+      row.innerHTML = `<div class="label">${name}${path ? `<span class="path">${path}</span>` : ''}</div><input readonly value="${url.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"><button type="button" class="copy">复制</button><button type="button" class="secondary qrcode">二维码</button>`;
       root.appendChild(row);
+      row.querySelector('input').scrollLeft = row.querySelector('input').scrollWidth;
       row.querySelector('.copy').onclick = async () => {
         const input = row.querySelector('input');
         input.select();
