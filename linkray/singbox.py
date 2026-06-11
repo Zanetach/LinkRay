@@ -5,16 +5,35 @@ import json
 import re
 from collections.abc import Mapping
 from http.server import ThreadingHTTPServer
+from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, unquote, urlparse
+from urllib.request import Request, urlopen
 
 from ._http import PASS_HEADERS, AdapterHandler, fetch_upstream, first_query_value, parse_link_netloc
+from .config import LinkRayConfig, parse_singbox_inbound_ports
 from .native import b64decode_text, decode_subscription_links
 from .rules import COMPACT_CN_DOMAIN_SUFFIXES, FOREIGN_DOMAIN_SUFFIXES, RouteRules, load_route_rules
+from .singbox_runtime import (
+    DEFAULT_RUNTIME_DIR,
+    SingBoxUser,
+    ensure_runtime_user,
+    reconcile_runtime_users,
+    singbox_user_outbounds,
+)
 
 
 TOKEN_RE = re.compile(r"^/sub/([^/]+)/sing-box/?$")
+
+
+def fetch_subscription_username(marzban_url: str, token: str) -> str:
+    url = f"{marzban_url.rstrip('/')}/sub/{token}/info"
+    request = Request(url, headers={"Accept": "application/json"})
+    with urlopen(request, timeout=15) as response:
+        data = json.loads(response.read().decode("utf-8"))
+    username = data.get("username") if isinstance(data, dict) else ""
+    return username if isinstance(username, str) else ""
 
 
 def proxy_tag(parsed, host: str) -> str:
@@ -263,7 +282,12 @@ def build_route_rules(route_rules: RouteRules) -> list[dict[str, Any]]:
     return rules
 
 
-def build_singbox_json(subscription_payload: bytes, route_rules: RouteRules | None = None) -> str:
+def build_singbox_json(
+    subscription_payload: bytes,
+    route_rules: RouteRules | None = None,
+    config: LinkRayConfig | None = None,
+    advanced_user: SingBoxUser | None = None,
+) -> str:
     outbounds: list[dict[str, Any]] = []
     seen: set[str] = set()
     for link in decode_subscription_links(subscription_payload):
@@ -275,6 +299,12 @@ def build_singbox_json(subscription_payload: bytes, route_rules: RouteRules | No
             continue
         seen.add(tag)
         outbounds.append(outbound)
+    if config and advanced_user:
+        for outbound in singbox_user_outbounds(config, advanced_user):
+            tag = outbound["tag"]
+            if tag not in seen:
+                seen.add(tag)
+                outbounds.append(outbound)
 
     names = [str(outbound["tag"]) for outbound in outbounds]
     effective_rules = route_rules or load_route_rules()
@@ -327,6 +357,11 @@ def build_singbox_json(subscription_payload: bytes, route_rules: RouteRules | No
 
 
 class SingBoxHandler(AdapterHandler):
+    server_domain = ""
+    runtime_dir = DEFAULT_RUNTIME_DIR
+    reload_command = ""
+    singbox_inbound_ports = ()
+
     def do_GET(self) -> None:
         path = urlparse(self.path).path
         if path == "/health":
@@ -339,7 +374,21 @@ class SingBoxHandler(AdapterHandler):
         token = match.group(1)
         try:
             _, upstream_headers, raw = fetch_upstream(self.marzban_url, token, {"Accept": "text/plain"})
-            body = build_singbox_json(raw).encode("utf-8")
+            config = None
+            advanced_user = None
+            if self.server_domain:
+                config = LinkRayConfig(domain=self.server_domain, singbox_inbound_ports=self.singbox_inbound_ports)
+                username = fetch_subscription_username(self.marzban_url, token)
+                if not username:
+                    raise ValueError("missing Marzban username for sing-box runtime user")
+                advanced_user, _ = ensure_runtime_user(
+                    token,
+                    config,
+                    runtime_dir=Path(self.runtime_dir),
+                    reload_command=self.reload_command or None,
+                    name=username,
+                )
+            body = build_singbox_json(raw, config=config, advanced_user=advanced_user).encode("utf-8")
         except HTTPError as exc:
             self.send_bytes(exc.code, dict(exc.headers.items()), exc.read() or b"upstream error\n")
             return
@@ -350,16 +399,63 @@ class SingBoxHandler(AdapterHandler):
         headers["Content-Type"] = "application/json; charset=utf-8"
         self.send_bytes(200, headers, body)
 
-def make_singbox_server(listen: str, port: int, marzban_url: str) -> ThreadingHTTPServer:
+    def do_POST(self) -> None:
+        path = urlparse(self.path).path
+        if path != "/runtime/reconcile":
+            self.send_bytes(404, {"Content-Type": "text/plain"}, b"not found\n")
+            return
+        if not self.server_domain:
+            self.send_bytes(503, {"Content-Type": "text/plain"}, b"sing-box runtime is not enabled\n")
+            return
+        try:
+            length = int(self.headers.get("Content-Length") or "0")
+            payload = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
+            usernames = payload.get("active_usernames")
+            if not isinstance(usernames, list) or not all(isinstance(item, str) for item in usernames):
+                raise ValueError("active_usernames must be a string list")
+            config = LinkRayConfig(domain=self.server_domain, singbox_inbound_ports=self.singbox_inbound_ports)
+            changed = reconcile_runtime_users(
+                set(usernames),
+                config,
+                runtime_dir=Path(self.runtime_dir),
+                reload_command=self.reload_command or None,
+            )
+            remaining = len([name for name in usernames if name])
+            body = json.dumps({"ok": True, "changed": changed, "remaining": remaining}).encode("utf-8")
+            self.send_bytes(200, {"Content-Type": "application/json; charset=utf-8"}, body)
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            self.send_bytes(400, {"Content-Type": "text/plain"}, f"invalid reconcile request: {exc}\n".encode("utf-8"))
+
+def make_singbox_server(
+    listen: str,
+    port: int,
+    marzban_url: str,
+    server_domain: str = "",
+    runtime_dir=DEFAULT_RUNTIME_DIR,
+    reload_command: str = "",
+    singbox_inbound_ports=(),
+) -> ThreadingHTTPServer:
     class Handler(SingBoxHandler):
         pass
 
     Handler.marzban_url = marzban_url
+    Handler.server_domain = server_domain
+    Handler.runtime_dir = runtime_dir
+    Handler.reload_command = reload_command
+    Handler.singbox_inbound_ports = singbox_inbound_ports
     return ThreadingHTTPServer((listen, port), Handler)
 
 
 def serve_singbox(args: argparse.Namespace) -> int:
-    server = make_singbox_server(args.listen, args.port, args.marzban_url)
+    server = make_singbox_server(
+        args.listen,
+        args.port,
+        args.marzban_url,
+        server_domain=getattr(args, "server_domain", ""),
+        runtime_dir=getattr(args, "runtime_dir", DEFAULT_RUNTIME_DIR),
+        reload_command=getattr(args, "reload_command", ""),
+        singbox_inbound_ports=parse_singbox_inbound_ports(getattr(args, "singbox_inbound", None)),
+    )
     try:
         server.serve_forever()
     except KeyboardInterrupt:

@@ -33,6 +33,7 @@ linkray = [
   "assets/patches/marzban-dashboard/current/index.html",
   "assets/patches/marzban-dashboard/current/index.linkray.js",
   "assets/patches/marzban-dashboard/current/index.original.js",
+  "assets/patches/marzban-jobs/current/linkray_singbox_usages.py",
   "assets/source-patches/marzban-dashboard/README.md",
   "assets/source-patches/marzban-dashboard/linkray-dashboard.patch",
 ]

@@ -63,7 +63,7 @@ def command_action(command: str, apply: bool, runner: ShellRunner) -> BootstrapA
 def dependency_commands() -> list[str]:
     return [
         "apt-get update",
-        "DEBIAN_FRONTEND=noninteractive apt-get install -y curl ca-certificates gnupg nginx sqlite3 socat cron unzip openssh-client",
+        "DEBIAN_FRONTEND=noninteractive apt-get install -y curl ca-certificates gnupg nginx sqlite3 socat cron unzip openssh-client git build-essential tar",
         "command -v docker >/dev/null 2>&1 || curl -fsSL https://get.docker.com | sh",
         "systemctl enable --now docker",
         "systemctl enable --now nginx",
@@ -87,6 +87,40 @@ def xray_binary_commands(version: str = "v25.3.6") -> list[str]:
     ]
 
 
+def go_toolchain_commands(version: str = "1.23.12") -> list[str]:
+    archive = f"https://go.dev/dl/go{version}.linux-amd64.tar.gz"
+    return [
+        (
+            f"test -x /usr/local/go/bin/go && /usr/local/go/bin/go version | grep -q 'go{version}' || "
+            f"tmp=$(mktemp -d) && "
+            f"curl -fL {shell_quote(archive)} -o \"$tmp/go.tar.gz\" && "
+            f"rm -rf /usr/local/go && "
+            f"tar -C /usr/local -xzf \"$tmp/go.tar.gz\" && "
+            f"rm -rf \"$tmp\""
+        ),
+        "/usr/local/go/bin/go version",
+    ]
+
+
+def singbox_binary_commands(version: str = "v1.12.0") -> list[str]:
+    binary = "/usr/local/bin/sing-box"
+    marker = f"/usr/local/share/linkray/sing-box-with-v2ray-api-quic-utls-clash-api-{version}"
+    return [
+        *go_toolchain_commands(),
+        (
+            f"test -f {marker} -a -x {binary} || "
+            f"tmp=$(mktemp -d) && "
+            f"mkdir -p /usr/local/share/linkray && "
+            f"GOBIN=\"$tmp/bin\" /usr/local/go/bin/go install -trimpath -tags 'with_v2ray_api with_quic with_utls with_clash_api' "
+            f"github.com/sagernet/sing-box/cmd/sing-box@{version} && "
+            f"install -m 0755 \"$tmp/bin/sing-box\" {binary} && "
+            f"touch {marker} && "
+            f"rm -rf \"$tmp\""
+        ),
+        f"{binary} version | head -1",
+    ]
+
+
 def node_flags(nodes: list[NodeHost]) -> str:
     return " ".join(f"--node {shell_quote(f'{node.name}={node.domain}')}" for node in nodes)
 
@@ -101,6 +135,7 @@ def linkray_api_commands() -> list[str]:
         "systemctl enable --now linkray-egern",
         "systemctl enable --now linkray-shadowrocket",
         "systemctl enable --now linkray-singbox",
+        "systemctl enable --now linkray-singbox-runtime",
         "systemctl enable --now linkray-sub-auto",
         "systemctl enable --now linkray-rules-update.timer",
         "systemctl start linkray-rules-update.service || true",
@@ -110,6 +145,7 @@ def linkray_api_commands() -> list[str]:
         "systemctl restart linkray-egern",
         "systemctl restart linkray-shadowrocket",
         "systemctl restart linkray-singbox",
+        "systemctl restart linkray-singbox-runtime",
         "systemctl restart linkray-sub-auto",
         "systemctl restart linkray-relay",
     ]
@@ -148,6 +184,7 @@ def master_runtime_commands(
     if issue_cert:
         commands.extend(cert_commands(config, cf_token_env))
     commands.extend(xray_binary_commands())
+    commands.extend(singbox_binary_commands())
     commands.extend(
         [
             "cd /opt/marzban && docker compose up -d --force-recreate marzban",

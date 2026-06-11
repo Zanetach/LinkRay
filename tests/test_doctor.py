@@ -5,6 +5,7 @@ from pathlib import Path
 from linkray.config import DEFAULT_PORTS, LinkRayConfig, parse_inbound_ports
 from linkray.doctor import CommandResult, docker_has_container, exit_code, has_listening_port, run_doctor
 from linkray.install import install_master, install_node
+from linkray.singbox_runtime import SINGBOX_DEFAULT_PORTS, SINGBOX_STATS_PORT
 
 
 class FakeRunner:
@@ -48,7 +49,12 @@ class DoctorTests(unittest.TestCase):
     def test_runtime_doctor_master_detects_healthy_runtime(self):
         ss_ports = "\n".join(
             f'tcp LISTEN 0 4096 *:{port} *:* users:(("xray",pid=1,fd=3))'
-            for port in [8000, 9443, 61990, 61991, 61992, 61993, 61994, 61995, *DEFAULT_PORTS.values()]
+            for port in [
+                8000, 9443, 61990, 61991, 61992, 61993, 61994, 61995,
+                SINGBOX_STATS_PORT,
+                *SINGBOX_DEFAULT_PORTS.values(),
+                *DEFAULT_PORTS.values(),
+            ]
         )
         runner = FakeRunner(
             {
@@ -61,6 +67,7 @@ class DoctorTests(unittest.TestCase):
                 ("systemctl", "is-active", "linkray-egern"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "linkray-shadowrocket"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "linkray-singbox"): CommandResult(0, "active\n"),
+                ("systemctl", "is-active", "linkray-singbox-runtime"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "linkray-sub-auto"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "linkray-rules-update.timer"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "linkray-relay"): CommandResult(0, "active\n"),
@@ -78,7 +85,12 @@ class DoctorTests(unittest.TestCase):
         expected_ports = {**DEFAULT_PORTS, **dict(custom_ports)}
         ss_ports = "\n".join(
             f'tcp LISTEN 0 4096 *:{port} *:* users:(("xray",pid=1,fd=3))'
-            for port in [8000, 9443, 61990, 61991, 61992, 61993, 61994, 61995, *expected_ports.values()]
+            for port in [
+                8000, 9443, 61990, 61991, 61992, 61993, 61994, 61995,
+                SINGBOX_STATS_PORT,
+                *SINGBOX_DEFAULT_PORTS.values(),
+                *expected_ports.values(),
+            ]
         )
         runner = FakeRunner(
             {
@@ -91,6 +103,7 @@ class DoctorTests(unittest.TestCase):
                 ("systemctl", "is-active", "linkray-egern"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "linkray-shadowrocket"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "linkray-singbox"): CommandResult(0, "active\n"),
+                ("systemctl", "is-active", "linkray-singbox-runtime"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "linkray-sub-auto"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "linkray-rules-update.timer"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "linkray-relay"): CommandResult(0, "active\n"),

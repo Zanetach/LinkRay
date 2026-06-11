@@ -15,6 +15,7 @@ test -f "$src/etc/systemd/system/linkray-clash.service"
 test -f "$src/etc/systemd/system/linkray-egern.service"
 test -f "$src/etc/systemd/system/linkray-shadowrocket.service"
 test -f "$src/etc/systemd/system/linkray-singbox.service"
+test -f "$src/etc/systemd/system/linkray-singbox-runtime.service"
 test -f "$src/etc/systemd/system/linkray-sub-auto.service"
 test -f "$src/etc/systemd/system/linkray-relay.service"
 test -f "$src/etc/systemd/system/linkray-rules-update.service"
@@ -23,9 +24,12 @@ test -f "$src/var/lib/marzban/linkray/hosts.sql"
 test -f "$src/var/lib/marzban/linkray/linkray-manifest.json"
 test -f "$src/var/lib/marzban/linkray/source-patches/marzban-dashboard/README.md"
 test -f "$src/var/lib/marzban/linkray/source-patches/marzban-dashboard/linkray-dashboard.patch"
+test -f "$src/var/lib/marzban/linkray/singbox/config.json"
+test -f "$src/var/lib/marzban/linkray/singbox/users.json"
 test -f "$src/var/lib/marzban/linkray/rules/cn-domains.txt"
 test -f "$src/var/lib/marzban/linkray/rules/cn-ip-cidrs.txt"
 test -f "$src/var/lib/marzban/linkray/patches/clash.py"
+test -f "$src/var/lib/marzban/linkray/jobs/linkray_singbox_usages.py"
 test -f "$src/var/lib/marzban/templates/subscription/index.html"
 test -f "$src/var/lib/marzban/dashboard-patches/index.linkray.js"
 
@@ -35,7 +39,9 @@ install -d \
   /var/lib/marzban/templates/subscription \
   /var/lib/marzban/dashboard-patches \
   /var/lib/marzban/linkray/patches \
+  /var/lib/marzban/linkray/jobs \
   /var/lib/marzban/linkray/source-patches/marzban-dashboard \
+  /var/lib/marzban/linkray/singbox \
   /var/lib/marzban/linkray/rules \
   /opt/marzban \
   /etc/nginx/conf.d \
@@ -47,9 +53,12 @@ install -m 0644 "$src/var/lib/marzban/linkray/hosts.sql" /var/lib/marzban/linkra
 install -m 0644 "$src/var/lib/marzban/linkray/linkray-manifest.json" /var/lib/marzban/linkray/linkray-manifest.json
 install -m 0644 "$src/var/lib/marzban/linkray/source-patches/marzban-dashboard/README.md" /var/lib/marzban/linkray/source-patches/marzban-dashboard/README.md
 install -m 0644 "$src/var/lib/marzban/linkray/source-patches/marzban-dashboard/linkray-dashboard.patch" /var/lib/marzban/linkray/source-patches/marzban-dashboard/linkray-dashboard.patch
+install -m 0644 "$src/var/lib/marzban/linkray/singbox/config.json" /var/lib/marzban/linkray/singbox/config.json
+test -f /var/lib/marzban/linkray/singbox/users.json || install -m 0644 "$src/var/lib/marzban/linkray/singbox/users.json" /var/lib/marzban/linkray/singbox/users.json
 install -m 0644 "$src/var/lib/marzban/linkray/rules/cn-domains.txt" /var/lib/marzban/linkray/rules/cn-domains.txt
 install -m 0644 "$src/var/lib/marzban/linkray/rules/cn-ip-cidrs.txt" /var/lib/marzban/linkray/rules/cn-ip-cidrs.txt
 install -m 0644 "$src/var/lib/marzban/linkray/patches/clash.py" /var/lib/marzban/linkray/patches/clash.py
+install -m 0644 "$src/var/lib/marzban/linkray/jobs/linkray_singbox_usages.py" /var/lib/marzban/linkray/jobs/linkray_singbox_usages.py
 install -m 0644 "$src/var/lib/marzban/dashboard-patches/index.html" /var/lib/marzban/dashboard-patches/index.html
 install -m 0644 "$src/var/lib/marzban/dashboard-patches/index.linkray.js" /var/lib/marzban/dashboard-patches/index.linkray.js
 install -m 0644 "$src/var/lib/marzban/dashboard-patches/index.original.js" /var/lib/marzban/dashboard-patches/index.original.js
@@ -60,6 +69,7 @@ install -m 0644 "$src/etc/systemd/system/linkray-clash.service" /etc/systemd/sys
 install -m 0644 "$src/etc/systemd/system/linkray-egern.service" /etc/systemd/system/linkray-egern.service
 install -m 0644 "$src/etc/systemd/system/linkray-shadowrocket.service" /etc/systemd/system/linkray-shadowrocket.service
 install -m 0644 "$src/etc/systemd/system/linkray-singbox.service" /etc/systemd/system/linkray-singbox.service
+install -m 0644 "$src/etc/systemd/system/linkray-singbox-runtime.service" /etc/systemd/system/linkray-singbox-runtime.service
 install -m 0644 "$src/etc/systemd/system/linkray-sub-auto.service" /etc/systemd/system/linkray-sub-auto.service
 install -m 0644 "$src/etc/systemd/system/linkray-relay.service" /etc/systemd/system/linkray-relay.service
 install -m 0644 "$src/etc/systemd/system/linkray-rules-update.service" /etc/systemd/system/linkray-rules-update.service
@@ -74,6 +84,7 @@ systemctl enable --now linkray-clash
 systemctl enable --now linkray-egern
 systemctl enable --now linkray-shadowrocket
 systemctl enable --now linkray-singbox
+systemctl enable --now linkray-singbox-runtime
 systemctl enable --now linkray-sub-auto
 systemctl enable --now linkray-rules-update.timer
 systemctl start linkray-rules-update.service || true
@@ -83,6 +94,7 @@ systemctl restart linkray-clash
 systemctl restart linkray-egern
 systemctl restart linkray-shadowrocket
 systemctl restart linkray-singbox
+systemctl restart linkray-singbox-runtime
 systemctl restart linkray-sub-auto
 systemctl restart linkray-relay
 nginx -t

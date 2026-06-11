@@ -1,6 +1,6 @@
 <div align="center">
   <h1>LinkRay</h1>
-  <p><b>Repeatable Marzban + Xray-core deployment tooling for multi-node proxy operations.</b></p>
+  <p><b>Repeatable Marzban + Xray-core + sing-box deployment tooling for multi-node proxy operations.</b></p>
   <a href="https://github.com/Zanetach/LinkRay/stargazers"><img src="https://img.shields.io/github/stars/Zanetach/LinkRay?style=flat-square" alt="Stars"></a>
   <a href="https://github.com/Zanetach/LinkRay/releases"><img src="https://img.shields.io/github/v/tag/Zanetach/LinkRay?label=version&style=flat-square" alt="Version"></a>
   <a href="pyproject.toml"><img src="https://img.shields.io/badge/python-3.9%2B-3776ab?style=flat-square&logo=python&logoColor=white" alt="Python 3.9+"></a>
@@ -11,7 +11,7 @@
 
 ## Why
 
-LinkRay packages a Marzban + Xray-core deployment into repeatable configuration, rendered assets, sidecar services, and health checks. Marzban remains the user, subscription, traffic, and node management control plane. Xray-core remains the proxy runtime. LinkRay owns the operational layer around them: installation layout, inbound definitions, subscription adapters, Nginx entrypoint, dashboard patch assets, and node status surfaces.
+LinkRay packages a Marzban + Xray-core deployment into repeatable configuration, rendered assets, sidecar services, and health checks. Marzban remains the user, subscription, traffic, and node management control plane. Xray-core remains the primary proxy runtime. LinkRay can also run an experimental sing-box runtime for Hysteria2, TUIC, and AnyTLS, with generated user credentials and a Marzban job that syncs sing-box stats back into Marzban usage tables.
 
 The goal is simple: stop hand-editing live container files as the primary workflow. Make changes in this repository, render the deployment tree, validate it, then apply the rendered files to a prepared host.
 
@@ -21,7 +21,7 @@ The goal is simple: stop hand-editing live container files as the primary workfl
 |---|---|
 | Master render | Marzban Docker Compose, Nginx config, Xray config, SQL host initialization, dashboard patches, subscription templates, sidecar systemd units |
 | Node render | Marzban Node Docker Compose and install shape |
-| Inbound set | 12 Xray-core inbound protocol families with overridable ports |
+| Inbound set | 12 Xray-core inbound protocol families plus 3 experimental sing-box inbound families, all with overridable ports |
 | Subscription routing | Browser/client-aware `/sub/<token>` routing plus Clash/Mihomo, Egern, Shadowrocket, and sing-box adapters |
 | Dashboard patch | User link ordering, concrete protocol card labels, and Node Info backed by `linkray api` |
 | Multi-node relay | Master-side TCP relay ports for secondary nodes, avoiding client-side proxy chaining |
@@ -46,9 +46,17 @@ LinkRay renders these inbound families for every node:
 | VMess HTTPUpgrade TLS | HTTPUpgrade + TLS |
 | Trojan gRPC TLS | gRPC + TLS |
 
-Clash/Mihomo and sing-box are supported as client subscription formats through LinkRay sidecars. LinkRay still uses Marzban-managed Xray-core as the proxy runtime.
+Clash/Mihomo and sing-box are supported as client subscription formats through LinkRay sidecars. LinkRay uses Marzban-managed Xray-core for the stable runtime set and a LinkRay-managed sing-box runtime for advanced protocols.
 
-Hysteria2, TUIC, and AnyTLS are tracked as planned sing-box runtime protocols, not production-supported Marzban protocols yet. They require a separate sing-box service, user credential generation, subscription rendering, and Marzban-compatible traffic stats before enablement. Check the explicit matrix with:
+Hysteria2, TUIC, and AnyTLS are experimental production paths:
+
+- `linkray-singbox-runtime.service` runs sing-box on the master.
+- `linkray-singbox.service` creates per-subscription credentials when the sing-box subscription is requested.
+- The generated sing-box subscription includes the normal Marzban/Xray nodes plus Hysteria2, TUIC, and AnyTLS outbounds.
+- `linkray_singbox_usages.py` is mounted into Marzban and periodically syncs sing-box V2Ray API stats into Marzban `users`, `admins`, `system`, and hourly usage tables.
+- The same Marzban job reconciles active usernames with the local sing-box sidecar so disabled, deleted, expired, or limited users are pruned from the sing-box runtime config.
+
+The sing-box binary must be built with `with_v2ray_api`, `with_quic`, `with_utls`, and `with_clash_api`. `bootstrap master` does this automatically with Go 1.23.12. Check the explicit matrix with:
 
 ```bash
 linkray protocols
@@ -119,6 +127,14 @@ https://<master-domain>:<panel-port>/dashboard/
 ```
 
 If `--reality-private-key` and `--reality-short-id` are omitted during `--apply`, LinkRay generates them automatically and writes them into `/var/lib/marzban/xray_config.json`.
+
+`bootstrap master` builds `/usr/local/bin/sing-box` from source with:
+
+```text
+with_v2ray_api with_quic with_utls with_clash_api
+```
+
+These tags are required for the advanced runtime and for validating generated sing-box client configs. The ordinary upstream sing-box release binary does not include the V2Ray API stats service required for Marzban usage sync.
 
 ## Fresh Node Bootstrap
 

@@ -9,3 +9,4 @@ services:
       - /var/lib/marzban/dashboard-patches/index.html:/code/app/dashboard/build/index.html:ro
       - /var/lib/marzban/dashboard-patches/index.linkray.js:/code/app/dashboard/build/statics/index.linkray.js:ro
       - /var/lib/marzban/dashboard-patches/index.original.js:/code/app/dashboard/build/statics/index.a1cce931.js:ro
+      - /var/lib/marzban/linkray/jobs/linkray_singbox_usages.py:/code/app/jobs/linkray_singbox_usages.py:ro

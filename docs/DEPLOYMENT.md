@@ -38,7 +38,15 @@ linkray bootstrap master \
   --apply
 ```
 
-The master bootstrap writes LinkRay-managed files, installs required system packages, installs Docker when missing, obtains the TLS certificate through acme.sh DNS Cloudflare, starts Marzban, applies `hosts.sql`, validates Nginx, reloads Nginx, and runs `doctor`.
+The master bootstrap writes LinkRay-managed files, installs required system packages, installs Docker when missing, builds sing-box with LinkRay-required tags, obtains the TLS certificate through acme.sh DNS Cloudflare, starts Marzban, applies `hosts.sql`, validates Nginx, reloads Nginx, and runs `doctor`.
+
+LinkRay builds `/usr/local/bin/sing-box` with:
+
+```text
+with_v2ray_api with_quic with_utls with_clash_api
+```
+
+The ordinary upstream release binary does not include the V2Ray API stats service needed by the LinkRay sing-box usage sync job. That job also reconciles active Marzban usernames with the local sing-box sidecar, pruning disabled, deleted, expired, or limited users from the sing-box runtime config.
 
 If Reality values are not provided through `--reality-private-key` and `--reality-short-id`, `bootstrap master --apply` generates them automatically before writing `/var/lib/marzban/xray_config.json`.
 
@@ -66,6 +74,9 @@ The rendered master tree contains:
 - `var/lib/marzban/xray_config.json`
 - `var/lib/marzban/linkray/hosts.sql`
 - `var/lib/marzban/linkray/patches/clash.py`
+- `var/lib/marzban/linkray/jobs/linkray_singbox_usages.py`
+- `var/lib/marzban/linkray/singbox/config.json`
+- `var/lib/marzban/linkray/singbox/users.json`
 - `var/lib/marzban/templates/clash/default.yml`
 - `var/lib/marzban/dashboard-patches/*`
 - `opt/marzban/docker-compose.yml`
@@ -74,6 +85,7 @@ The rendered master tree contains:
 - `etc/systemd/system/linkray-egern.service`
 - `etc/systemd/system/linkray-shadowrocket.service`
 - `etc/systemd/system/linkray-singbox.service`
+- `etc/systemd/system/linkray-singbox-runtime.service`
 - `etc/systemd/system/linkray-sub-auto.service`
 - `etc/systemd/system/linkray-relay.service`
 
@@ -175,6 +187,7 @@ linkray doctor --role node
 - Standalone `xray.service` is inactive.
 - Marzban-managed Xray process exists.
 - Expected LinkRay ports are listening.
+- The sing-box runtime API port and Hysteria2/TUIC/AnyTLS inbound ports are listening on the master.
 
 ## Secondary Node Relay
 
@@ -208,6 +221,7 @@ mihomo -t -f /tmp/linkray.yaml
 curl -ksS '<marzban-subscription-url>/shadowrocket-conf' -o /tmp/linkray-shadowrocket.conf
 curl -ksS '<marzban-subscription-url>/shadowrocket' -o /tmp/linkray-shadowrocket.txt
 curl -ksS '<marzban-subscription-url>/sing-box' -o /tmp/linkray-sing-box.json
+sing-box check -c /tmp/linkray-sing-box.json
 ```
 
 Expected result for a two-node deployment:

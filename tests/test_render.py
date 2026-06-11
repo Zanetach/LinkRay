@@ -56,6 +56,7 @@ class RenderTests(unittest.TestCase):
         config = LinkRayConfig(
             domain="edge-a.example.com",
             inbound_ports=parse_inbound_ports(["vless_tls=28080", "trojan_grpc_tls=28091"]),
+            singbox_inbound_ports=(("hysteria2", 29080), ("anytls", 29082)),
         )
         data = xray_config(config)
         by_tag = {item["tag"]: item for item in data["inbounds"]}
@@ -72,6 +73,13 @@ class RenderTests(unittest.TestCase):
             service = (output / "etc/systemd/system/linkray-api.service").read_text()
             self.assertIn("--inbound vless_tls=28080", service)
             self.assertIn("--inbound trojan_grpc_tls=28091", service)
+            singbox_runtime = json.loads((output / "var/lib/marzban/linkray/singbox/config.json").read_text())
+            by_tag = {item["tag"]: item for item in singbox_runtime["inbounds"]}
+            self.assertEqual(by_tag["Hysteria2"]["listen_port"], 29080)
+            self.assertEqual(by_tag["AnyTLS"]["listen_port"], 29082)
+            singbox_service = (output / "etc/systemd/system/linkray-singbox.service").read_text()
+            self.assertIn("--singbox-inbound hysteria2=29080", singbox_service)
+            self.assertIn("--singbox-inbound anytls=29082", singbox_service)
             self.assertEqual(validate_rendered(output), [])
 
     def test_custom_inbound_ports_reject_duplicate_runtime_ports(self):
@@ -122,6 +130,7 @@ class RenderTests(unittest.TestCase):
             self.assertIn("etc/systemd/system/linkray-egern.service", relative)
             self.assertIn("etc/systemd/system/linkray-shadowrocket.service", relative)
             self.assertIn("etc/systemd/system/linkray-singbox.service", relative)
+            self.assertIn("etc/systemd/system/linkray-singbox-runtime.service", relative)
             self.assertIn("etc/systemd/system/linkray-sub-auto.service", relative)
             self.assertIn("etc/systemd/system/linkray-relay.service", relative)
             self.assertIn("etc/systemd/system/linkray-rules-update.service", relative)
@@ -130,9 +139,12 @@ class RenderTests(unittest.TestCase):
             self.assertIn("var/lib/marzban/linkray/linkray-manifest.json", relative)
             self.assertIn("var/lib/marzban/linkray/source-patches/marzban-dashboard/linkray-dashboard.patch", relative)
             self.assertIn("var/lib/marzban/linkray/source-patches/marzban-dashboard/README.md", relative)
+            self.assertIn("var/lib/marzban/linkray/singbox/config.json", relative)
+            self.assertIn("var/lib/marzban/linkray/singbox/users.json", relative)
             self.assertIn("var/lib/marzban/linkray/rules/cn-domains.txt", relative)
             self.assertIn("var/lib/marzban/linkray/rules/cn-ip-cidrs.txt", relative)
             self.assertIn("var/lib/marzban/linkray/patches/clash.py", relative)
+            self.assertIn("var/lib/marzban/linkray/jobs/linkray_singbox_usages.py", relative)
             self.assertNotIn("var/lib/marzban/linkray/public/ports.html", relative)
             self.assertNotIn("var/lib/marzban/linkray/public/ports.json", relative)
             self.assertIn("var/lib/marzban/templates/clash/default.yml", relative)
@@ -160,7 +172,14 @@ class RenderTests(unittest.TestCase):
             compose = (output / "opt/marzban/docker-compose.yml").read_text()
             self.assertIn("/var/lib/marzban/linkray/bin/xray:/usr/local/bin/xray:ro", compose)
             self.assertIn("/var/lib/marzban/linkray/patches/clash.py:/code/app/subscription/clash.py:ro", compose)
+            self.assertIn(
+                "/var/lib/marzban/linkray/jobs/linkray_singbox_usages.py:/code/app/jobs/linkray_singbox_usages.py:ro",
+                compose,
+            )
             self.assertIn("index.linkray.js", compose)
+            env = (output / "opt/marzban/.env").read_text()
+            self.assertIn("LINKRAY_SINGBOX_STATS_API = 127.0.0.1:61996", env)
+            self.assertIn("LINKRAY_SINGBOX_SIDECAR_URL = http://127.0.0.1:61995", env)
             nginx = (output / "etc/nginx/conf.d/marzban-panel.conf").read_text()
             self.assertIn("location ~ ^/sub/[^/]+/?$", nginx)
             self.assertIn("proxy_pass http://127.0.0.1:61993", nginx)
@@ -189,6 +208,10 @@ class RenderTests(unittest.TestCase):
             self.assertIn("ExecStart=/usr/local/bin/linkray shadowrocket --listen 127.0.0.1 --port 61994", shadowrocket_service)
             singbox_service = (output / "etc/systemd/system/linkray-singbox.service").read_text()
             self.assertIn("ExecStart=/usr/local/bin/linkray sing-box --listen 127.0.0.1 --port 61995", singbox_service)
+            self.assertIn("--runtime-dir /var/lib/marzban/linkray/singbox", singbox_service)
+            self.assertIn("--server-domain edge-a.example.com", singbox_service)
+            runtime_service = (output / "etc/systemd/system/linkray-singbox-runtime.service").read_text()
+            self.assertIn("ExecStart=/usr/local/bin/sing-box run -c /var/lib/marzban/linkray/singbox/config.json", runtime_service)
             auto_service = (output / "etc/systemd/system/linkray-sub-auto.service").read_text()
             self.assertIn("ExecStart=/usr/local/bin/linkray sub-auto --listen 127.0.0.1 --port 61993", auto_service)
             self.assertIn("--clash-url http://127.0.0.1:61991", auto_service)
@@ -341,6 +364,20 @@ class RenderTests(unittest.TestCase):
                 self.assertIn("def read_rule_file", text)
                 self.assertIn("'dialer-proxy'", text)
                 self.assertIn("primary_server", text)
+
+    def test_singbox_usage_job_patch_records_to_marzban_tables(self):
+        patch = Path("patches/marzban-jobs/current/linkray_singbox_usages.py").read_text()
+
+        self.assertIn("XRayAPI", patch)
+        self.assertIn("LINKRAY_SINGBOX_STATS_API", patch)
+        self.assertIn("LINKRAY_SINGBOX_SIDECAR_URL", patch)
+        self.assertIn('User.used_traffic + bindparam("value")', patch)
+        self.assertIn("record_linkray_singbox_user_usages", patch)
+        self.assertIn("reconcile_linkray_singbox_runtime_users", patch)
+        self.assertIn("active_usernames", patch)
+        self.assertIn("UserStatus.active", patch)
+        self.assertIn("scheduler.add_job(", patch)
+        self.assertIn("stat.name", patch)
 
     def test_marzban_env_contains_directly_usable_defaults(self):
         env = marzban_env(

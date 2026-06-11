@@ -1,6 +1,10 @@
 import base64
 import json
+import tempfile
+import threading
 import unittest
+from pathlib import Path
+from urllib.request import Request, urlopen
 
 from linkray.rules import RouteRules
 
@@ -116,6 +120,65 @@ class SingBoxTests(unittest.TestCase):
         self.assertEqual(reality["short_id"], "")
         self.assertIsNotNone(reality["public_key"])
         self.assertIsNotNone(reality["short_id"])
+
+    def test_build_singbox_json_can_append_linkray_advanced_outbounds(self):
+        from linkray.config import LinkRayConfig
+        from linkray.singbox import build_singbox_json
+        from linkray.singbox_runtime import credential_for_token
+
+        user = credential_for_token("token-a", "secret-a")
+        link = "trojan://password@edge-a.example.com:18083?security=tls&type=tcp&sni=edge-a.example.com#edge-a-Trojan_TLS"
+        data = json.loads(
+            build_singbox_json(
+                base64.b64encode(link.encode()),
+                config=LinkRayConfig(domain="edge-a.example.com"),
+                advanced_user=user,
+            )
+        )
+        outbounds = {item["tag"]: item for item in data["outbounds"]}
+
+        self.assertIn("Hysteria2", outbounds)
+        self.assertIn("TUIC", outbounds)
+        self.assertIn("AnyTLS", outbounds)
+        self.assertIn("Hysteria2", outbounds["全球代理"]["outbounds"])
+        self.assertEqual(outbounds["TUIC"]["uuid"], user.uuid)
+
+    def test_singbox_sidecar_reconcile_endpoint_prunes_runtime_users(self):
+        from linkray.config import LinkRayConfig
+        from linkray.singbox import make_singbox_server
+        from linkray.singbox_runtime import ensure_runtime_user, load_users
+
+        with tempfile.TemporaryDirectory() as tmp:
+            runtime_dir = Path(tmp)
+            config = LinkRayConfig(domain="edge-a.example.com")
+            ensure_runtime_user("token-a", config, runtime_dir, secret="server-secret", name="active-user")
+            ensure_runtime_user("token-b", config, runtime_dir, secret="server-secret", name="stale-user")
+            server = make_singbox_server(
+                "127.0.0.1",
+                0,
+                "http://127.0.0.1:1",
+                server_domain="edge-a.example.com",
+                runtime_dir=runtime_dir,
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                port = server.server_address[1]
+                body = json.dumps({"active_usernames": ["active-user"]}).encode("utf-8")
+                request = Request(
+                    f"http://127.0.0.1:{port}/runtime/reconcile",
+                    data=body,
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urlopen(request, timeout=3) as response:
+                    payload = json.loads(response.read())
+                self.assertEqual(payload["remaining"], 1)
+                self.assertTrue(payload["changed"])
+                self.assertEqual([user.name for user in load_users(runtime_dir)], ["active-user"])
+            finally:
+                server.shutdown()
+                server.server_close()
 
 
 if __name__ == "__main__":

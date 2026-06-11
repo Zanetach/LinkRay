@@ -6,7 +6,7 @@ from pathlib import Path
 from .api import serve_api
 from .bootstrap import bootstrap_master, bootstrap_node
 from .clash import serve_clash
-from .config import LinkRayConfig, NodeHost, parse_inbound_ports, parse_node_host
+from .config import LinkRayConfig, NodeHost, parse_inbound_ports, parse_node_host, parse_singbox_inbound_ports
 from .doctor import exit_code, run_doctor
 from .egern import serve_egern
 from .install import install_master, install_node
@@ -48,6 +48,11 @@ def add_common_master_args(parser: argparse.ArgumentParser) -> None:
         action="append",
         help="Override an inbound port in key=port form, for example vless_tls=28080. Repeat as needed.",
     )
+    parser.add_argument(
+        "--singbox-inbound",
+        action="append",
+        help="Override a sing-box inbound port in key=port form, for example hysteria2=19080. Repeat as needed.",
+    )
 
 
 def config_from_args(args: argparse.Namespace) -> LinkRayConfig:
@@ -62,6 +67,7 @@ def config_from_args(args: argparse.Namespace) -> LinkRayConfig:
         grpc_service_name=args.grpc_service_name,
         panel_port=args.panel_port,
         inbound_ports=parse_inbound_ports(args.inbound),
+        singbox_inbound_ports=parse_singbox_inbound_ports(args.singbox_inbound),
     )
 
 
@@ -170,6 +176,14 @@ def add_singbox_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentP
     singbox.add_argument("--listen", default="127.0.0.1")
     singbox.add_argument("--port", default=61995, type=int)
     singbox.add_argument("--marzban-url", default="http://127.0.0.1:8000")
+    singbox.add_argument("--server-domain", default="")
+    singbox.add_argument("--runtime-dir", type=Path, default=Path("/var/lib/marzban/linkray/singbox"))
+    singbox.add_argument("--reload-command", default="")
+    singbox.add_argument(
+        "--singbox-inbound",
+        action="append",
+        help="Override a sing-box inbound port in key=port form. Repeat as needed.",
+    )
 
 
 def add_sub_auto_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:

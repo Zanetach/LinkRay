@@ -20,7 +20,14 @@ DEFAULT_PORTS = {
     "trojan_grpc_tls": 18091,
 }
 
+SINGBOX_DEFAULT_PORTS = {
+    "hysteria2": 19080,
+    "tuic": 19081,
+    "anytls": 19082,
+}
+
 PORT_KEYS = tuple(DEFAULT_PORTS.keys())
+SINGBOX_PORT_KEYS = tuple(SINGBOX_DEFAULT_PORTS.keys())
 RELAY_PORT_OFFSET = 100
 
 
@@ -39,6 +46,7 @@ class LinkRayConfig:
     panel_port: int = 9443
     marzban_http_port: int = 8000
     inbound_ports: tuple[tuple[str, int], ...] = ()
+    singbox_inbound_ports: tuple[tuple[str, int], ...] = ()
 
     def validate(self) -> None:
         if not self.domain or "." not in self.domain:
@@ -52,12 +60,23 @@ class LinkRayConfig:
         if len(self.reality_short_id) < 4:
             raise ValueError("reality_short_id is unexpectedly short")
         self.port_map()
+        self.singbox_port_map()
 
     def port_map(self) -> dict[str, int]:
         ports = dict(DEFAULT_PORTS)
         for key, port in self.inbound_ports:
             if key not in DEFAULT_PORTS:
                 raise ValueError(f"unknown inbound port key: {key}")
+            validate_port(port)
+            ports[key] = port
+        validate_unique_ports(ports)
+        return ports
+
+    def singbox_port_map(self) -> dict[str, int]:
+        ports = dict(SINGBOX_DEFAULT_PORTS)
+        for key, port in self.singbox_inbound_ports:
+            if key not in SINGBOX_DEFAULT_PORTS:
+                raise ValueError(f"unknown sing-box inbound port key: {key}")
             validate_port(port)
             ports[key] = port
         validate_unique_ports(ports)
@@ -106,6 +125,37 @@ def parse_inbound_ports(values: list[str] | None) -> tuple[tuple[str, int], ...]
         seen.add(key)
     if duplicates:
         raise ValueError(f"duplicate inbound port key(s): {', '.join(duplicates)}")
+    return tuple(parsed)
+
+
+def parse_singbox_inbound_port(value: str) -> tuple[str, int]:
+    if "=" not in value:
+        raise ValueError("sing-box inbound must be formatted as key=port, for example hysteria2=19080")
+    key, raw_port = value.split("=", 1)
+    key = key.strip()
+    if key not in SINGBOX_DEFAULT_PORTS:
+        allowed = ", ".join(SINGBOX_PORT_KEYS)
+        raise ValueError(f"unknown sing-box inbound key {key!r}; allowed keys: {allowed}")
+    try:
+        port = int(raw_port.strip())
+    except ValueError as exc:
+        raise ValueError(f"invalid port for {key}: {raw_port}") from exc
+    validate_port(port)
+    return key, port
+
+
+def parse_singbox_inbound_ports(values: list[str] | None) -> tuple[tuple[str, int], ...]:
+    if not values:
+        return ()
+    parsed = [parse_singbox_inbound_port(value) for value in values]
+    seen: set[str] = set()
+    duplicates: set[str] = set()
+    for key, _ in parsed:
+        if key in seen:
+            duplicates.add(key)
+        seen.add(key)
+    if duplicates:
+        raise ValueError(f"duplicate sing-box inbound port key(s): {', '.join(duplicates)}")
     return tuple(parsed)
 
 

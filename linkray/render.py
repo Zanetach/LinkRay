@@ -10,6 +10,7 @@ from pathlib import Path
 
 from .config import DEFAULT_PORTS, RELAY_PORT_OFFSET, LinkRayConfig, NodeHost, RenderResult, relay_port
 from .rules import BUILTIN_CN_DOMAIN_SUFFIXES, BUILTIN_CN_IP_CIDRS, RouteRules, write_route_rules
+from .singbox_runtime import DEFAULT_RUNTIME_DIR, server_config
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -158,6 +159,7 @@ def master_compose() -> str:
       - /var/lib/marzban:/var/lib/marzban
       - /var/lib/marzban/linkray/bin/xray:/usr/local/bin/xray:ro
       - /var/lib/marzban/linkray/patches/clash.py:/code/app/subscription/clash.py:ro
+      - /var/lib/marzban/linkray/jobs/linkray_singbox_usages.py:/code/app/jobs/linkray_singbox_usages.py:ro
       - /var/lib/marzban/dashboard-patches/index.html:/code/app/dashboard/build/index.html:ro
       - /var/lib/marzban/dashboard-patches/{DASHBOARD_PATCH_JS}:/code/app/dashboard/build/statics/{DASHBOARD_PATCH_JS}:ro
       - /var/lib/marzban/dashboard-patches/index.original.js:/code/app/dashboard/build/statics/index.a1cce931.js:ro
@@ -318,6 +320,8 @@ def marzban_env(config: LinkRayConfig) -> str:
             'SQLALCHEMY_DATABASE_URL = "sqlite:////var/lib/marzban/db.sqlite3"',
             f"XRAY_JSON = {dotenv_value('/var/lib/marzban/xray_config.json')}",
             f"XRAY_SUBSCRIPTION_URL_PREFIX = {dotenv_value(f'https://{config.domain}:{config.panel_port}')}",
+            "LINKRAY_SINGBOX_STATS_API = 127.0.0.1:61996",
+            "LINKRAY_SINGBOX_SIDECAR_URL = http://127.0.0.1:61995",
             'CUSTOM_TEMPLATES_DIRECTORY = "/var/lib/marzban/templates"',
             'CLASH_SUBSCRIPTION_TEMPLATE = "clash/default.yml"',
             "DOCS = False",
@@ -441,7 +445,42 @@ def linkray_shadowrocket_service(config: LinkRayConfig) -> str:
 
 
 def linkray_singbox_service(config: LinkRayConfig) -> str:
-    return _marzban_adapter_service("LinkRay sing-box subscription adapter", "sing-box", 61995, config.marzban_http_port)
+    inbound_flags = " ".join(
+        f"--singbox-inbound {shlex.quote(f'{key}={port}')}" for key, port in config.singbox_inbound_ports
+    )
+    if inbound_flags:
+        inbound_flags = " " + inbound_flags
+    return f"""[Unit]
+Description=LinkRay sing-box subscription adapter
+After=network-online.target linkray-singbox-runtime.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/linkray sing-box --listen 127.0.0.1 --port 61995 --marzban-url http://127.0.0.1:{config.marzban_http_port} --server-domain {shlex.quote(config.domain)} --runtime-dir {DEFAULT_RUNTIME_DIR}{inbound_flags} --reload-command 'systemctl try-restart linkray-singbox-runtime'
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+"""
+
+
+def linkray_singbox_runtime_service() -> str:
+    return """[Unit]
+Description=LinkRay sing-box advanced protocol runtime
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/sing-box run -c /var/lib/marzban/linkray/singbox/config.json
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+"""
 
 
 def linkray_sub_auto_service(config: LinkRayConfig) -> str:
@@ -626,12 +665,15 @@ def render_master(
         write_text(output / "etc/systemd/system/linkray-egern.service", linkray_egern_service(config)),
         write_text(output / "etc/systemd/system/linkray-shadowrocket.service", linkray_shadowrocket_service(config)),
         write_text(output / "etc/systemd/system/linkray-singbox.service", linkray_singbox_service(config)),
+        write_text(output / "etc/systemd/system/linkray-singbox-runtime.service", linkray_singbox_runtime_service()),
         write_text(output / "etc/systemd/system/linkray-sub-auto.service", linkray_sub_auto_service(config)),
         write_text(output / "etc/systemd/system/linkray-rules-update.service", linkray_rules_update_service()),
         write_text(output / "etc/systemd/system/linkray-rules-update.timer", linkray_rules_update_timer()),
         write_text(output / "etc/systemd/system/linkray-relay.service", linkray_relay_service(effective_nodes, config)),
         write_text(output / "var/lib/marzban/linkray/hosts.sql", hosts_sql(config, effective_nodes)),
         write_text(output / "var/lib/marzban/linkray/linkray-manifest.json", render_manifest(config, effective_nodes)),
+        write_text(output / "var/lib/marzban/linkray/singbox/config.json", json.dumps(server_config(config, []), indent=2) + "\n"),
+        write_text(output / "var/lib/marzban/linkray/singbox/users.json", json.dumps({"version": 1, "users": []}, indent=2) + "\n"),
         copy_file(
             DASHBOARD_SOURCE_PATCH_ROOT / "README.md",
             output / "var/lib/marzban/linkray/source-patches/marzban-dashboard/README.md",
@@ -644,6 +686,10 @@ def render_master(
         output / "var/lib/marzban/linkray/rules/cn-ip-cidrs.txt",
         copy_file(TEMPLATE_ROOT / "marzban/clash/default.yml", output / "var/lib/marzban/templates/clash/default.yml"),
         copy_file(PATCH_ROOT / "marzban-subscription/current/clash.py", output / "var/lib/marzban/linkray/patches/clash.py"),
+        copy_file(
+            PATCH_ROOT / "marzban-jobs/current/linkray_singbox_usages.py",
+            output / "var/lib/marzban/linkray/jobs/linkray_singbox_usages.py",
+        ),
         copy_file(
             PATCH_ROOT / "marzban-subscription-page/current/index.html",
             output / "var/lib/marzban/templates/subscription/index.html",
@@ -688,6 +734,7 @@ def validate_rendered(path: Path) -> list[str]:
         path / "etc/systemd/system/linkray-egern.service",
         path / "etc/systemd/system/linkray-shadowrocket.service",
         path / "etc/systemd/system/linkray-singbox.service",
+        path / "etc/systemd/system/linkray-singbox-runtime.service",
         path / "etc/systemd/system/linkray-sub-auto.service",
         path / "etc/systemd/system/linkray-rules-update.service",
         path / "etc/systemd/system/linkray-rules-update.timer",
@@ -699,6 +746,9 @@ def validate_rendered(path: Path) -> list[str]:
     clash_patch_path = path / "var/lib/marzban/linkray/patches/clash.py"
     if (path / "opt/marzban/docker-compose.yml").exists() and not clash_patch_path.exists():
         errors.append(f"{path}: missing var/lib/marzban/linkray/patches/clash.py")
+    singbox_usage_job_path = path / "var/lib/marzban/linkray/jobs/linkray_singbox_usages.py"
+    if (path / "opt/marzban/docker-compose.yml").exists() and not singbox_usage_job_path.exists():
+        errors.append(f"{path}: missing var/lib/marzban/linkray/jobs/linkray_singbox_usages.py")
     required_any = [
         path / "opt/marzban/docker-compose.yml",
         path / "opt/marzban-node/docker-compose.yml",

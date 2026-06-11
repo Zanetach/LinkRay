@@ -18,16 +18,17 @@ class ProtocolCapabilityTests(unittest.TestCase):
 
         for key in ["hysteria2", "tuic", "anytls"]:
             self.assertEqual(by_key[key].runtime, "sing-box")
-            self.assertEqual(by_key[key].status, "planned")
+            self.assertEqual(by_key[key].status, "experimental")
+            self.assertEqual(by_key[key].subscription_formats, ("sing-box",))
             self.assertIn("stats", by_key[key].notes.lower())
 
     def test_capabilities_by_status_groups_without_losing_protocols(self):
         grouped = capabilities_by_status()
 
         self.assertIn("supported", grouped)
-        self.assertIn("planned", grouped)
+        self.assertIn("experimental", grouped)
         self.assertEqual(
-            {item.key for item in grouped["planned"]},
+            {item.key for item in grouped["experimental"]},
             {"hysteria2", "tuic", "anytls"},
         )
 

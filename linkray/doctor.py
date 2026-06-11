@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Protocol
 
 from .config import DEFAULT_PORTS
+from .singbox_runtime import SINGBOX_DEFAULT_PORTS, SINGBOX_STATS_PORT
 
 
 @dataclass(frozen=True)
@@ -127,6 +128,7 @@ def runtime_checks(role: str, runner: Runner, root: Path = Path("/")) -> list[Ch
         checks.append(service_check("linkray-egern", "active", runner))
         checks.append(service_check("linkray-shadowrocket", "active", runner))
         checks.append(service_check("linkray-singbox", "active", runner))
+        checks.append(service_check("linkray-singbox-runtime", "active", runner))
         checks.append(service_check("linkray-sub-auto", "active", runner))
         checks.append(service_check("linkray-rules-update.timer", "active", runner))
         checks.append(service_check("linkray-relay", "active", runner))
@@ -139,7 +141,19 @@ def runtime_checks(role: str, runner: Runner, root: Path = Path("/")) -> list[Ch
     )
     expected_ports = rendered_xray_ports(root)
     if role == "master":
-        expected_ports = [8000, 9443, 61990, 61991, 61992, 61993, 61994, 61995, *expected_ports]
+        expected_ports = [
+            8000,
+            9443,
+            61990,
+            61991,
+            61992,
+            61993,
+            61994,
+            61995,
+            SINGBOX_STATS_PORT,
+            *SINGBOX_DEFAULT_PORTS.values(),
+            *expected_ports,
+        ]
         checks.append(docker_check("marzban-marzban-1", runner))
     else:
         expected_ports = [62050, 62051, *expected_ports]
@@ -164,12 +178,16 @@ def file_checks(role: str, root: Path) -> list[Check]:
             "etc/systemd/system/linkray-egern.service",
             "etc/systemd/system/linkray-shadowrocket.service",
             "etc/systemd/system/linkray-singbox.service",
+            "etc/systemd/system/linkray-singbox-runtime.service",
             "etc/systemd/system/linkray-sub-auto.service",
             "etc/systemd/system/linkray-rules-update.service",
             "etc/systemd/system/linkray-rules-update.timer",
             "etc/systemd/system/linkray-relay.service",
             "var/lib/marzban/linkray/rules/cn-domains.txt",
             "var/lib/marzban/linkray/rules/cn-ip-cidrs.txt",
+            "var/lib/marzban/linkray/singbox/config.json",
+            "var/lib/marzban/linkray/singbox/users.json",
+            "var/lib/marzban/linkray/jobs/linkray_singbox_usages.py",
         ]
         recommended = ["var/lib/marzban/linkray/hosts.sql"]
     else:
