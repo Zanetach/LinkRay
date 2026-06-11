@@ -284,6 +284,32 @@ class RenderTests(unittest.TestCase):
                 self.assertIn("TCP TLS / Reality / gRPC Reality / WS TLS / gRPC TLS / XHTTP Reality", html)
                 self.assertNotIn("linkrayProtocolCardDetails failed hard", html)
 
+    def test_dashboard_frontend_branding_uses_linkray(self):
+        for html_path in [
+            Path("patches/marzban-dashboard/current/index.html"),
+            Path("linkray/assets/patches/marzban-dashboard/current/index.html"),
+        ]:
+            with self.subTest(html=str(html_path)):
+                html = html_path.read_text()
+
+                self.assertIn("<title>LinkRay</title>", html)
+                self.assertIn('name="apple-mobile-web-app-title" content="LinkRay"', html)
+                self.assertIn('name="application-name" content="LinkRay"', html)
+                self.assertNotIn("<title>Marzban</title>", html)
+                self.assertNotIn('content="Marzban"', html)
+
+        for patch_path in [
+            Path("patches/marzban-dashboard/source/linkray-dashboard.patch"),
+            Path("linkray/assets/source-patches/marzban-dashboard/linkray-dashboard.patch"),
+        ]:
+            with self.subTest(patch=str(patch_path)):
+                patch = patch_path.read_text()
+
+                self.assertIn("diff --git a/app/dashboard/index.html b/app/dashboard/index.html", patch)
+                self.assertIn("+    <title>LinkRay</title>", patch)
+                self.assertIn('+    <meta name="apple-mobile-web-app-title" content="LinkRay" />', patch)
+                self.assertIn('+    <meta name="application-name" content="LinkRay" />', patch)
+
     def test_clash_template_uses_scalar_dns_policy(self):
         for template_path in [
             Path("templates/marzban/clash/default.yml"),

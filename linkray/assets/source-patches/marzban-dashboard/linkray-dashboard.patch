@@ -1,3 +1,27 @@
+diff --git a/app/dashboard/index.html b/app/dashboard/index.html
+index 4fc60f1..9f23c59 100644
+--- a/app/dashboard/index.html
++++ b/app/dashboard/index.html
+@@ -4,7 +4,7 @@
+     <meta charset="UTF-8" />
+     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+     <meta name="viewport" content="width=device-width, user-scalable=no" />
+-    <title>Marzban</title>
++    <title>LinkRay</title>
+     <link
+       rel="apple-touch-icon"
+       sizes="180x180"
+@@ -29,8 +29,8 @@
+       color="#5bbad5"
+     />
+     <link rel="shortcut icon" href="/statics/favicon/favicon.ico" />
+-    <meta name="apple-mobile-web-app-title" content="Marzban" />
+-    <meta name="application-name" content="Marzban" />
++    <meta name="apple-mobile-web-app-title" content="LinkRay" />
++    <meta name="application-name" content="LinkRay" />
+     <meta name="msapplication-TileColor" content="#2b5797" />
+     <meta name="msapplication-config" content="/statics/favicon/browserconfig.xml" />
+     <meta name="theme-color" content="#3B81F6" />
 diff --git a/app/dashboard/src/components/LinkRayNodeInfo.tsx b/app/dashboard/src/components/LinkRayNodeInfo.tsx
 new file mode 100644
 index 0000000..6fda109
