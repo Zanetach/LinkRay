@@ -127,6 +127,86 @@ class ShadowrocketTests(unittest.TestCase):
 
         self.assertNotIn("profile-web-page-url", module.PASS_HEADERS)
 
+    def test_vless_to_shadowrocket_tls_tcp(self):
+        from linkray.shadowrocket import vless_to_shadowrocket
+
+        result = vless_to_shadowrocket(
+            "vless://uuid@edge.example.com:18080?security=tls&type=tcp&sni=edge.example.com&flow=xtls-rprx-vision#my-node"
+        )
+        self.assertIsNotNone(result)
+        name, line = result
+        self.assertEqual(name, "my-node")
+        self.assertIn("vless", line)
+        self.assertIn("edge.example.com", line)
+        self.assertIn("18080", line)
+        self.assertIn("flow=xtls-rprx-vision", line)
+        self.assertIn("tls=true", line)
+
+    def test_vless_to_shadowrocket_rejects_reality(self):
+        from linkray.shadowrocket import vless_to_shadowrocket
+
+        self.assertIsNone(vless_to_shadowrocket("vless://u@h:1?security=reality&type=tcp"))
+
+    def test_vless_to_shadowrocket_ws(self):
+        from linkray.shadowrocket import vless_to_shadowrocket
+
+        result = vless_to_shadowrocket(
+            "vless://uuid@edge.example.com:18086?security=tls&type=ws&path=/vless-ws&host=edge.example.com#ws-node"
+        )
+        self.assertIsNotNone(result)
+        _, line = result
+        self.assertIn("obfs=websocket", line)
+        self.assertIn("obfs-uri=/vless-ws", line)
+
+    def test_trojan_to_shadowrocket_tcp(self):
+        from linkray.shadowrocket import trojan_to_shadowrocket
+
+        result = trojan_to_shadowrocket(
+            "trojan://secretpassword@edge.example.com:18083?security=tls&type=tcp&sni=edge.example.com#trojan-node"
+        )
+        self.assertIsNotNone(result)
+        name, line = result
+        self.assertEqual(name, "trojan-node")
+        self.assertIn("trojan", line)
+        self.assertIn("password=secretpassword", line)
+        self.assertIn("peer=edge.example.com", line)
+
+    def test_trojan_to_shadowrocket_rejects_grpc(self):
+        from linkray.shadowrocket import trojan_to_shadowrocket
+
+        self.assertIsNone(trojan_to_shadowrocket("trojan://p@h:1?type=grpc"))
+
+    def test_vmess_to_shadowrocket_ws_tls(self):
+        from linkray.shadowrocket import vmess_to_shadowrocket
+
+        data = {"ps": "my-vmess", "add": "edge.example.com", "port": "18089", "id": "uuid",
+                "net": "ws", "path": "/ws", "host": "edge.example.com", "tls": "tls", "scy": "auto"}
+        result = vmess_to_shadowrocket(f"vmess://{b64(json.dumps(data))}")
+
+        self.assertIsNotNone(result)
+        name, line = result
+        self.assertEqual(name, "my-vmess")
+        self.assertIn("vmess", line)
+        self.assertIn("obfs=websocket", line)
+
+    def test_vmess_to_shadowrocket_rejects_non_tls(self):
+        from linkray.shadowrocket import vmess_to_shadowrocket
+
+        data = {"add": "h", "port": 1, "id": "u", "net": "tcp", "tls": ""}
+        self.assertIsNone(vmess_to_shadowrocket(f"vmess://{b64(json.dumps(data))}"))
+
+    def test_shadowsocks_to_shadowrocket_b64_userinfo(self):
+        from linkray.shadowrocket import shadowsocks_to_shadowrocket
+
+        result = shadowsocks_to_shadowrocket(
+            "ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTpwYXNzd29yZA@edge.example.com:18085#ss-node"
+        )
+        self.assertIsNotNone(result)
+        name, line = result
+        self.assertEqual(name, "ss-node")
+        self.assertIn("method=chacha20-ietf-poly1305", line)
+        self.assertIn("password=password", line)
+
 
 if __name__ == "__main__":
     unittest.main()

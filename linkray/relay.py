@@ -6,7 +6,7 @@ import logging
 from dataclasses import dataclass
 from typing import Sequence
 
-from .config import DEFAULT_PORTS, PORT_KEYS, relay_port, validate_port
+from .config import DEFAULT_PORTS, PORT_KEYS, relay_port, validate_port, validate_unique_ports
 from .render import ACTIVE_INBOUND_TAGS
 
 
@@ -62,12 +62,17 @@ def relay_specs(
     ports = dict(DEFAULT_PORTS)
     if inbound_ports:
         ports.update(dict(inbound_ports))
+    validate_unique_ports(ports)
 
     specs: list[RelaySpec] = []
+    occupied = {port: f"primary:{key}" for key, port in ports.items()}
     for node_index, node in enumerate(nodes, start=1):
         for key in PORT_KEYS:
             target_port = ports[key]
             listen_port = relay_port(target_port, node_index, node.port_offset)
+            if listen_port in occupied:
+                raise ValueError(f"relay port conflict {listen_port}: {node.name}:{key} conflicts with {occupied[listen_port]}")
+            occupied[listen_port] = f"{node.name}:{key}"
             specs.append(
                 RelaySpec(
                     node=node.name,

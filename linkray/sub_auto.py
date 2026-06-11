@@ -7,16 +7,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
+from ._http import PASS_HEADERS
 from .native import build_stable_native_subscription
-
-
-PASS_HEADERS = {
-    "content-disposition",
-    "support-url",
-    "profile-title",
-    "profile-update-interval",
-    "subscription-userinfo",
-}
 
 
 def browser_request(user_agent: str, accept: str) -> bool:
@@ -64,6 +56,7 @@ def fetch(url: str, headers: Mapping[str, str]) -> tuple[int, dict[str, str], by
 
 class SubAutoHandler(BaseHTTPRequestHandler):
     marzban_url: str
+    clash_url: str
     egern_url: str
     shadowrocket_url: str
     singbox_url: str
@@ -81,18 +74,15 @@ class SubAutoHandler(BaseHTTPRequestHandler):
             self.send_bytes(404, {"Content-Type": "text/plain"}, b"not found\n")
             return
         suffix, extra = choose_suffix(self.headers.get("User-Agent", ""), self.headers.get("Accept", ""))
-        if suffix == "/egern":
-            url = f"{self.egern_url.rstrip('/')}/sub/{token}/egern"
-        elif suffix in {"/shadowrocket", "/shadowrocket-conf"}:
-            url = f"{self.shadowrocket_url.rstrip('/')}/sub/{token}/shadowrocket"
-            if suffix == "/shadowrocket-conf":
-                url = f"{self.shadowrocket_url.rstrip('/')}/sub/{token}/shadowrocket-conf"
-        elif suffix == "/sing-box":
-            url = f"{self.singbox_url.rstrip('/')}/sub/{token}/sing-box"
-        elif suffix == "/native":
-            url = f"{self.marzban_url.rstrip('/')}/sub/{token}"
-        else:
-            url = f"{self.marzban_url.rstrip('/')}/sub/{token}{suffix}"
+        url = upstream_url_for_suffix(
+            suffix,
+            token,
+            marzban_url=self.marzban_url,
+            egern_url=self.egern_url,
+            shadowrocket_url=self.shadowrocket_url,
+            singbox_url=self.singbox_url,
+            clash_url=self.clash_url,
+        )
         try:
             status, headers, body = fetch(url, request_headers(self.headers, extra))
             if suffix == "/native" and status == 200:
@@ -123,6 +113,7 @@ def make_sub_auto_server(
     listen: str,
     port: int,
     marzban_url: str,
+    clash_url: str,
     egern_url: str,
     shadowrocket_url: str,
     singbox_url: str,
@@ -131,6 +122,7 @@ def make_sub_auto_server(
         pass
 
     Handler.marzban_url = marzban_url
+    Handler.clash_url = clash_url
     Handler.egern_url = egern_url
     Handler.shadowrocket_url = shadowrocket_url
     Handler.singbox_url = singbox_url
@@ -138,7 +130,7 @@ def make_sub_auto_server(
 
 
 def serve_sub_auto(args: argparse.Namespace) -> int:
-    server = make_sub_auto_server(args.listen, args.port, args.marzban_url, args.egern_url, args.shadowrocket_url, args.singbox_url)
+    server = make_sub_auto_server(args.listen, args.port, args.marzban_url, args.clash_url, args.egern_url, args.shadowrocket_url, args.singbox_url)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
@@ -146,3 +138,26 @@ def serve_sub_auto(args: argparse.Namespace) -> int:
     finally:
         server.server_close()
     return 0
+
+
+def upstream_url_for_suffix(
+    suffix: str,
+    token: str,
+    *,
+    marzban_url: str,
+    egern_url: str,
+    shadowrocket_url: str,
+    singbox_url: str,
+    clash_url: str,
+) -> str:
+    if suffix == "/clash-meta":
+        return f"{clash_url.rstrip('/')}/sub/{token}/clash-meta"
+    if suffix == "/egern":
+        return f"{egern_url.rstrip('/')}/sub/{token}/egern"
+    if suffix == "/shadowrocket":
+        return f"{shadowrocket_url.rstrip('/')}/sub/{token}/shadowrocket"
+    if suffix == "/sing-box":
+        return f"{singbox_url.rstrip('/')}/sub/{token}/sing-box"
+    if suffix == "/native":
+        return f"{marzban_url.rstrip('/')}/sub/{token}"
+    return f"{marzban_url.rstrip('/')}/sub/{token}{suffix}"

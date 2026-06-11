@@ -135,6 +135,85 @@ class EgernTests(unittest.TestCase):
     def test_forwarded_headers_do_not_expose_internal_profile_url(self):
         self.assertNotIn("profile-web-page-url", PASS_HEADERS)
 
+    def test_vless_to_egern_tls_tcp(self):
+        from linkray.egern import vless_to_egern
+
+        result = vless_to_egern(
+            "vless://uuid@edge.example.com:18080?security=tls&type=tcp&sni=edge.example.com&flow=xtls-rprx-vision#my-node"
+        )
+        self.assertIsNotNone(result)
+        item = result["vless"]
+        self.assertEqual(item["user_id"], "uuid")
+        self.assertEqual(item["flow"], "xtls-rprx-vision")
+        self.assertEqual(item["port"], 18080)
+        self.assertIn("tls", item["transport"])
+
+    def test_vless_to_egern_rejects_reality_and_grpc(self):
+        from linkray.egern import vless_to_egern
+
+        self.assertIsNone(vless_to_egern("vless://u@h:1?security=reality&type=tcp"))
+        self.assertIsNone(vless_to_egern("vless://u@h:1?security=tls&type=grpc"))
+
+    def test_vless_to_egern_ws(self):
+        from linkray.egern import vless_to_egern
+
+        result = vless_to_egern(
+            "vless://uuid@edge.example.com:18086?security=tls&type=ws&sni=edge.example.com&path=/vless-ws&host=edge.example.com#ws-node"
+        )
+        self.assertIsNotNone(result)
+        item = result["vless"]
+        # egern uses "wss" key for WS+TLS, "ws" for plain WS
+        transport_key = "wss" if "wss" in item["transport"] else "ws"
+        self.assertIn(transport_key, item["transport"])
+        self.assertEqual(item["transport"][transport_key]["path"], "/vless-ws")
+
+    def test_trojan_to_egern_tcp(self):
+        from linkray.egern import trojan_to_egern
+
+        result = trojan_to_egern(
+            "trojan://secretpassword@edge.example.com:18083?security=tls&type=tcp&sni=edge.example.com#trojan-node"
+        )
+        self.assertIsNotNone(result)
+        item = result["trojan"]
+        self.assertEqual(item["password"], "secretpassword")
+        self.assertEqual(item["sni"], "edge.example.com")
+        self.assertFalse(item["skip_tls_verify"])
+
+    def test_trojan_to_egern_rejects_grpc(self):
+        from linkray.egern import trojan_to_egern
+
+        self.assertIsNone(trojan_to_egern("trojan://p@h:1?type=grpc"))
+
+    def test_vmess_to_egern_ws_tls(self):
+        from linkray.egern import vmess_to_egern
+
+        data = {"ps": "my-vmess", "add": "edge.example.com", "port": "18089", "id": "uuid",
+                "net": "ws", "path": "/ws", "host": "edge.example.com", "tls": "tls", "scy": "auto"}
+        result = vmess_to_egern(f"vmess://{b64(json.dumps(data))}")
+
+        self.assertIsNotNone(result)
+        item = result["vmess"]
+        self.assertEqual(item["user_id"], "uuid")
+        self.assertIn("wss", item["transport"])
+
+    def test_vmess_to_egern_rejects_grpc_and_bad_b64(self):
+        from linkray.egern import vmess_to_egern
+
+        bad_grpc = b64(json.dumps({"add": "h", "port": 1, "id": "u", "net": "grpc"}))
+        self.assertIsNone(vmess_to_egern(f"vmess://{bad_grpc}"))
+        self.assertIsNone(vmess_to_egern("vmess://!!!not-base64!!!"))
+
+    def test_shadowsocks_to_egern_plain_userinfo(self):
+        from linkray.egern import shadowsocks_to_egern
+
+        result = shadowsocks_to_egern(
+            "ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTpwYXNzd29yZA@edge.example.com:18085#ss-node"
+        )
+        self.assertIsNotNone(result)
+        item = result["shadowsocks"]
+        self.assertEqual(item["method"], "chacha20-ietf-poly1305")
+        self.assertEqual(item["password"], "password")
+
 
 if __name__ == "__main__":
     unittest.main()

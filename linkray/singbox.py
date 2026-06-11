@@ -4,41 +4,17 @@ import argparse
 import json
 import re
 from collections.abc import Mapping
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import ThreadingHTTPServer
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, unquote, urlparse
-from urllib.request import Request, urlopen
 
-from .egern import FOREIGN_DOMAIN_SUFFIXES
+from ._http import PASS_HEADERS, AdapterHandler, fetch_upstream, first_query_value, parse_link_netloc
 from .native import b64decode_text, decode_subscription_links
-from .rules import BUILTIN_CN_DOMAIN_SUFFIXES, RouteRules, load_route_rules
+from .rules import COMPACT_CN_DOMAIN_SUFFIXES, FOREIGN_DOMAIN_SUFFIXES, RouteRules, load_route_rules
 
 
 TOKEN_RE = re.compile(r"^/sub/([^/]+)/sing-box/?$")
-PASS_HEADERS = {
-    "content-disposition",
-    "support-url",
-    "profile-title",
-    "profile-update-interval",
-    "subscription-userinfo",
-}
-
-
-def first_query_value(query: Mapping[str, list[str]], *names: str) -> str:
-    for name in names:
-        values = query.get(name)
-        if values and values[0]:
-            return values[0]
-    return ""
-
-
-def parse_link_netloc(parsed) -> tuple[str, int] | None:
-    host = parsed.hostname
-    port = parsed.port
-    if not host or not port:
-        return None
-    return host, int(port)
 
 
 def proxy_tag(parsed, host: str) -> str:
@@ -56,8 +32,8 @@ def tls_config(query: Mapping[str, list[str]], fallback_server_name: str, realit
         },
     }
     if reality:
-        public_key = first_query_value(query, "pbk", "public-key", "public_key")
-        short_id = first_query_value(query, "sid", "short-id", "short_id")
+        public_key = first_query_value(query, "pbk", "public-key", "public_key") or ""
+        short_id = first_query_value(query, "sid", "short-id", "short_id") or ""
         config["reality"] = {
             "enabled": True,
             "public_key": public_key,
@@ -280,8 +256,7 @@ def build_route_rules(route_rules: RouteRules) -> list[dict[str, Any]]:
     ]
     for domain in FOREIGN_DOMAIN_SUFFIXES:
         rules.append({"domain_suffix": [domain], "outbound": "全球代理"})
-    compact_cn_domains = sorted(set(BUILTIN_CN_DOMAIN_SUFFIXES) | {"dns.pub", "doh.pub", "alidns.com"})
-    for domain in compact_cn_domains:
+    for domain in COMPACT_CN_DOMAIN_SUFFIXES:
         rules.append({"domain_suffix": [domain], "outbound": "国内站点"})
     if route_rules.cn_ip_cidrs:
         rules.append({"ip_cidr": route_rules.cn_ip_cidrs, "outbound": "国内站点"})
@@ -310,7 +285,17 @@ def build_singbox_json(subscription_payload: bytes, route_rules: RouteRules | No
                 {"tag": "local", "address": "223.5.5.5", "detour": "DIRECT"},
                 {"tag": "remote", "address": "https://dns.google/dns-query", "detour": "全球代理"},
             ],
-            "final": "local",
+            "rules": [
+                {
+                    "domain_suffix": list(COMPACT_CN_DOMAIN_SUFFIXES),
+                    "server": "local",
+                },
+                {
+                    "ip_cidr": ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"],
+                    "server": "local",
+                },
+            ],
+            "final": "remote",
         },
         "inbounds": [
             {
@@ -341,19 +326,7 @@ def build_singbox_json(subscription_payload: bytes, route_rules: RouteRules | No
     return json.dumps(data, ensure_ascii=False, indent=2, separators=(",", ": ")) + "\n"
 
 
-def fetch_upstream(marzban_url: str, token: str, headers: Mapping[str, str]) -> tuple[int, dict[str, str], bytes]:
-    url = f"{marzban_url.rstrip('/')}/sub/{token}"
-    req = Request(url, headers={k: v for k, v in headers.items() if v})
-    with urlopen(req, timeout=15) as response:
-        return response.status, dict(response.headers.items()), response.read()
-
-
-class SingBoxHandler(BaseHTTPRequestHandler):
-    marzban_url: str
-
-    def log_message(self, format: str, *args: object) -> None:
-        return
-
+class SingBoxHandler(AdapterHandler):
     def do_GET(self) -> None:
         path = urlparse(self.path).path
         if path == "/health":
@@ -376,17 +349,6 @@ class SingBoxHandler(BaseHTTPRequestHandler):
         headers = {name: value for name, value in upstream_headers.items() if name.lower() in PASS_HEADERS}
         headers["Content-Type"] = "application/json; charset=utf-8"
         self.send_bytes(200, headers, body)
-
-    def send_bytes(self, status: int, headers: Mapping[str, str], body: bytes) -> None:
-        self.send_response(status)
-        self.send_header("Cache-Control", "no-store")
-        for name, value in headers.items():
-            if name.lower() not in {"content-length", "transfer-encoding", "connection"}:
-                self.send_header(name, value)
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
-
 
 def make_singbox_server(listen: str, port: int, marzban_url: str) -> ThreadingHTTPServer:
     class Handler(SingBoxHandler):

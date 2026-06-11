@@ -22,10 +22,10 @@ The goal is simple: stop hand-editing live container files as the primary workfl
 | Master render | Marzban Docker Compose, Nginx config, Xray config, SQL host initialization, dashboard patches, subscription templates, sidecar systemd units |
 | Node render | Marzban Node Docker Compose and install shape |
 | Inbound set | 12 Xray-core inbound protocol families with overridable ports |
-| Subscription routing | Browser/client-aware `/sub/<token>` routing plus Egern, Shadowrocket, and sing-box adapters |
+| Subscription routing | Browser/client-aware `/sub/<token>` routing plus Clash/Mihomo, Egern, Shadowrocket, and sing-box adapters |
 | Dashboard patch | User link ordering, concrete protocol card labels, and Node Info backed by `linkray api` |
 | Multi-node relay | Master-side TCP relay ports for secondary nodes, avoiding client-side proxy chaining |
-| Runtime checks | `linkray doctor` file and runtime health checks for master and node roles |
+| Runtime checks | `linkray doctor` file, manifest, port, and runtime health checks for master and node roles |
 
 ## Protocol Coverage
 
@@ -46,7 +46,7 @@ LinkRay renders these inbound families for every node:
 | VMess HTTPUpgrade TLS | HTTPUpgrade + TLS |
 | Trojan gRPC TLS | gRPC + TLS |
 
-sing-box is supported as a client subscription format through a LinkRay sidecar. LinkRay still uses Marzban-managed Xray-core as the proxy runtime. Hysteria2, TUIC, and AnyTLS remain out of scope for v1 because they need a separate stats and subscription integration layer before they can fit the Marzban-first model.
+Clash/Mihomo and sing-box are supported as client subscription formats through LinkRay sidecars. LinkRay still uses Marzban-managed Xray-core as the proxy runtime. Hysteria2, TUIC, and AnyTLS remain out of scope for v1 because they need a separate stats and subscription integration layer before they can fit the Marzban-first model.
 
 ## Install
 
@@ -68,6 +68,14 @@ After installation:
 ```bash
 linkray --help
 ```
+
+Build release artifacts locally:
+
+```bash
+scripts/build-release.sh
+```
+
+The release script creates `dist/*.tar.gz` and `dist/*.whl`, installs the wheel into a temporary virtualenv, and smoke-tests `linkray --help`.
 
 ## Fresh Master Bootstrap
 
@@ -117,6 +125,15 @@ Then bootstrap the node:
 
 ```bash
 linkray bootstrap node --apply
+```
+
+Or pull the certificate from a master over SSH during bootstrap:
+
+```bash
+linkray bootstrap node \
+  --pull-cert-from root@edge-a.example.com \
+  --remote-cert-path /var/lib/marzban/ssl_client_cert.pem \
+  --apply
 ```
 
 ## Render First
@@ -192,6 +209,7 @@ Rendered master deployments include these LinkRay-managed systemd units:
 | Unit | Purpose |
 |---|---|
 | `linkray-api.service` | Reports node port status |
+| `linkray-clash.service` | Converts Marzban subscriptions into Clash/Mihomo YAML |
 | `linkray-egern.service` | Converts Marzban subscriptions into Egern YAML |
 | `linkray-shadowrocket.service` | Converts Marzban subscriptions into Shadowrocket config |
 | `linkray-singbox.service` | Converts Marzban subscriptions into compact sing-box JSON |
@@ -261,9 +279,10 @@ The current dashboard patch under `patches/marzban-dashboard/current/` is a comp
 
 ```text
 var/lib/marzban/linkray/hosts.sql
+var/lib/marzban/linkray/linkray-manifest.json
 ```
 
-This SQL initializes Marzban `inbounds` and `hosts` rows for the selected nodes. Review it before applying:
+The SQL initializes Marzban `inbounds` and `hosts` rows for the selected nodes. The manifest records render time, git commit, selected nodes, and non-secret config parameters for later `linkray doctor` checks. Review the SQL before applying:
 
 ```bash
 sqlite3 /var/lib/marzban/db.sqlite3 < /var/lib/marzban/linkray/hosts.sql

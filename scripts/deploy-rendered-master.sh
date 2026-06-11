@@ -11,6 +11,7 @@ test -f "$src/var/lib/marzban/xray_config.json"
 test -f "$src/opt/marzban/docker-compose.yml"
 test -f "$src/etc/nginx/conf.d/marzban-panel.conf"
 test -f "$src/etc/systemd/system/linkray-api.service"
+test -f "$src/etc/systemd/system/linkray-clash.service"
 test -f "$src/etc/systemd/system/linkray-egern.service"
 test -f "$src/etc/systemd/system/linkray-shadowrocket.service"
 test -f "$src/etc/systemd/system/linkray-singbox.service"
@@ -19,6 +20,7 @@ test -f "$src/etc/systemd/system/linkray-relay.service"
 test -f "$src/etc/systemd/system/linkray-rules-update.service"
 test -f "$src/etc/systemd/system/linkray-rules-update.timer"
 test -f "$src/var/lib/marzban/linkray/hosts.sql"
+test -f "$src/var/lib/marzban/linkray/linkray-manifest.json"
 test -f "$src/var/lib/marzban/linkray/rules/cn-domains.txt"
 test -f "$src/var/lib/marzban/linkray/rules/cn-ip-cidrs.txt"
 test -f "$src/var/lib/marzban/linkray/patches/clash.py"
@@ -39,6 +41,7 @@ install -m 0644 "$src/var/lib/marzban/xray_config.json" /var/lib/marzban/xray_co
 install -m 0644 "$src/var/lib/marzban/templates/clash/default.yml" /var/lib/marzban/templates/clash/default.yml
 install -m 0644 "$src/var/lib/marzban/templates/subscription/index.html" /var/lib/marzban/templates/subscription/index.html
 install -m 0644 "$src/var/lib/marzban/linkray/hosts.sql" /var/lib/marzban/linkray/hosts.sql
+install -m 0644 "$src/var/lib/marzban/linkray/linkray-manifest.json" /var/lib/marzban/linkray/linkray-manifest.json
 install -m 0644 "$src/var/lib/marzban/linkray/rules/cn-domains.txt" /var/lib/marzban/linkray/rules/cn-domains.txt
 install -m 0644 "$src/var/lib/marzban/linkray/rules/cn-ip-cidrs.txt" /var/lib/marzban/linkray/rules/cn-ip-cidrs.txt
 install -m 0644 "$src/var/lib/marzban/linkray/patches/clash.py" /var/lib/marzban/linkray/patches/clash.py
@@ -48,6 +51,7 @@ install -m 0644 "$src/var/lib/marzban/dashboard-patches/index.original.js" /var/
 install -m 0644 "$src/opt/marzban/docker-compose.yml" /opt/marzban/docker-compose.yml
 install -m 0644 "$src/etc/nginx/conf.d/marzban-panel.conf" /etc/nginx/conf.d/marzban-panel.conf
 install -m 0644 "$src/etc/systemd/system/linkray-api.service" /etc/systemd/system/linkray-api.service
+install -m 0644 "$src/etc/systemd/system/linkray-clash.service" /etc/systemd/system/linkray-clash.service
 install -m 0644 "$src/etc/systemd/system/linkray-egern.service" /etc/systemd/system/linkray-egern.service
 install -m 0644 "$src/etc/systemd/system/linkray-shadowrocket.service" /etc/systemd/system/linkray-shadowrocket.service
 install -m 0644 "$src/etc/systemd/system/linkray-singbox.service" /etc/systemd/system/linkray-singbox.service
@@ -61,6 +65,7 @@ docker compose up -d
 sqlite3 /var/lib/marzban/db.sqlite3 < /var/lib/marzban/linkray/hosts.sql
 systemctl daemon-reload
 systemctl enable --now linkray-api
+systemctl enable --now linkray-clash
 systemctl enable --now linkray-egern
 systemctl enable --now linkray-shadowrocket
 systemctl enable --now linkray-singbox
@@ -69,6 +74,7 @@ systemctl enable --now linkray-rules-update.timer
 systemctl start linkray-rules-update.service || true
 systemctl enable --now linkray-relay
 systemctl restart linkray-api
+systemctl restart linkray-clash
 systemctl restart linkray-egern
 systemctl restart linkray-shadowrocket
 systemctl restart linkray-singbox

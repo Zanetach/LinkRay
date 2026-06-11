@@ -53,5 +53,44 @@ class NativeSubscriptionTests(unittest.TestCase):
         self.assertNotIn("vmess-grpc", decoded)
 
 
+    def test_b64decode_text_handles_missing_padding(self):
+        from linkray.native import b64decode_text
+
+        raw = base64.urlsafe_b64encode(b"hello world").decode().rstrip("=")
+        self.assertEqual(b64decode_text(raw), "hello world")
+
+    def test_stable_vless_accepts_tls_tcp_and_ws(self):
+        from linkray.native import stable_vless
+
+        self.assertTrue(stable_vless("vless://u@h:1?security=tls&type=tcp"))
+        self.assertTrue(stable_vless("vless://u@h:1?security=tls&type=ws"))
+        self.assertFalse(stable_vless("vless://u@h:1?security=reality&type=tcp"))
+        self.assertFalse(stable_vless("vless://u@h:1?security=tls&type=grpc"))
+
+    def test_stable_trojan_accepts_tcp_and_ws_only(self):
+        from linkray.native import stable_trojan
+
+        self.assertTrue(stable_trojan("trojan://p@h:1?type=tcp"))
+        self.assertTrue(stable_trojan("trojan://p@h:1?type=ws"))
+        self.assertFalse(stable_trojan("trojan://p@h:1?type=grpc"))
+
+    def test_stable_vmess_accepts_tcp_and_ws_only(self):
+        from linkray.native import stable_vmess
+
+        vmess_ws = b64(json.dumps({"add": "h", "port": 1, "id": "u", "net": "ws", "tls": "tls"}))
+        vmess_grpc = b64(json.dumps({"add": "h", "port": 1, "id": "u", "net": "grpc"}))
+
+        self.assertTrue(stable_vmess(f"vmess://{vmess_ws}"))
+        self.assertFalse(stable_vmess(f"vmess://{vmess_grpc}"))
+        self.assertFalse(stable_vmess("vmess://!!!not-base64!!!"))
+
+    def test_stable_native_link_passes_ss_unconditionally(self):
+        from linkray.native import stable_native_link
+
+        self.assertTrue(stable_native_link("ss://anything@h:1"))
+        self.assertFalse(stable_native_link("hysteria2://anything"))
+        self.assertFalse(stable_native_link("unknown://anything"))
+
+
 if __name__ == "__main__":
     unittest.main()

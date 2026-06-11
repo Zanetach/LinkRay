@@ -59,6 +59,7 @@ class BootstrapTests(unittest.TestCase):
             self.assertTrue((root / "var/lib/marzban/linkray/hosts.sql").exists())
             self.assertTrue((root / "var/lib/marzban/linkray/patches/clash.py").exists())
             self.assertTrue((root / "etc/systemd/system/linkray-api.service").exists())
+            self.assertTrue((root / "etc/systemd/system/linkray-clash.service").exists())
             self.assertTrue((root / "etc/systemd/system/linkray-egern.service").exists())
             self.assertTrue((root / "etc/systemd/system/linkray-shadowrocket.service").exists())
             self.assertTrue((root / "etc/systemd/system/linkray-singbox.service").exists())
@@ -68,6 +69,7 @@ class BootstrapTests(unittest.TestCase):
             self.assertTrue((root / "etc/systemd/system/linkray-rules-update.timer").exists())
             self.assertTrue(any("Xray-linux-64.zip" in command for command in runner.commands))
             self.assertTrue(any("systemctl enable --now linkray-api" in command for command in runner.commands))
+            self.assertTrue(any("systemctl enable --now linkray-clash" in command for command in runner.commands))
             self.assertTrue(any("systemctl enable --now linkray-egern" in command for command in runner.commands))
             self.assertTrue(any("systemctl enable --now linkray-shadowrocket" in command for command in runner.commands))
             self.assertTrue(any("systemctl enable --now linkray-singbox" in command for command in runner.commands))
@@ -130,6 +132,46 @@ class BootstrapTests(unittest.TestCase):
             self.assertTrue((root / "opt/marzban-node/docker-compose.yml").exists())
             self.assertTrue(any("docker compose up -d" in command for command in runner.commands))
             self.assertTrue(all(action.ok for action in actions))
+
+    def test_bootstrap_node_can_pull_certificate_from_master(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runner = RecordingRunner()
+            actions = bootstrap_node(
+                root=root,
+                apply=True,
+                runtime=True,
+                runner=runner,
+                pull_cert_from="root@edge-a.example.com",
+            )
+
+            self.assertTrue((root / "opt/marzban-node/docker-compose.yml").exists())
+            self.assertFalse(any(not action.ok and "ssl_client_cert.pem" in action.detail for action in actions))
+            self.assertTrue(
+                any(
+                    "scp -q -o StrictHostKeyChecking=accept-new root@edge-a.example.com:/var/lib/marzban/ssl_client_cert.pem" in command
+                    for command in runner.commands
+                )
+            )
+
+    def test_bootstrap_node_cli_exposes_certificate_pull(self):
+        stdout = StringIO()
+
+        with redirect_stdout(stdout):
+            code = main(
+                [
+                    "bootstrap",
+                    "node",
+                    "--pull-cert-from",
+                    "root@edge-a.example.com",
+                    "--remote-cert-path",
+                    "/tmp/ssl_client_cert.pem",
+                ]
+            )
+
+        self.assertEqual(code, 0)
+        text = stdout.getvalue()
+        self.assertIn("scp -q -o StrictHostKeyChecking=accept-new root@edge-a.example.com:/tmp/ssl_client_cert.pem", text)
 
     def test_bootstrap_node_apply_requires_node_certificate(self):
         with tempfile.TemporaryDirectory() as tmp:

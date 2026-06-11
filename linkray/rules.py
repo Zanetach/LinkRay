@@ -83,6 +83,43 @@ BUILTIN_CN_DOMAIN_SUFFIXES = (
     "kuaishou.com",
 )
 
+COMPACT_CN_DOMAIN_SUFFIXES: tuple[str, ...] = tuple(
+    sorted(set(BUILTIN_CN_DOMAIN_SUFFIXES) | {"dns.pub", "doh.pub", "alidns.com"})
+)
+
+FOREIGN_DOMAIN_SUFFIXES: tuple[str, ...] = (
+    "dns.google",
+    "cloudflare-dns.com",
+    "telegram.org",
+    "t.me",
+    "youtube.com",
+    "youtu.be",
+    "googlevideo.com",
+    "tiktok.com",
+    "tiktokv.com",
+    "tiktokcdn.com",
+    "facebook.com",
+    "fb.com",
+    "fbcdn.net",
+    "instagram.com",
+    "whatsapp.com",
+    "x.com",
+    "twitter.com",
+    "t.co",
+    "google.com",
+    "gstatic.com",
+    "googleapis.com",
+    "googleusercontent.com",
+    "openai.com",
+    "chatgpt.com",
+    "oaistatic.com",
+    "oaiusercontent.com",
+    "anthropic.com",
+    "claude.ai",
+    "github.com",
+    "githubusercontent.com",
+)
+
 BUILTIN_CN_IP_CIDRS = (
     "106.52.0.0/15",
     "106.54.0.0/16",

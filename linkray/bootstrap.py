@@ -14,6 +14,10 @@ from .install import install_master, install_node
 from .render import default_nodes
 
 
+DEFAULT_NODE_REMOTE_CERT_PATH = "/var/lib/marzban/ssl_client_cert.pem"
+NODE_CERT_PATH = Path("var/lib/marzban-node/ssl_client_cert.pem")
+
+
 @dataclass(frozen=True)
 class BootstrapAction:
     kind: str
@@ -59,7 +63,7 @@ def command_action(command: str, apply: bool, runner: ShellRunner) -> BootstrapA
 def dependency_commands() -> list[str]:
     return [
         "apt-get update",
-        "DEBIAN_FRONTEND=noninteractive apt-get install -y curl ca-certificates gnupg nginx sqlite3 socat cron unzip",
+        "DEBIAN_FRONTEND=noninteractive apt-get install -y curl ca-certificates gnupg nginx sqlite3 socat cron unzip openssh-client",
         "command -v docker >/dev/null 2>&1 || curl -fsSL https://get.docker.com | sh",
         "systemctl enable --now docker",
         "systemctl enable --now nginx",
@@ -93,6 +97,7 @@ def linkray_api_commands() -> list[str]:
         "rm -f /var/lib/marzban/linkray/public/ports.html /var/lib/marzban/linkray/public/ports.json",
         "systemctl daemon-reload",
         "systemctl enable --now linkray-api",
+        "systemctl enable --now linkray-clash",
         "systemctl enable --now linkray-egern",
         "systemctl enable --now linkray-shadowrocket",
         "systemctl enable --now linkray-singbox",
@@ -101,6 +106,7 @@ def linkray_api_commands() -> list[str]:
         "systemctl start linkray-rules-update.service || true",
         "systemctl enable --now linkray-relay",
         "systemctl restart linkray-api",
+        "systemctl restart linkray-clash",
         "systemctl restart linkray-egern",
         "systemctl restart linkray-shadowrocket",
         "systemctl restart linkray-singbox",
@@ -155,12 +161,30 @@ def master_runtime_commands(
     return commands
 
 
-def node_runtime_commands() -> list[str]:
+def pull_node_cert_commands(pull_cert_from: str, remote_cert_path: str, local_cert_path: Path) -> list[str]:
+    source = f"{pull_cert_from}:{remote_cert_path}"
     return [
-        *dependency_commands(),
-        "cd /opt/marzban-node && docker compose up -d",
-        "linkray doctor --role node",
+        f"mkdir -p {shell_quote(str(local_cert_path.parent))}",
+        f"scp -q -o StrictHostKeyChecking=accept-new {shell_quote(source)} {shell_quote(str(local_cert_path))}",
+        f"chmod 600 {shell_quote(str(local_cert_path))}",
     ]
+
+
+def node_runtime_commands(
+    pull_cert_from: str | None = None,
+    remote_cert_path: str = DEFAULT_NODE_REMOTE_CERT_PATH,
+    local_cert_path: Path = Path("/") / NODE_CERT_PATH,
+) -> list[str]:
+    commands = dependency_commands()
+    if pull_cert_from:
+        commands.extend(pull_node_cert_commands(pull_cert_from, remote_cert_path, local_cert_path))
+    commands.extend(
+        [
+            "cd /opt/marzban-node && docker compose up -d",
+            "linkray doctor --role node",
+        ]
+    )
+    return commands
 
 
 def install_actions_to_bootstrap(actions) -> list[BootstrapAction]:
@@ -229,10 +253,12 @@ def bootstrap_node(
     apply: bool = False,
     runtime: bool | None = None,
     runner: ShellRunner | None = None,
+    pull_cert_from: str | None = None,
+    remote_cert_path: str = DEFAULT_NODE_REMOTE_CERT_PATH,
 ) -> list[BootstrapAction]:
     effective_runtime = root == Path("/") if runtime is None else runtime
-    cert_path = root / "var/lib/marzban-node/ssl_client_cert.pem"
-    if apply and not cert_path.exists():
+    cert_path = root / NODE_CERT_PATH
+    if apply and not cert_path.exists() and not pull_cert_from:
         return [
             BootstrapAction(
                 "precheck",
@@ -243,7 +269,7 @@ def bootstrap_node(
     actions = install_actions_to_bootstrap(install_node(root=root, apply=apply))
     if effective_runtime:
         shell_runner = runner or SubprocessShellRunner()
-        for command in node_runtime_commands():
+        for command in node_runtime_commands(pull_cert_from, remote_cert_path, cert_path):
             action = command_action(command, apply, shell_runner)
             actions.append(action)
             if apply and not action.ok:

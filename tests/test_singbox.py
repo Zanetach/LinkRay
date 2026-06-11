@@ -83,5 +83,40 @@ class SingBoxTests(unittest.TestCase):
         self.assertIn("10.31.63.0/24", output)
 
 
+    def test_singbox_dns_routes_cn_domains_to_local_server(self):
+        from linkray.singbox import build_singbox_json
+
+        links = "trojan://password@edge-a.example.com:18083?security=tls&type=tcp&sni=edge-a.example.com#t"
+        data = json.loads(build_singbox_json(base64.b64encode(links.encode())))
+        dns = data["dns"]
+
+        self.assertEqual(dns["final"], "remote")
+        servers = {s["tag"] for s in dns["servers"]}
+        self.assertIn("local", servers)
+        self.assertIn("remote", servers)
+
+        rules = dns["rules"]
+        cn_rule = next((r for r in rules if r.get("server") == "local" and "domain_suffix" in r), None)
+        self.assertIsNotNone(cn_rule, "expected a domain_suffix rule routing to local DNS")
+        self.assertIn("baidu.com", cn_rule["domain_suffix"])
+        self.assertIn("qq.com", cn_rule["domain_suffix"])
+
+        private_rule = next((r for r in rules if r.get("server") == "local" and "ip_cidr" in r), None)
+        self.assertIsNotNone(private_rule, "expected a private-IP rule routing to local DNS")
+        self.assertIn("192.168.0.0/16", private_rule["ip_cidr"])
+
+    def test_singbox_reality_missing_params_produce_empty_strings_not_null(self):
+        from linkray.singbox import build_singbox_json
+
+        link = "vless://uuid@1.2.3.4:18081?security=reality&type=tcp&sni=www.microsoft.com#no-pbk-sid"
+        data = json.loads(build_singbox_json(base64.b64encode(link.encode())))
+        reality = data["outbounds"][0]["tls"]["reality"]
+
+        self.assertEqual(reality["public_key"], "")
+        self.assertEqual(reality["short_id"], "")
+        self.assertIsNotNone(reality["public_key"])
+        self.assertIsNotNone(reality["short_id"])
+
+
 if __name__ == "__main__":
     unittest.main()

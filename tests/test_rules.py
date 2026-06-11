@@ -5,6 +5,8 @@ from pathlib import Path
 from linkray.rules import (
     BUILTIN_CN_DOMAIN_SUFFIXES,
     BUILTIN_CN_IP_CIDRS,
+    COMPACT_CN_DOMAIN_SUFFIXES,
+    FOREIGN_DOMAIN_SUFFIXES,
     RouteRules,
     load_route_rules,
     parse_cidr_lines,
@@ -85,6 +87,19 @@ class RouteRuleTests(unittest.TestCase):
         }
 
         self.assertTrue(expected.issubset(set(BUILTIN_CN_DOMAIN_SUFFIXES)))
+
+    def test_compact_cn_domain_suffixes_is_superset_of_builtins_and_includes_extras(self):
+        self.assertTrue(set(BUILTIN_CN_DOMAIN_SUFFIXES).issubset(set(COMPACT_CN_DOMAIN_SUFFIXES)))
+        self.assertIn("dns.pub", COMPACT_CN_DOMAIN_SUFFIXES)
+        self.assertIn("doh.pub", COMPACT_CN_DOMAIN_SUFFIXES)
+        self.assertIn("alidns.com", COMPACT_CN_DOMAIN_SUFFIXES)
+        self.assertEqual(list(COMPACT_CN_DOMAIN_SUFFIXES), sorted(COMPACT_CN_DOMAIN_SUFFIXES))
+
+    def test_foreign_domain_suffixes_covers_key_services(self):
+        expected = {"google.com", "github.com", "youtube.com", "telegram.org", "openai.com", "anthropic.com"}
+        self.assertTrue(expected.issubset(set(FOREIGN_DOMAIN_SUFFIXES)))
+        self.assertNotIn("baidu.com", FOREIGN_DOMAIN_SUFFIXES)
+        self.assertNotIn("qq.com", FOREIGN_DOMAIN_SUFFIXES)
 
 
 if __name__ == "__main__":

@@ -33,6 +33,10 @@ class DoctorTests(unittest.TestCase):
             install_master(LinkRayConfig(domain="edge-a.example.com"), root=root, apply=True)
             checks = run_doctor("master", root=root, runtime=False)
             self.assertEqual(exit_code(checks), 0)
+            manifest_checks = [check for check in checks if check.name == "manifest"]
+            self.assertEqual(len(manifest_checks), 1)
+            self.assertIn("role=master", manifest_checks[0].detail)
+            self.assertIn("domain=edge-a.example.com", manifest_checks[0].detail)
 
     def test_file_doctor_node_against_rendered_root(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -44,7 +48,7 @@ class DoctorTests(unittest.TestCase):
     def test_runtime_doctor_master_detects_healthy_runtime(self):
         ss_ports = "\n".join(
             f'tcp LISTEN 0 4096 *:{port} *:* users:(("xray",pid=1,fd=3))'
-            for port in [8000, 9443, 61990, 61992, 61993, 61994, 61995, *DEFAULT_PORTS.values()]
+            for port in [8000, 9443, 61990, 61991, 61992, 61993, 61994, 61995, *DEFAULT_PORTS.values()]
         )
         runner = FakeRunner(
             {
@@ -53,6 +57,7 @@ class DoctorTests(unittest.TestCase):
                 ("systemctl", "is-active", "nginx"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "xray"): CommandResult(3, "inactive\n"),
                 ("systemctl", "is-active", "linkray-api"): CommandResult(0, "active\n"),
+                ("systemctl", "is-active", "linkray-clash"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "linkray-egern"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "linkray-shadowrocket"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "linkray-singbox"): CommandResult(0, "active\n"),
@@ -73,7 +78,7 @@ class DoctorTests(unittest.TestCase):
         expected_ports = {**DEFAULT_PORTS, **dict(custom_ports)}
         ss_ports = "\n".join(
             f'tcp LISTEN 0 4096 *:{port} *:* users:(("xray",pid=1,fd=3))'
-            for port in [8000, 9443, 61990, 61992, 61993, 61994, 61995, *expected_ports.values()]
+            for port in [8000, 9443, 61990, 61991, 61992, 61993, 61994, 61995, *expected_ports.values()]
         )
         runner = FakeRunner(
             {
@@ -82,6 +87,7 @@ class DoctorTests(unittest.TestCase):
                 ("systemctl", "is-active", "nginx"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "xray"): CommandResult(3, "inactive\n"),
                 ("systemctl", "is-active", "linkray-api"): CommandResult(0, "active\n"),
+                ("systemctl", "is-active", "linkray-clash"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "linkray-egern"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "linkray-shadowrocket"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "linkray-singbox"): CommandResult(0, "active\n"),

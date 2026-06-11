@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -59,12 +60,22 @@ class LinkRayConfig:
                 raise ValueError(f"unknown inbound port key: {key}")
             validate_port(port)
             ports[key] = port
+        validate_unique_ports(ports)
         return ports
 
 
 def validate_port(port: int) -> None:
     if port < 1 or port > 65535:
         raise ValueError(f"invalid port: {port}")
+
+
+def validate_unique_ports(ports: Mapping[str, int]) -> None:
+    seen: dict[int, str] = {}
+    for key, port in ports.items():
+        validate_port(port)
+        if port in seen:
+            raise ValueError(f"duplicate inbound port {port}: {seen[port]} and {key}")
+        seen[port] = key
 
 
 def parse_inbound_port(value: str) -> tuple[str, int]:

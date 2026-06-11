@@ -4,25 +4,16 @@ import argparse
 import json
 import re
 from collections.abc import Mapping
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Any
+from http.server import ThreadingHTTPServer
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, unquote, urlparse
-from urllib.request import Request, urlopen
 
-from .egern import FOREIGN_DOMAIN_SUFFIXES
+from ._http import PASS_HEADERS, AdapterHandler, fetch_upstream, first_query_value, parse_link_netloc
 from .native import b64decode_text, build_stable_native_subscription, decode_subscription_links
-from .rules import BUILTIN_CN_DOMAIN_SUFFIXES, RouteRules, load_route_rules
+from .rules import COMPACT_CN_DOMAIN_SUFFIXES, FOREIGN_DOMAIN_SUFFIXES, RouteRules, load_route_rules
 
 
 TOKEN_RE = re.compile(r"^/sub/([^/]+)/(shadowrocket|shadowrocket-conf)/?$")
-PASS_HEADERS = {
-    "content-disposition",
-    "support-url",
-    "profile-title",
-    "profile-update-interval",
-    "subscription-userinfo",
-}
 
 
 def conf_token(value: object) -> str:
@@ -33,22 +24,6 @@ def option(name: str, value: object | None) -> str | None:
     if value is None or value == "":
         return None
     return f"{name}={conf_token(value)}"
-
-
-def first_query_value(query: Mapping[str, list[str]], *names: str) -> str | None:
-    for name in names:
-        values = query.get(name)
-        if values and values[0]:
-            return values[0]
-    return None
-
-
-def parse_link_netloc(parsed) -> tuple[str, int] | None:
-    host = parsed.hostname
-    port = parsed.port
-    if not host or not port:
-        return None
-    return host, int(port)
 
 
 def proxy_name(parsed, host: str) -> str:
@@ -242,8 +217,7 @@ def build_rules(route_rules: RouteRules) -> list[str]:
     )
     for domain in FOREIGN_DOMAIN_SUFFIXES:
         lines.append(f"DOMAIN-SUFFIX,{domain},全球代理")
-    compact_cn_domains = sorted(set(BUILTIN_CN_DOMAIN_SUFFIXES) | {"dns.pub", "doh.pub", "alidns.com"})
-    for domain in compact_cn_domains:
+    for domain in COMPACT_CN_DOMAIN_SUFFIXES:
         lines.append(f"DOMAIN-SUFFIX,{domain},国内站点")
     lines.append("GEOIP,CN,国内站点")
     lines.append("FINAL,漏网之鱼")
@@ -290,19 +264,7 @@ def build_shadowrocket_subscription(subscription_payload: bytes) -> bytes:
     return build_stable_native_subscription(subscription_payload)
 
 
-def fetch_upstream(marzban_url: str, token: str, headers: Mapping[str, str]) -> tuple[int, dict[str, str], bytes]:
-    url = f"{marzban_url.rstrip('/')}/sub/{token}"
-    req = Request(url, headers={k: v for k, v in headers.items() if v})
-    with urlopen(req, timeout=15) as response:
-        return response.status, dict(response.headers.items()), response.read()
-
-
-class ShadowrocketHandler(BaseHTTPRequestHandler):
-    marzban_url: str
-
-    def log_message(self, format: str, *args: object) -> None:
-        return
-
+class ShadowrocketHandler(AdapterHandler):
     def do_GET(self) -> None:
         path = urlparse(self.path).path
         if path == "/health":
@@ -333,17 +295,6 @@ class ShadowrocketHandler(BaseHTTPRequestHandler):
         headers = {name: value for name, value in upstream_headers.items() if name.lower() in PASS_HEADERS}
         headers["Content-Type"] = "text/plain; charset=utf-8"
         self.send_bytes(200, headers, body)
-
-    def send_bytes(self, status: int, headers: Mapping[str, str], body: bytes) -> None:
-        self.send_response(status)
-        self.send_header("Cache-Control", "no-store")
-        for name, value in headers.items():
-            if name.lower() not in {"content-length", "transfer-encoding", "connection"}:
-                self.send_header(name, value)
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
-
 
 def make_shadowrocket_server(listen: str, port: int, marzban_url: str) -> ThreadingHTTPServer:
     class Handler(ShadowrocketHandler):

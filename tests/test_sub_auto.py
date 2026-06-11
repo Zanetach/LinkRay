@@ -1,6 +1,6 @@
 import unittest
 
-from linkray.sub_auto import PASS_HEADERS, choose_suffix, parse_token
+from linkray.sub_auto import PASS_HEADERS, choose_suffix, parse_token, upstream_url_for_suffix
 
 
 class SubAutoTests(unittest.TestCase):
@@ -11,6 +11,20 @@ class SubAutoTests(unittest.TestCase):
         self.assertEqual(choose_suffix("Shadowrocket/2520 CFNetwork", "*/*")[0], "/shadowrocket")
         self.assertEqual(choose_suffix("Mozilla/5.0", "text/html,*/*")[0], "")
         self.assertEqual(choose_suffix("unknown", "*/*")[0], "/native")
+
+    def test_clash_clients_route_to_linkray_clash_adapter(self):
+        self.assertEqual(
+            upstream_url_for_suffix(
+                "/clash-meta",
+                "abc123",
+                marzban_url="http://127.0.0.1:8000",
+                egern_url="http://127.0.0.1:61992",
+                shadowrocket_url="http://127.0.0.1:61994",
+                singbox_url="http://127.0.0.1:61995",
+                clash_url="http://127.0.0.1:61991",
+            ),
+            "http://127.0.0.1:61991/sub/abc123/clash-meta",
+        )
 
     def test_parse_token_accepts_only_base_subscription_path(self):
         self.assertEqual(parse_token("/sub/abc"), "abc")

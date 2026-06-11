@@ -1,0 +1,430 @@
+from __future__ import annotations
+
+import argparse
+import json
+import re
+from collections.abc import Mapping
+from http.server import ThreadingHTTPServer
+from typing import Any
+from urllib.error import HTTPError, URLError
+from urllib.parse import parse_qs, unquote, urlparse
+
+from ._http import PASS_HEADERS, AdapterHandler, fetch_upstream, first_query_value, parse_link_netloc
+from .native import b64decode_text, decode_subscription_links
+from .rules import COMPACT_CN_DOMAIN_SUFFIXES, FOREIGN_DOMAIN_SUFFIXES, RouteRules, load_route_rules
+
+
+TOKEN_RE = re.compile(r"^/sub/([^/]+)/clash-meta/?$")
+
+
+def yaml_scalar(value: Any) -> str:
+    if value is True:
+        return "true"
+    if value is False:
+        return "false"
+    if value is None:
+        return "null"
+    if isinstance(value, (int, float)):
+        return str(value)
+    text = str(value)
+    if (
+        text
+        and text.lower() not in {"true", "false", "null", "yes", "no", "on", "off"}
+        and "\n" not in text
+        and ": " not in text
+        and not text.startswith(("*", "&", "!", "- ", "? ", "{", "}", "[", "]", ",", "#", "|", ">", "@", "`", "\"", "'"))
+    ):
+        return text
+    return json.dumps(text, ensure_ascii=False)
+
+
+def yaml_lines(value: Any, indent: int = 0) -> list[str]:
+    prefix = " " * indent
+    if isinstance(value, dict):
+        lines: list[str] = []
+        for key, item in value.items():
+            if isinstance(item, (dict, list)):
+                lines.append(f"{prefix}{key}:")
+                lines.extend(yaml_lines(item, indent + 2))
+            else:
+                lines.append(f"{prefix}{key}: {yaml_scalar(item)}")
+        return lines
+    if isinstance(value, list):
+        lines = []
+        for item in value:
+            if isinstance(item, dict):
+                entries = list(item.items())
+                if not entries:
+                    lines.append(f"{prefix}- {{}}")
+                    continue
+                first_key, first_value = entries[0]
+                if isinstance(first_value, (dict, list)):
+                    lines.append(f"{prefix}- {first_key}:")
+                    lines.extend(yaml_lines(first_value, indent + 4))
+                else:
+                    lines.append(f"{prefix}- {first_key}: {yaml_scalar(first_value)}")
+                for key, child in entries[1:]:
+                    if isinstance(child, (dict, list)):
+                        lines.append(f"{prefix}  {key}:")
+                        lines.extend(yaml_lines(child, indent + 4))
+                    else:
+                        lines.append(f"{prefix}  {key}: {yaml_scalar(child)}")
+            else:
+                lines.append(f"{prefix}- {yaml_scalar(item)}")
+        return lines
+    return [f"{prefix}{yaml_scalar(value)}"]
+
+
+def proxy_name(parsed, host: str) -> str:
+    return unquote(parsed.fragment) or host
+
+
+def tls_common(query: Mapping[str, list[str]], fallback_server_name: str) -> dict[str, Any]:
+    server_name = first_query_value(query, "sni", "servername") or fallback_server_name
+    return {
+        "tls": True,
+        "servername": server_name,
+        "skip-cert-verify": first_query_value(query, "allowInsecure", "skip-cert-verify") in {"1", "true", "True"},
+        "client-fingerprint": first_query_value(query, "fp", "fingerprint") or "chrome",
+    }
+
+
+def transport_options(query: Mapping[str, list[str]], network: str, fallback_host: str) -> dict[str, Any] | None:
+    if network == "tcp":
+        return None
+    if network == "ws":
+        return {
+            "network": "ws",
+            "ws-opts": {
+                "path": first_query_value(query, "path") or "/",
+                "headers": {"Host": first_query_value(query, "host") or fallback_host},
+            },
+        }
+    if network == "grpc":
+        return {
+            "network": "grpc",
+            "grpc-opts": {
+                "grpc-service-name": first_query_value(query, "serviceName", "service_name") or "grpc",
+            },
+        }
+    if network == "httpupgrade":
+        return {
+            "network": "httpupgrade",
+            "httpupgrade-opts": {
+                "path": first_query_value(query, "path") or "/",
+                "headers": {"Host": first_query_value(query, "host") or fallback_host},
+            },
+        }
+    return None
+
+
+def vless_to_clash(link: str) -> dict[str, Any] | None:
+    parsed = urlparse(link)
+    host_port = parse_link_netloc(parsed)
+    if not host_port or not parsed.username:
+        return None
+    host, port = host_port
+    query = parse_qs(parsed.query)
+    network = first_query_value(query, "type") or "tcp"
+    security = first_query_value(query, "security") or ""
+    if network == "xhttp" or network not in {"tcp", "ws", "grpc", "httpupgrade"}:
+        return None
+    if security not in {"tls", "reality"}:
+        return None
+    proxy: dict[str, Any] = {
+        "name": proxy_name(parsed, host),
+        "type": "vless",
+        "server": host,
+        "port": port,
+        "uuid": unquote(parsed.username),
+        "udp": True,
+    }
+    proxy.update(tls_common(query, host))
+    flow = first_query_value(query, "flow")
+    if flow:
+        proxy["flow"] = flow
+    if security == "reality":
+        proxy["reality-opts"] = {
+            "public-key": first_query_value(query, "pbk", "public-key", "public_key") or "",
+            "short-id": first_query_value(query, "sid", "short-id", "short_id") or "",
+        }
+    transport = transport_options(query, network, host)
+    if transport:
+        proxy.update(transport)
+    return proxy
+
+
+def trojan_to_clash(link: str) -> dict[str, Any] | None:
+    parsed = urlparse(link)
+    host_port = parse_link_netloc(parsed)
+    if not host_port or not parsed.username:
+        return None
+    host, port = host_port
+    query = parse_qs(parsed.query)
+    network = first_query_value(query, "type") or "tcp"
+    if network == "xhttp" or network not in {"tcp", "ws", "grpc", "httpupgrade"}:
+        return None
+    proxy: dict[str, Any] = {
+        "name": proxy_name(parsed, host),
+        "type": "trojan",
+        "server": host,
+        "port": port,
+        "password": unquote(parsed.username),
+        "udp": True,
+    }
+    proxy.update(tls_common(query, host))
+    transport = transport_options(query, network, host)
+    if transport:
+        proxy.update(transport)
+    return proxy
+
+
+def vmess_to_clash(link: str) -> dict[str, Any] | None:
+    try:
+        data = json.loads(b64decode_text(link.removeprefix("vmess://")))
+    except (ValueError, UnicodeDecodeError):
+        return None
+    host = data.get("add")
+    port = data.get("port")
+    uuid = data.get("id")
+    if not host or not port or not uuid:
+        return None
+    network = str(data.get("net") or "tcp")
+    if network == "xhttp" or network not in {"tcp", "ws", "grpc", "httpupgrade"}:
+        return None
+    proxy: dict[str, Any] = {
+        "name": str(data.get("ps") or host),
+        "type": "vmess",
+        "server": str(host),
+        "port": int(port),
+        "uuid": str(uuid),
+        "alterId": int(data.get("aid") or 0),
+        "cipher": str(data.get("scy") or "auto"),
+        "udp": True,
+    }
+    if data.get("tls") == "tls":
+        proxy["tls"] = True
+        proxy["servername"] = str(data.get("sni") or data.get("host") or host)
+        proxy["skip-cert-verify"] = False
+    query_like = {
+        "host": [str(data.get("host") or host)],
+        "path": [str(data.get("path") or "/")],
+        "serviceName": [str(data.get("path") or data.get("serviceName") or "grpc")],
+    }
+    transport = transport_options(query_like, network, str(host))
+    if transport:
+        proxy.update(transport)
+    return proxy
+
+
+def parse_shadowsocks_userinfo(raw: str) -> tuple[str, str] | None:
+    userinfo = raw
+    if ":" not in userinfo:
+        try:
+            userinfo = b64decode_text(userinfo)
+        except (ValueError, UnicodeDecodeError):
+            return None
+    if ":" not in userinfo:
+        return None
+    method, password = userinfo.split(":", 1)
+    return unquote(method), unquote(password)
+
+
+def shadowsocks_to_clash(link: str) -> dict[str, Any] | None:
+    parsed = urlparse(link)
+    host_port = parse_link_netloc(parsed)
+    if host_port and parsed.username:
+        host, port = host_port
+        parsed_userinfo = parse_shadowsocks_userinfo(parsed.username)
+    else:
+        text = link.removeprefix("ss://").split("#", 1)[0].split("?", 1)[0]
+        try:
+            decoded = b64decode_text(text)
+        except (ValueError, UnicodeDecodeError):
+            return None
+        if "@" not in decoded:
+            return None
+        userinfo, server = decoded.rsplit("@", 1)
+        if ":" not in server:
+            return None
+        host, raw_port = server.rsplit(":", 1)
+        try:
+            port = int(raw_port)
+        except ValueError:
+            return None
+        parsed_userinfo = parse_shadowsocks_userinfo(userinfo)
+    if not parsed_userinfo:
+        return None
+    method, password = parsed_userinfo
+    return {
+        "name": proxy_name(parsed, host),
+        "type": "ss",
+        "server": host,
+        "port": port,
+        "cipher": method,
+        "password": password,
+        "udp": True,
+    }
+
+
+def convert_link(link: str) -> dict[str, Any] | None:
+    if link.startswith("vless://"):
+        return vless_to_clash(link)
+    if link.startswith("trojan://"):
+        return trojan_to_clash(link)
+    if link.startswith("vmess://"):
+        return vmess_to_clash(link)
+    if link.startswith("ss://"):
+        return shadowsocks_to_clash(link)
+    return None
+
+
+def build_proxy_groups(names: list[str]) -> list[dict[str, Any]]:
+    default = names[0] if names else "DIRECT"
+    selector = names if names else ["DIRECT"]
+    return [
+        {"name": "手动切换", "type": "select", "proxies": selector},
+        {
+            "name": "自动选择",
+            "type": "url-test",
+            "proxies": selector,
+            "url": "https://www.gstatic.com/generate_204",
+            "interval": 300,
+            "tolerance": 50,
+        },
+        {"name": "全球代理", "type": "select", "proxies": ["手动切换", "自动选择", *selector]},
+        {"name": "Google", "type": "select", "proxies": ["全球代理", "自动选择", "手动切换", *selector]},
+        {"name": "YouTube", "type": "select", "proxies": ["全球代理", "自动选择", "手动切换", *selector]},
+        {"name": "Telegram", "type": "select", "proxies": ["全球代理", "自动选择", "手动切换", *selector]},
+        {"name": "Facebook", "type": "select", "proxies": ["全球代理", "自动选择", "手动切换", *selector]},
+        {"name": "X", "type": "select", "proxies": ["全球代理", "自动选择", "手动切换", *selector]},
+        {"name": "TikTok", "type": "select", "proxies": ["全球代理", "自动选择", "手动切换", *selector]},
+        {"name": "OpenAI", "type": "select", "proxies": ["全球代理", "自动选择", "手动切换", *selector]},
+        {"name": "ClaudeAI", "type": "select", "proxies": ["全球代理", "自动选择", "手动切换", *selector]},
+        {"name": "国内站点", "type": "select", "proxies": ["DIRECT", "全球代理", default]},
+        {"name": "本地直连", "type": "select", "proxies": ["DIRECT", "全球代理"]},
+        {"name": "漏网之鱼", "type": "select", "proxies": ["全球代理", "自动选择", "手动切换", "DIRECT", *selector]},
+    ]
+
+
+def build_rules(route_rules: RouteRules) -> list[str]:
+    rules = [
+        "DOMAIN-SUFFIX,google.com,Google",
+        "DOMAIN-SUFFIX,gstatic.com,Google",
+        "DOMAIN-SUFFIX,youtube.com,YouTube",
+        "DOMAIN-SUFFIX,ytimg.com,YouTube",
+        "DOMAIN-SUFFIX,telegram.org,Telegram",
+        "DOMAIN-SUFFIX,t.me,Telegram",
+        "DOMAIN-SUFFIX,facebook.com,Facebook",
+        "DOMAIN-SUFFIX,fbcdn.net,Facebook",
+        "DOMAIN-SUFFIX,x.com,X",
+        "DOMAIN-SUFFIX,twitter.com,X",
+        "DOMAIN-SUFFIX,tiktok.com,TikTok",
+        "DOMAIN-KEYWORD,tiktok,TikTok",
+        "DOMAIN-SUFFIX,openai.com,OpenAI",
+        "DOMAIN-SUFFIX,chatgpt.com,OpenAI",
+        "DOMAIN-SUFFIX,anthropic.com,ClaudeAI",
+        "DOMAIN-SUFFIX,claude.ai,ClaudeAI",
+        "DOMAIN-SUFFIX,local,本地直连",
+        "DOMAIN-SUFFIX,lan,本地直连",
+        "IP-CIDR,10.0.0.0/8,本地直连",
+        "IP-CIDR,172.16.0.0/12,本地直连",
+        "IP-CIDR,192.168.0.0/16,本地直连",
+        "IP-CIDR,127.0.0.0/8,本地直连",
+        "IP-CIDR,169.254.0.0/16,本地直连",
+    ]
+    for domain in FOREIGN_DOMAIN_SUFFIXES:
+        rules.append(f"DOMAIN-SUFFIX,{domain},全球代理")
+    for domain in COMPACT_CN_DOMAIN_SUFFIXES:
+        rules.append(f"DOMAIN-SUFFIX,{domain},国内站点")
+    for cidr in route_rules.cn_ip_cidrs:
+        rules.append(f"IP-CIDR,{cidr},国内站点")
+    rules.append("GEOIP,CN,国内站点")
+    rules.append("FINAL,漏网之鱼")
+    return rules
+
+
+def build_clash_meta_yaml(subscription_payload: bytes, route_rules: RouteRules | None = None) -> str:
+    proxies: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for link in decode_subscription_links(subscription_payload):
+        proxy = convert_link(link)
+        if not proxy:
+            continue
+        name = proxy.get("name")
+        if not isinstance(name, str) or not name or name in seen:
+            continue
+        seen.add(name)
+        proxies.append(proxy)
+
+    names = [str(proxy["name"]) for proxy in proxies]
+    effective_rules = route_rules or load_route_rules()
+    data = {
+        "mixed-port": 7890,
+        "allow-lan": False,
+        "mode": "rule",
+        "log-level": "warning",
+        "ipv6": False,
+        "tcp-concurrent": True,
+        "unified-delay": True,
+        "profile": {"store-selected": True, "store-fake-ip": False},
+        "dns": {
+            "enable": True,
+            "listen": "127.0.0.1:1053",
+            "ipv6": False,
+            "enhanced-mode": "fake-ip",
+            "fake-ip-filter": ["*.lan", "*.local"],
+            "default-nameserver": ["223.5.5.5", "119.29.29.29"],
+            "nameserver": ["https://doh.pub/dns-query", "https://dns.alidns.com/dns-query"],
+            "fallback": ["https://dns.google/dns-query"],
+            "respect-rules": True,
+        },
+        "proxies": proxies,
+        "proxy-groups": build_proxy_groups(names),
+        "rules": build_rules(effective_rules),
+    }
+    return "\n".join(yaml_lines(data)) + "\n"
+
+
+class ClashHandler(AdapterHandler):
+    def do_GET(self) -> None:
+        path = urlparse(self.path).path
+        if path == "/health":
+            self.send_bytes(200, {"Content-Type": "text/plain"}, b"ok\n")
+            return
+        match = TOKEN_RE.match(path)
+        if not match:
+            self.send_bytes(404, {"Content-Type": "text/plain"}, b"not found\n")
+            return
+        token = match.group(1)
+        try:
+            _, upstream_headers, raw = fetch_upstream(self.marzban_url, token, {"Accept": "text/plain"})
+            body = build_clash_meta_yaml(raw).encode("utf-8")
+        except HTTPError as exc:
+            self.send_bytes(exc.code, dict(exc.headers.items()), exc.read() or b"upstream error\n")
+            return
+        except (URLError, TimeoutError, ValueError) as exc:
+            self.send_bytes(502, {"Content-Type": "text/plain"}, f"clash upstream unavailable: {exc}\n".encode("utf-8"))
+            return
+        headers = {name: value for name, value in upstream_headers.items() if name.lower() in PASS_HEADERS}
+        headers["Content-Type"] = "text/yaml; charset=utf-8"
+        self.send_bytes(200, headers, body)
+
+
+def make_clash_server(listen: str, port: int, marzban_url: str) -> ThreadingHTTPServer:
+    class Handler(ClashHandler):
+        pass
+
+    Handler.marzban_url = marzban_url
+    return ThreadingHTTPServer((listen, port), Handler)
+
+
+def serve_clash(args: argparse.Namespace) -> int:
+    server = make_clash_server(args.listen, args.port, args.marzban_url)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        return 130
+    finally:
+        server.server_close()
+    return 0

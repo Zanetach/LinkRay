@@ -3,7 +3,9 @@ from __future__ import annotations
 import json
 import shutil
 import shlex
+import subprocess
 from collections.abc import Sequence
+from datetime import datetime, timezone
 from pathlib import Path
 
 from .config import DEFAULT_PORTS, RELAY_PORT_OFFSET, LinkRayConfig, NodeHost, RenderResult, relay_port
@@ -97,108 +99,38 @@ def xhttp_reality_stream(config: LinkRayConfig, path: str) -> dict:
     return stream
 
 
+def _inbound(tag: str, port_key: str, protocol: str, stream: dict | None, ports: dict[str, int]) -> dict:
+    settings: dict = {"clients": []}
+    if protocol == "vless":
+        settings["decryption"] = "none"
+    elif protocol == "shadowsocks":
+        settings["network"] = "tcp,udp"
+    entry: dict = {"tag": tag, "listen": "0.0.0.0", "port": ports[port_key], "protocol": protocol, "settings": settings}
+    if stream is not None:
+        entry["streamSettings"] = stream
+    return entry
+
+
 def xray_config(config: LinkRayConfig) -> dict:
     config.validate()
     ports = config.port_map()
+    inbounds = [
+        _inbound("VLESS TCP TLS",        "vless_tls",             "vless",       tls_stream(config),                              ports),
+        _inbound("VLESS TCP REALITY",    "vless_reality",         "vless",       reality_stream(config),                          ports),
+        _inbound("VLESS GRPC REALITY",   "vless_grpc_reality",    "vless",       reality_stream(config, network="grpc"),           ports),
+        _inbound("Trojan TCP TLS",       "trojan_tls",            "trojan",      tls_stream(config),                              ports),
+        _inbound("VMess TCP TLS",        "vmess_tls",             "vmess",       tls_stream(config),                              ports),
+        _inbound("Shadowsocks TCP UDP",  "shadowsocks",           "shadowsocks", None,                                            ports),
+        _inbound("VLESS WS TLS",         "vless_ws_tls",          "vless",       ws_tls_stream(config, "/vless-ws"),              ports),
+        _inbound("VLESS GRPC TLS",       "vless_grpc_tls",        "vless",       grpc_tls_stream(config, config.grpc_service_name), ports),
+        _inbound("VLESS XHTTP REALITY",  "vless_xhttp_reality",   "vless",       xhttp_reality_stream(config, "/vless-xhttp"),    ports),
+        _inbound("VMess WS TLS",         "vmess_ws_tls",          "vmess",       ws_tls_stream(config, "/vmess-ws"),              ports),
+        _inbound("VMess HTTPUpgrade TLS","vmess_httpupgrade_tls", "vmess",       httpupgrade_tls_stream(config, "/vmess-httpupgrade"), ports),
+        _inbound("Trojan GRPC TLS",      "trojan_grpc_tls",       "trojan",      grpc_tls_stream(config, "trojan-grpc"),          ports),
+    ]
     return {
         "log": {"loglevel": "warning"},
-        "inbounds": [
-            {
-                "tag": "VLESS TCP TLS",
-                "listen": "0.0.0.0",
-                "port": ports["vless_tls"],
-                "protocol": "vless",
-                "settings": {"clients": [], "decryption": "none"},
-                "streamSettings": tls_stream(config),
-            },
-            {
-                "tag": "VLESS TCP REALITY",
-                "listen": "0.0.0.0",
-                "port": ports["vless_reality"],
-                "protocol": "vless",
-                "settings": {"clients": [], "decryption": "none"},
-                "streamSettings": reality_stream(config),
-            },
-            {
-                "tag": "VLESS GRPC REALITY",
-                "listen": "0.0.0.0",
-                "port": ports["vless_grpc_reality"],
-                "protocol": "vless",
-                "settings": {"clients": [], "decryption": "none"},
-                "streamSettings": reality_stream(config, network="grpc"),
-            },
-            {
-                "tag": "Trojan TCP TLS",
-                "listen": "0.0.0.0",
-                "port": ports["trojan_tls"],
-                "protocol": "trojan",
-                "settings": {"clients": []},
-                "streamSettings": tls_stream(config),
-            },
-            {
-                "tag": "VMess TCP TLS",
-                "listen": "0.0.0.0",
-                "port": ports["vmess_tls"],
-                "protocol": "vmess",
-                "settings": {"clients": []},
-                "streamSettings": tls_stream(config),
-            },
-            {
-                "tag": "Shadowsocks TCP UDP",
-                "listen": "0.0.0.0",
-                "port": ports["shadowsocks"],
-                "protocol": "shadowsocks",
-                "settings": {"clients": [], "network": "tcp,udp"},
-            },
-            {
-                "tag": "VLESS WS TLS",
-                "listen": "0.0.0.0",
-                "port": ports["vless_ws_tls"],
-                "protocol": "vless",
-                "settings": {"clients": [], "decryption": "none"},
-                "streamSettings": ws_tls_stream(config, "/vless-ws"),
-            },
-            {
-                "tag": "VLESS GRPC TLS",
-                "listen": "0.0.0.0",
-                "port": ports["vless_grpc_tls"],
-                "protocol": "vless",
-                "settings": {"clients": [], "decryption": "none"},
-                "streamSettings": grpc_tls_stream(config, config.grpc_service_name),
-            },
-            {
-                "tag": "VLESS XHTTP REALITY",
-                "listen": "0.0.0.0",
-                "port": ports["vless_xhttp_reality"],
-                "protocol": "vless",
-                "settings": {"clients": [], "decryption": "none"},
-                "streamSettings": xhttp_reality_stream(config, "/vless-xhttp"),
-            },
-            {
-                "tag": "VMess WS TLS",
-                "listen": "0.0.0.0",
-                "port": ports["vmess_ws_tls"],
-                "protocol": "vmess",
-                "settings": {"clients": []},
-                "streamSettings": ws_tls_stream(config, "/vmess-ws"),
-            },
-            {
-                "tag": "VMess HTTPUpgrade TLS",
-                "listen": "0.0.0.0",
-                "port": ports["vmess_httpupgrade_tls"],
-                "protocol": "vmess",
-                "settings": {"clients": []},
-                "streamSettings": httpupgrade_tls_stream(config, "/vmess-httpupgrade"),
-            },
-            {
-                "tag": "Trojan GRPC TLS",
-                "listen": "0.0.0.0",
-                "port": ports["trojan_grpc_tls"],
-                "protocol": "trojan",
-                "settings": {"clients": []},
-                "streamSettings": grpc_tls_stream(config, "trojan-grpc"),
-            },
-        ],
+        "inbounds": inbounds,
         "outbounds": [
             {"protocol": "freedom", "tag": "direct"},
             {"protocol": "blackhole", "tag": "blocked"},
@@ -267,6 +199,19 @@ def nginx_panel(config: LinkRayConfig) -> str:
 
     location ~ ^/sub/[^/]+/?$ {{
         proxy_pass http://127.0.0.1:61993;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header User-Agent $http_user_agent;
+        proxy_set_header Accept $http_accept;
+        proxy_set_header Accept-Language $http_accept_language;
+        add_header Cache-Control "no-store";
+    }}
+
+    location ~ ^/sub/[^/]+/clash-meta/?$ {{
+        proxy_pass http://127.0.0.1:61991;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -377,20 +322,65 @@ def marzban_env(config: LinkRayConfig) -> str:
     )
 
 
-ACTIVE_INBOUND_TAGS = (
-    "VLESS TCP TLS",
-    "VLESS TCP REALITY",
-    "VLESS GRPC REALITY",
-    "Trojan TCP TLS",
-    "VMess TCP TLS",
-    "Shadowsocks TCP UDP",
-    "VLESS WS TLS",
-    "VLESS GRPC TLS",
-    "VLESS XHTTP REALITY",
-    "VMess WS TLS",
-    "VMess HTTPUpgrade TLS",
-    "Trojan GRPC TLS",
+def current_commit() -> str:
+    try:
+        completed = subprocess.run(
+            ["git", "rev-parse", "--short=12", "HEAD"],
+            cwd=PROJECT_ROOT,
+            text=True,
+            capture_output=True,
+            timeout=2,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return "unknown"
+    if completed.returncode != 0:
+        return "unknown"
+    return completed.stdout.strip() or "unknown"
+
+
+def render_manifest(config: LinkRayConfig, nodes: Sequence[NodeHost], role: str = "master") -> str:
+    ports = config.port_map()
+    data = {
+        "version": 1,
+        "role": role,
+        "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "commit": current_commit(),
+        "config": {
+            "domain": config.domain,
+            "panel_port": config.panel_port,
+            "marzban_http_port": config.marzban_http_port,
+            "cert_file": config.cert_file,
+            "key_file": config.key_file,
+            "grpc_service_name": config.grpc_service_name,
+            "reality_server_name": config.reality_server_name,
+            "reality_dest": config.reality_dest,
+            "inbound_ports": ports,
+        },
+        "nodes": [{"name": node.name, "domain": node.domain} for node in nodes],
+    }
+    return json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+
+
+# Per-inbound host row specification.
+# Columns: remark_suffix, port_key, inbound_tag, sni_src, host_src, fingerprint, path
+# sni_src/host_src: "N"=node.domain  "R"=reality_server_name  None=NULL
+# path: None, a literal string, or "grpc"=config.grpc_service_name
+_HOST_SPECS: tuple[tuple, ...] = (
+    ("VLESS_TLS_Vision",      "vless_tls",             "VLESS TCP TLS",         "N",  None, "chrome", None),
+    ("VLESS_Reality_Vision",  "vless_reality",         "VLESS TCP REALITY",     "R",  None, "chrome", None),
+    ("VLESS_Reality_gRPC",    "vless_grpc_reality",    "VLESS GRPC REALITY",    "R",  None, "chrome", None),
+    ("Trojan_TLS",            "trojan_tls",            "Trojan TCP TLS",        "N",  None, "chrome", None),
+    ("VMess_TLS",             "vmess_tls",             "VMess TCP TLS",         "N",  None, "chrome", None),
+    ("Shadowsocks",           "shadowsocks",           "Shadowsocks TCP UDP",   None, None, "none",   None),
+    ("VLESS_WS_TLS",          "vless_ws_tls",          "VLESS WS TLS",          "N",  "N",  "chrome", "/vless-ws"),
+    ("VLESS_gRPC_TLS",        "vless_grpc_tls",        "VLESS GRPC TLS",        "N",  None, "chrome", "grpc"),
+    ("VLESS_XHTTP_Reality",   "vless_xhttp_reality",   "VLESS XHTTP REALITY",   "R",  None, "chrome", "/vless-xhttp"),
+    ("VMess_WS_TLS",          "vmess_ws_tls",          "VMess WS TLS",          "N",  "N",  "chrome", "/vmess-ws"),
+    ("VMess_HTTPUpgrade_TLS", "vmess_httpupgrade_tls", "VMess HTTPUpgrade TLS", "N",  "N",  "chrome", "/vmess-httpupgrade"),
+    ("Trojan_gRPC_TLS",       "trojan_grpc_tls",       "Trojan GRPC TLS",       "N",  None, "chrome", "trojan-grpc"),
 )
+
+ACTIVE_INBOUND_TAGS = tuple(spec[2] for spec in _HOST_SPECS)
 
 
 def default_nodes(config: LinkRayConfig) -> list[NodeHost]:
@@ -417,66 +407,48 @@ WantedBy=multi-user.target
 """
 
 
-def linkray_egern_service(config: LinkRayConfig) -> str:
+def _marzban_adapter_service(description: str, cmd: str, port: int, marzban_http_port: int) -> str:
     return f"""[Unit]
-Description=LinkRay Egern subscription adapter
+Description={description}
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/linkray egern --listen 127.0.0.1 --port 61992 --marzban-url http://127.0.0.1:{config.marzban_http_port}
+ExecStart=/usr/local/bin/linkray {cmd} --listen 127.0.0.1 --port {port} --marzban-url http://127.0.0.1:{marzban_http_port}
 Restart=always
 RestartSec=3
 
 [Install]
 WantedBy=multi-user.target
 """
+
+
+def linkray_egern_service(config: LinkRayConfig) -> str:
+    return _marzban_adapter_service("LinkRay Egern subscription adapter", "egern", 61992, config.marzban_http_port)
+
+
+def linkray_clash_service(config: LinkRayConfig) -> str:
+    return _marzban_adapter_service("LinkRay Clash/Mihomo subscription adapter", "clash", 61991, config.marzban_http_port)
 
 
 def linkray_shadowrocket_service(config: LinkRayConfig) -> str:
-    return f"""[Unit]
-Description=LinkRay Shadowrocket subscription adapter
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-ExecStart=/usr/local/bin/linkray shadowrocket --listen 127.0.0.1 --port 61994 --marzban-url http://127.0.0.1:{config.marzban_http_port}
-Restart=always
-RestartSec=3
-
-[Install]
-WantedBy=multi-user.target
-"""
+    return _marzban_adapter_service("LinkRay Shadowrocket subscription adapter", "shadowrocket", 61994, config.marzban_http_port)
 
 
 def linkray_singbox_service(config: LinkRayConfig) -> str:
-    return f"""[Unit]
-Description=LinkRay sing-box subscription adapter
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-ExecStart=/usr/local/bin/linkray sing-box --listen 127.0.0.1 --port 61995 --marzban-url http://127.0.0.1:{config.marzban_http_port}
-Restart=always
-RestartSec=3
-
-[Install]
-WantedBy=multi-user.target
-"""
+    return _marzban_adapter_service("LinkRay sing-box subscription adapter", "sing-box", 61995, config.marzban_http_port)
 
 
 def linkray_sub_auto_service(config: LinkRayConfig) -> str:
     return f"""[Unit]
 Description=LinkRay automatic subscription format router
-After=network-online.target linkray-egern.service linkray-shadowrocket.service linkray-singbox.service
+After=network-online.target linkray-clash.service linkray-egern.service linkray-shadowrocket.service linkray-singbox.service
 Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/linkray sub-auto --listen 127.0.0.1 --port 61993 --marzban-url http://127.0.0.1:{config.marzban_http_port} --egern-url http://127.0.0.1:61992 --shadowrocket-url http://127.0.0.1:61994 --singbox-url http://127.0.0.1:61995
+ExecStart=/usr/local/bin/linkray sub-auto --listen 127.0.0.1 --port 61993 --marzban-url http://127.0.0.1:{config.marzban_http_port} --clash-url http://127.0.0.1:61991 --egern-url http://127.0.0.1:61992 --shadowrocket-url http://127.0.0.1:61994 --singbox-url http://127.0.0.1:61995
 Restart=always
 RestartSec=3
 
@@ -548,243 +520,33 @@ def sql_string(value: object) -> str:
 def host_rows(config: LinkRayConfig, nodes: Sequence[NodeHost]) -> list[tuple[object, ...]]:
     rows: list[tuple[object, ...]] = []
     ports = config.port_map()
+    occupied_ports = {port: f"primary:{key}" for key, port in ports.items()}
     for node_index, node in enumerate(nodes):
         node.validate()
         address = node.domain if node_index == 0 else config.domain
-        def public_port(key: str) -> int:
-            return relay_port(ports[key], node_index)
-        rows.extend(
-            [
-                (
-                    f"{node.name}-VLESS_TLS_Vision",
-                    address,
-                    public_port("vless_tls"),
-                    "VLESS TCP TLS",
-                    node.domain,
-                    None,
-                    "inbound_default",
-                    "none",
-                    "chrome",
-                    0,
-                    0,
-                    None,
-                    0,
-                    None,
-                    0,
-                    None,
-                    0,
-                ),
-                (
-                    f"{node.name}-VLESS_Reality_Vision",
-                    address,
-                    public_port("vless_reality"),
-                    "VLESS TCP REALITY",
-                    config.reality_server_name,
-                    None,
-                    "inbound_default",
-                    "none",
-                    "chrome",
-                    0,
-                    0,
-                    None,
-                    0,
-                    None,
-                    0,
-                    None,
-                    0,
-                ),
-                (
-                    f"{node.name}-VLESS_Reality_gRPC",
-                    address,
-                    public_port("vless_grpc_reality"),
-                    "VLESS GRPC REALITY",
-                    config.reality_server_name,
-                    None,
-                    "inbound_default",
-                    "none",
-                    "chrome",
-                    0,
-                    0,
-                    None,
-                    0,
-                    None,
-                    0,
-                    None,
-                    0,
-                ),
-                (
-                    f"{node.name}-Trojan_TLS",
-                    address,
-                    public_port("trojan_tls"),
-                    "Trojan TCP TLS",
-                    node.domain,
-                    None,
-                    "inbound_default",
-                    "none",
-                    "chrome",
-                    0,
-                    0,
-                    None,
-                    0,
-                    None,
-                    0,
-                    None,
-                    0,
-                ),
-                (
-                    f"{node.name}-VMess_TLS",
-                    address,
-                    public_port("vmess_tls"),
-                    "VMess TCP TLS",
-                    node.domain,
-                    None,
-                    "inbound_default",
-                    "none",
-                    "chrome",
-                    0,
-                    0,
-                    None,
-                    0,
-                    None,
-                    0,
-                    None,
-                    0,
-                ),
-                (
-                    f"{node.name}-Shadowsocks",
-                    address,
-                    public_port("shadowsocks"),
-                    "Shadowsocks TCP UDP",
-                    None,
-                    None,
-                    "inbound_default",
-                    "none",
-                    "none",
-                    0,
-                    0,
-                    None,
-                    0,
-                    None,
-                    0,
-                    None,
-                    0,
-                ),
-                (
-                    f"{node.name}-VLESS_WS_TLS",
-                    address,
-                    public_port("vless_ws_tls"),
-                    "VLESS WS TLS",
-                    node.domain,
-                    node.domain,
-                    "inbound_default",
-                    "none",
-                    "chrome",
-                    0,
-                    0,
-                    "/vless-ws",
-                    0,
-                    None,
-                    0,
-                    None,
-                    0,
-                ),
-                (
-                    f"{node.name}-VLESS_gRPC_TLS",
-                    address,
-                    public_port("vless_grpc_tls"),
-                    "VLESS GRPC TLS",
-                    node.domain,
-                    None,
-                    "inbound_default",
-                    "none",
-                    "chrome",
-                    0,
-                    0,
-                    config.grpc_service_name,
-                    0,
-                    None,
-                    0,
-                    None,
-                    0,
-                ),
-                (
-                    f"{node.name}-VLESS_XHTTP_Reality",
-                    address,
-                    public_port("vless_xhttp_reality"),
-                    "VLESS XHTTP REALITY",
-                    config.reality_server_name,
-                    None,
-                    "inbound_default",
-                    "none",
-                    "chrome",
-                    0,
-                    0,
-                    "/vless-xhttp",
-                    0,
-                    None,
-                    0,
-                    None,
-                    0,
-                ),
-                (
-                    f"{node.name}-VMess_WS_TLS",
-                    address,
-                    public_port("vmess_ws_tls"),
-                    "VMess WS TLS",
-                    node.domain,
-                    node.domain,
-                    "inbound_default",
-                    "none",
-                    "chrome",
-                    0,
-                    0,
-                    "/vmess-ws",
-                    0,
-                    None,
-                    0,
-                    None,
-                    0,
-                ),
-                (
-                    f"{node.name}-VMess_HTTPUpgrade_TLS",
-                    address,
-                    public_port("vmess_httpupgrade_tls"),
-                    "VMess HTTPUpgrade TLS",
-                    node.domain,
-                    node.domain,
-                    "inbound_default",
-                    "none",
-                    "chrome",
-                    0,
-                    0,
-                    "/vmess-httpupgrade",
-                    0,
-                    None,
-                    0,
-                    None,
-                    0,
-                ),
-                (
-                    f"{node.name}-Trojan_gRPC_TLS",
-                    address,
-                    public_port("trojan_grpc_tls"),
-                    "Trojan GRPC TLS",
-                    node.domain,
-                    None,
-                    "inbound_default",
-                    "none",
-                    "chrome",
-                    0,
-                    0,
-                    "trojan-grpc",
-                    0,
-                    None,
-                    0,
-                    None,
-                    0,
-                ),
-            ]
-        )
+        for remark_suffix, port_key, inbound_tag, sni_src, host_src, fingerprint, path_src in _HOST_SPECS:
+            sni = node.domain if sni_src == "N" else config.reality_server_name if sni_src == "R" else None
+            host = node.domain if host_src == "N" else None
+            path = config.grpc_service_name if path_src == "grpc" else path_src
+            port = relay_port(ports[port_key], node_index)
+            if node_index > 0:
+                if port in occupied_ports:
+                    raise ValueError(f"relay port conflict {port}: {node.name}:{port_key} conflicts with {occupied_ports[port]}")
+                occupied_ports[port] = f"{node.name}:{port_key}"
+            rows.append((
+                f"{node.name}-{remark_suffix}",
+                address,
+                port,
+                inbound_tag,
+                sni,
+                host,
+                "inbound_default",
+                "none",
+                fingerprint,
+                0, 0,
+                path,
+                0, None, 0, None, 0,
+            ))
     return rows
 
 
@@ -856,6 +618,7 @@ def render_master(
         write_text(output / "opt/marzban/docker-compose.yml", master_compose()),
         write_text(output / "etc/nginx/conf.d/marzban-panel.conf", nginx_panel(config)),
         write_text(output / "etc/systemd/system/linkray-api.service", linkray_api_service(effective_nodes, config)),
+        write_text(output / "etc/systemd/system/linkray-clash.service", linkray_clash_service(config)),
         write_text(output / "etc/systemd/system/linkray-egern.service", linkray_egern_service(config)),
         write_text(output / "etc/systemd/system/linkray-shadowrocket.service", linkray_shadowrocket_service(config)),
         write_text(output / "etc/systemd/system/linkray-singbox.service", linkray_singbox_service(config)),
@@ -864,6 +627,7 @@ def render_master(
         write_text(output / "etc/systemd/system/linkray-rules-update.timer", linkray_rules_update_timer()),
         write_text(output / "etc/systemd/system/linkray-relay.service", linkray_relay_service(effective_nodes, config)),
         write_text(output / "var/lib/marzban/linkray/hosts.sql", hosts_sql(config, effective_nodes)),
+        write_text(output / "var/lib/marzban/linkray/linkray-manifest.json", render_manifest(config, effective_nodes)),
         output / "var/lib/marzban/linkray/rules/cn-domains.txt",
         output / "var/lib/marzban/linkray/rules/cn-ip-cidrs.txt",
         copy_file(TEMPLATE_ROOT / "marzban/clash/default.yml", output / "var/lib/marzban/templates/clash/default.yml"),
@@ -903,8 +667,12 @@ def validate_rendered(path: Path) -> list[str]:
     hosts_sql_path = path / "var/lib/marzban/linkray/hosts.sql"
     if xray_path.exists() and not hosts_sql_path.exists():
         errors.append(f"{path}: missing var/lib/marzban/linkray/hosts.sql")
+    manifest_path = path / "var/lib/marzban/linkray/linkray-manifest.json"
+    if xray_path.exists() and not manifest_path.exists():
+        errors.append(f"{path}: missing var/lib/marzban/linkray/linkray-manifest.json")
     service_paths = [
         path / "etc/systemd/system/linkray-api.service",
+        path / "etc/systemd/system/linkray-clash.service",
         path / "etc/systemd/system/linkray-egern.service",
         path / "etc/systemd/system/linkray-shadowrocket.service",
         path / "etc/systemd/system/linkray-singbox.service",

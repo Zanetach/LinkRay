@@ -1,42 +1,22 @@
 from __future__ import annotations
 
 import argparse
-import base64
 import ipaddress
 import json
 import re
 import socket
 from collections.abc import Mapping
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import ThreadingHTTPServer
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, unquote, urlparse
-from urllib.request import Request, urlopen
 
-from .rules import BUILTIN_CN_DOMAIN_SUFFIXES, RouteRules, load_route_rules
+from ._http import PASS_HEADERS, AdapterHandler, fetch_upstream, first_query_value, parse_link_netloc
+from .native import b64decode_text, decode_subscription_links
+from .rules import COMPACT_CN_DOMAIN_SUFFIXES, FOREIGN_DOMAIN_SUFFIXES, RouteRules, load_route_rules
 
 
 TOKEN_RE = re.compile(r"^/sub/([^/]+)/egern/?$")
-PASS_HEADERS = {
-    "content-disposition",
-    "support-url",
-    "profile-title",
-    "profile-update-interval",
-    "subscription-userinfo",
-}
-
-
-def b64decode_text(value: str) -> str:
-    clean = value.strip()
-    padding = "=" * (-len(clean) % 4)
-    return base64.urlsafe_b64decode((clean + padding).encode("ascii")).decode("utf-8")
-
-
-def decode_subscription_links(payload: bytes) -> list[str]:
-    text = payload.decode("utf-8", errors="ignore").strip()
-    if "://" not in text:
-        text = b64decode_text(text)
-    return [line.strip() for line in text.splitlines() if "://" in line]
 
 
 def yaml_scalar(value: Any) -> str:
@@ -75,40 +55,6 @@ def yaml_lines(value: Any, indent: int = 0) -> list[str]:
     return [f"{prefix}{yaml_scalar(value)}"]
 
 
-FOREIGN_DOMAIN_SUFFIXES = (
-    "dns.google",
-    "cloudflare-dns.com",
-    "telegram.org",
-    "t.me",
-    "youtube.com",
-    "youtu.be",
-    "googlevideo.com",
-    "tiktok.com",
-    "tiktokv.com",
-    "tiktokcdn.com",
-    "facebook.com",
-    "fb.com",
-    "fbcdn.net",
-    "instagram.com",
-    "whatsapp.com",
-    "x.com",
-    "twitter.com",
-    "t.co",
-    "google.com",
-    "gstatic.com",
-    "googleapis.com",
-    "googleusercontent.com",
-    "openai.com",
-    "chatgpt.com",
-    "oaistatic.com",
-    "oaiusercontent.com",
-    "anthropic.com",
-    "claude.ai",
-    "github.com",
-    "githubusercontent.com",
-)
-
-
 def dump_egern_yaml(
     proxies: list[dict[str, dict[str, Any]]],
     policy_groups: list[dict[str, dict[str, Any]]] | None = None,
@@ -120,14 +66,6 @@ def dump_egern_yaml(
     if rules is not None:
         data["rules"] = rules
     return "\n".join(yaml_lines(data)) + "\n"
-
-
-def first_query_value(query: Mapping[str, list[str]], *names: str) -> str | None:
-    for name in names:
-        values = query.get(name)
-        if values and values[0]:
-            return values[0]
-    return None
 
 
 def resolve_server_address(host: str) -> str:
@@ -175,14 +113,6 @@ def ws_transport(query: Mapping[str, list[str]], fallback_host: str) -> dict[str
         payload["sni"] = first_query_value(query, "sni", "servername") or host
         payload["skip_tls_verify"] = False
     return {key: payload}
-
-
-def parse_link_netloc(parsed) -> tuple[str, int] | None:
-    host = parsed.hostname
-    port = parsed.port
-    if not host or not port:
-        return None
-    return host, int(port)
 
 
 def vless_to_egern(link: str) -> dict[str, dict[str, Any]] | None:
@@ -343,8 +273,7 @@ def build_route_rules(route_rules: RouteRules) -> list[dict[str, dict[str, Any]]
         rules.append({"ip_cidr": {"match": cidr, "policy": "国内站点"}})
     for domain in FOREIGN_DOMAIN_SUFFIXES:
         rules.append({"domain_suffix": {"match": domain, "policy": "全球代理"}})
-    compact_cn_domains = sorted(set(BUILTIN_CN_DOMAIN_SUFFIXES) | {"dns.pub", "doh.pub", "alidns.com"})
-    for domain in compact_cn_domains:
+    for domain in COMPACT_CN_DOMAIN_SUFFIXES:
         rules.append({"domain_suffix": {"match": domain, "policy": "国内站点"}})
     rules.append({"geoip": {"match": "CN", "policy": "国内站点"}})
     rules.append({"default": {"policy": "漏网之鱼"}})
@@ -388,19 +317,7 @@ def build_egern_yaml(subscription_payload: bytes, route_rules: RouteRules | None
     )
 
 
-def fetch_upstream(marzban_url: str, token: str, headers: Mapping[str, str]) -> tuple[int, dict[str, str], bytes]:
-    url = f"{marzban_url.rstrip('/')}/sub/{token}"
-    req = Request(url, headers={k: v for k, v in headers.items() if v})
-    with urlopen(req, timeout=15) as response:
-        return response.status, dict(response.headers.items()), response.read()
-
-
-class EgernHandler(BaseHTTPRequestHandler):
-    marzban_url: str
-
-    def log_message(self, format: str, *args: object) -> None:
-        return
-
+class EgernHandler(AdapterHandler):
     def do_GET(self) -> None:
         path = urlparse(self.path).path
         if path == "/health":
@@ -423,17 +340,6 @@ class EgernHandler(BaseHTTPRequestHandler):
         headers = {name: value for name, value in upstream_headers.items() if name.lower() in PASS_HEADERS}
         headers["Content-Type"] = "text/yaml; charset=utf-8"
         self.send_bytes(200, headers, body)
-
-    def send_bytes(self, status: int, headers: Mapping[str, str], body: bytes) -> None:
-        self.send_response(status)
-        self.send_header("Cache-Control", "no-store")
-        for name, value in headers.items():
-            if name.lower() not in {"content-length", "transfer-encoding", "connection"}:
-                self.send_header(name, value)
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
-
 
 def make_egern_server(listen: str, port: int, marzban_url: str) -> ThreadingHTTPServer:
     class Handler(EgernHandler):

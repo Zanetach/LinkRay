@@ -5,6 +5,7 @@ from pathlib import Path
 
 from .api import serve_api
 from .bootstrap import bootstrap_master, bootstrap_node
+from .clash import serve_clash
 from .config import LinkRayConfig, NodeHost, parse_inbound_ports, parse_node_host
 from .doctor import exit_code, run_doctor
 from .egern import serve_egern
@@ -103,6 +104,8 @@ def add_bootstrap_parser(subparsers: argparse._SubParsersAction[argparse.Argumen
     node = bootstrap_sub.add_parser("node", help="Bootstrap a Marzban node")
     node.add_argument("--root", type=Path, default=Path("/"), help="Install root. Use a temp directory for dry testing.")
     node.add_argument("--apply", action="store_true", help="Actually change files/services. Omit for dry-run.")
+    node.add_argument("--pull-cert-from", help="SSH source such as root@master.example.com for pulling ssl_client_cert.pem.")
+    node.add_argument("--remote-cert-path", default="/var/lib/marzban/ssl_client_cert.pem")
 
 
 def add_ports_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -147,6 +150,13 @@ def add_egern_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPar
     egern.add_argument("--marzban-url", default="http://127.0.0.1:8000")
 
 
+def add_clash_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    clash = subparsers.add_parser("clash", help="Run the Clash/Mihomo subscription adapter")
+    clash.add_argument("--listen", default="127.0.0.1")
+    clash.add_argument("--port", default=61991, type=int)
+    clash.add_argument("--marzban-url", default="http://127.0.0.1:8000")
+
+
 def add_shadowrocket_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     shadowrocket = subparsers.add_parser("shadowrocket", help="Run the Shadowrocket subscription adapter")
     shadowrocket.add_argument("--listen", default="127.0.0.1")
@@ -166,6 +176,7 @@ def add_sub_auto_parser(subparsers: argparse._SubParsersAction[argparse.Argument
     sub_auto.add_argument("--listen", default="127.0.0.1")
     sub_auto.add_argument("--port", default=61993, type=int)
     sub_auto.add_argument("--marzban-url", default="http://127.0.0.1:8000")
+    sub_auto.add_argument("--clash-url", default="http://127.0.0.1:61991")
     sub_auto.add_argument("--egern-url", default="http://127.0.0.1:61992")
     sub_auto.add_argument("--shadowrocket-url", default="http://127.0.0.1:61994")
     sub_auto.add_argument("--singbox-url", default="http://127.0.0.1:61995")
@@ -204,6 +215,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_bootstrap_parser(subparsers)
     add_ports_parser(subparsers)
     add_api_parser(subparsers)
+    add_clash_parser(subparsers)
     add_egern_parser(subparsers)
     add_shadowrocket_parser(subparsers)
     add_singbox_parser(subparsers)
@@ -301,6 +313,9 @@ def main(argv: list[str] | None = None) -> int:
         args.inbound_ports = parse_inbound_ports(args.inbound)
         return serve_api(args)
 
+    if args.command == "clash":
+        return serve_clash(args)
+
     if args.command == "egern":
         return serve_egern(args)
 
@@ -343,7 +358,12 @@ def main(argv: list[str] | None = None) -> int:
         return 1 if any(not action.ok for action in actions) else 0
 
     if args.command == "bootstrap" and args.role == "node":
-        actions = bootstrap_node(root=args.root, apply=args.apply)
+        actions = bootstrap_node(
+            root=args.root,
+            apply=args.apply,
+            pull_cert_from=args.pull_cert_from,
+            remote_cert_path=args.remote_cert_path,
+        )
         mode = "APPLY" if args.apply else "DRY-RUN"
         print(f"{mode}: node bootstrap root={args.root}")
         for action in actions:

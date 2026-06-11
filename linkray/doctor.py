@@ -61,6 +61,24 @@ def check_file(root: Path, relative: str, missing_status: str = "FAIL") -> Check
     return Check(missing_status, f"file {relative}", "missing")
 
 
+def manifest_check(role: str, root: Path) -> Check:
+    if role != "master":
+        return Check("PASS", "manifest", "not required for node role")
+    path = root / "var/lib/marzban/linkray/linkray-manifest.json"
+    if not path.exists():
+        return Check("FAIL", "manifest", "missing")
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return Check("FAIL", "manifest", f"invalid: {exc}")
+    actual_role = data.get("role")
+    domain = data.get("config", {}).get("domain") if isinstance(data.get("config"), dict) else None
+    commit = data.get("commit") or "unknown"
+    if actual_role != role:
+        return Check("FAIL", "manifest", f"expected role={role}, got role={actual_role}")
+    return Check("PASS", "manifest", f"role={actual_role} domain={domain or 'unknown'} commit={commit}")
+
+
 def service_check(name: str, expected: str, runner: Runner) -> Check:
     result = runner.run(["systemctl", "is-active", name])
     actual = result.stdout.strip() or result.stderr.strip() or f"exit={result.code}"
@@ -105,6 +123,7 @@ def runtime_checks(role: str, runner: Runner, root: Path = Path("/")) -> list[Ch
     checks.append(service_check("xray", "inactive", runner))
     if role == "master":
         checks.append(service_check("linkray-api", "active", runner))
+        checks.append(service_check("linkray-clash", "active", runner))
         checks.append(service_check("linkray-egern", "active", runner))
         checks.append(service_check("linkray-shadowrocket", "active", runner))
         checks.append(service_check("linkray-singbox", "active", runner))
@@ -120,20 +139,15 @@ def runtime_checks(role: str, runner: Runner, root: Path = Path("/")) -> list[Ch
     )
     expected_ports = rendered_xray_ports(root)
     if role == "master":
-        expected_ports = [8000, 9443, 61990, 61992, 61993, 61994, 61995, *expected_ports]
+        expected_ports = [8000, 9443, 61990, 61991, 61992, 61993, 61994, 61995, *expected_ports]
         checks.append(docker_check("marzban-marzban-1", runner))
     else:
         expected_ports = [62050, 62051, *expected_ports]
         checks.append(docker_check("marzban-node-marzban-node-1", runner))
 
     for port in expected_ports:
-        checks.append(
-            Check(
-                "PASS" if has_listening_port(ss_output, port) else "FAIL",
-                f"port {port}",
-                "listening" if has_listening_port(ss_output, port) else "not listening",
-            )
-        )
+        listening = has_listening_port(ss_output, port)
+        checks.append(Check("PASS" if listening else "FAIL", f"port {port}", "listening" if listening else "not listening"))
 
     return checks
 
@@ -163,6 +177,8 @@ def file_checks(role: str, root: Path) -> list[Check]:
         recommended = []
     checks = [check_file(root, item) for item in required]
     checks.extend(check_file(root, item, missing_status="WARN") for item in recommended)
+    if role == "master":
+        checks.append(manifest_check(role, root))
     return checks
 
 

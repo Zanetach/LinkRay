@@ -74,6 +74,32 @@ class RenderTests(unittest.TestCase):
             self.assertIn("--inbound trojan_grpc_tls=28091", service)
             self.assertEqual(validate_rendered(output), [])
 
+    def test_custom_inbound_ports_reject_duplicate_runtime_ports(self):
+        config = LinkRayConfig(
+            domain="edge-a.example.com",
+            inbound_ports=parse_inbound_ports(["vless_tls=18081"]),
+        )
+
+        with self.assertRaisesRegex(ValueError, "duplicate inbound port"):
+            xray_config(config)
+
+    def test_render_master_rejects_relay_port_conflicts(self):
+        config = LinkRayConfig(
+            domain="edge-a.example.com",
+            inbound_ports=parse_inbound_ports(["trojan_tls=17980"]),
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaisesRegex(ValueError, "relay port conflict"):
+                render_master(
+                    config,
+                    Path(tmp),
+                    nodes=[
+                        NodeHost("edge-a", "edge-a.example.com"),
+                        NodeHost("edge-b", "edge-b.example.com"),
+                    ],
+                )
+
     def test_render_master_writes_expected_files(self):
         with tempfile.TemporaryDirectory() as tmp:
             output = Path(tmp)
@@ -92,6 +118,7 @@ class RenderTests(unittest.TestCase):
             self.assertIn("opt/marzban/.env", relative)
             self.assertIn("etc/nginx/conf.d/marzban-panel.conf", relative)
             self.assertIn("etc/systemd/system/linkray-api.service", relative)
+            self.assertIn("etc/systemd/system/linkray-clash.service", relative)
             self.assertIn("etc/systemd/system/linkray-egern.service", relative)
             self.assertIn("etc/systemd/system/linkray-shadowrocket.service", relative)
             self.assertIn("etc/systemd/system/linkray-singbox.service", relative)
@@ -100,6 +127,7 @@ class RenderTests(unittest.TestCase):
             self.assertIn("etc/systemd/system/linkray-rules-update.service", relative)
             self.assertIn("etc/systemd/system/linkray-rules-update.timer", relative)
             self.assertIn("var/lib/marzban/linkray/hosts.sql", relative)
+            self.assertIn("var/lib/marzban/linkray/linkray-manifest.json", relative)
             self.assertIn("var/lib/marzban/linkray/rules/cn-domains.txt", relative)
             self.assertIn("var/lib/marzban/linkray/rules/cn-ip-cidrs.txt", relative)
             self.assertIn("var/lib/marzban/linkray/patches/clash.py", relative)
@@ -112,6 +140,14 @@ class RenderTests(unittest.TestCase):
 
             xray = json.loads((output / "var/lib/marzban/xray_config.json").read_text())
             self.assertEqual(xray["inbounds"][0]["tag"], "VLESS TCP TLS")
+            manifest = json.loads((output / "var/lib/marzban/linkray/linkray-manifest.json").read_text())
+            self.assertEqual(manifest["version"], 1)
+            self.assertEqual(manifest["role"], "master")
+            self.assertEqual(manifest["config"]["domain"], "edge-a.example.com")
+            self.assertEqual(manifest["nodes"][1]["domain"], "edge-b.example.com")
+            self.assertIn("commit", manifest)
+            self.assertNotIn("admin_password", json.dumps(manifest))
+            self.assertNotIn("reality_private_key", json.dumps(manifest))
             compose = (output / "opt/marzban/docker-compose.yml").read_text()
             self.assertIn("/var/lib/marzban/linkray/bin/xray:/usr/local/bin/xray:ro", compose)
             self.assertIn("/var/lib/marzban/linkray/patches/clash.py:/code/app/subscription/clash.py:ro", compose)
@@ -119,6 +155,8 @@ class RenderTests(unittest.TestCase):
             nginx = (output / "etc/nginx/conf.d/marzban-panel.conf").read_text()
             self.assertIn("location ~ ^/sub/[^/]+/?$", nginx)
             self.assertIn("proxy_pass http://127.0.0.1:61993", nginx)
+            self.assertIn("location ~ ^/sub/[^/]+/clash-meta/?$", nginx)
+            self.assertIn("proxy_pass http://127.0.0.1:61991", nginx)
             self.assertIn("location ~ ^/sub/[^/]+/egern/?$", nginx)
             self.assertIn("proxy_pass http://127.0.0.1:61992", nginx)
             self.assertIn("location ~ ^/sub/[^/]+/(shadowrocket|shadowrocket-conf)/?$", nginx)
@@ -134,6 +172,8 @@ class RenderTests(unittest.TestCase):
             service = (output / "etc/systemd/system/linkray-api.service").read_text()
             self.assertIn("ExecStart=/usr/local/bin/linkray api --listen 127.0.0.1 --port 61990", service)
             self.assertIn("--node edge-a=edge-a.example.com --node edge-b=edge-b.example.com", service)
+            clash_service = (output / "etc/systemd/system/linkray-clash.service").read_text()
+            self.assertIn("ExecStart=/usr/local/bin/linkray clash --listen 127.0.0.1 --port 61991", clash_service)
             egern_service = (output / "etc/systemd/system/linkray-egern.service").read_text()
             self.assertIn("ExecStart=/usr/local/bin/linkray egern --listen 127.0.0.1 --port 61992", egern_service)
             shadowrocket_service = (output / "etc/systemd/system/linkray-shadowrocket.service").read_text()
@@ -142,6 +182,7 @@ class RenderTests(unittest.TestCase):
             self.assertIn("ExecStart=/usr/local/bin/linkray sing-box --listen 127.0.0.1 --port 61995", singbox_service)
             auto_service = (output / "etc/systemd/system/linkray-sub-auto.service").read_text()
             self.assertIn("ExecStart=/usr/local/bin/linkray sub-auto --listen 127.0.0.1 --port 61993", auto_service)
+            self.assertIn("--clash-url http://127.0.0.1:61991", auto_service)
             self.assertIn("--egern-url http://127.0.0.1:61992", auto_service)
             self.assertIn("--shadowrocket-url http://127.0.0.1:61994", auto_service)
             self.assertIn("--singbox-url http://127.0.0.1:61995", auto_service)
@@ -370,7 +411,9 @@ class RenderTests(unittest.TestCase):
             self.assertGreater(len(actions), 1)
             self.assertTrue((root / "var/lib/marzban/xray_config.json").exists())
             self.assertTrue((root / "var/lib/marzban/linkray/hosts.sql").exists())
+            self.assertTrue((root / "var/lib/marzban/linkray/linkray-manifest.json").exists())
             self.assertTrue((root / "opt/marzban/.env").exists())
+            self.assertTrue((root / "etc/systemd/system/linkray-clash.service").exists())
             self.assertTrue((root / "etc/systemd/system/linkray-egern.service").exists())
             self.assertTrue((root / "etc/systemd/system/linkray-shadowrocket.service").exists())
             self.assertTrue((root / "etc/systemd/system/linkray-singbox.service").exists())
