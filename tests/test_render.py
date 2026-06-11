@@ -128,6 +128,8 @@ class RenderTests(unittest.TestCase):
             self.assertIn("etc/systemd/system/linkray-rules-update.timer", relative)
             self.assertIn("var/lib/marzban/linkray/hosts.sql", relative)
             self.assertIn("var/lib/marzban/linkray/linkray-manifest.json", relative)
+            self.assertIn("var/lib/marzban/linkray/source-patches/marzban-dashboard/linkray-dashboard.patch", relative)
+            self.assertIn("var/lib/marzban/linkray/source-patches/marzban-dashboard/README.md", relative)
             self.assertIn("var/lib/marzban/linkray/rules/cn-domains.txt", relative)
             self.assertIn("var/lib/marzban/linkray/rules/cn-ip-cidrs.txt", relative)
             self.assertIn("var/lib/marzban/linkray/patches/clash.py", relative)
@@ -148,6 +150,13 @@ class RenderTests(unittest.TestCase):
             self.assertIn("commit", manifest)
             self.assertNotIn("admin_password", json.dumps(manifest))
             self.assertNotIn("reality_private_key", json.dumps(manifest))
+            source_patch = (
+                output
+                / "var/lib/marzban/linkray/source-patches/marzban-dashboard/linkray-dashboard.patch"
+            ).read_text()
+            self.assertIn("app/dashboard/src/components/LinkRayNodeInfo.tsx", source_patch)
+            self.assertIn("app/dashboard/src/components/LinkRaySubscriptionLinks.tsx", source_patch)
+            self.assertIn("app/dashboard/src/components/UsersTable.tsx", source_patch)
             compose = (output / "opt/marzban/docker-compose.yml").read_text()
             self.assertIn("/var/lib/marzban/linkray/bin/xray:/usr/local/bin/xray:ro", compose)
             self.assertIn("/var/lib/marzban/linkray/patches/clash.py:/code/app/subscription/clash.py:ro", compose)

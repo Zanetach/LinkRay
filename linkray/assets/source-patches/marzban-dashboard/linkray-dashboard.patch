@@ -1,0 +1,228 @@
+diff --git a/app/dashboard/src/components/LinkRayNodeInfo.tsx b/app/dashboard/src/components/LinkRayNodeInfo.tsx
+new file mode 100644
+index 0000000..6fda109
+--- /dev/null
++++ b/app/dashboard/src/components/LinkRayNodeInfo.tsx
+@@ -0,0 +1,107 @@
++import {
++  Badge,
++  Box,
++  Button,
++  HStack,
++  SimpleGrid,
++  Table,
++  Tbody,
++  Td,
++  Text,
++  Th,
++  Thead,
++  Tr,
++  VStack,
++} from "@chakra-ui/react";
++import { FC, useEffect, useMemo, useState } from "react";
++
++type NodeResult = {
++  node: string;
++  host: string;
++  protocol: string;
++  port: number;
++  status: "open" | "closed";
++  latency_ms?: number | null;
++};
++
++type NodePayload = {
++  generated_at: string;
++  total: number;
++  open: number;
++  closed: number;
++  results: NodeResult[];
++};
++
++const PAGE_SIZE = 10;
++
++export const LinkRayNodeInfo: FC = () => {
++  const [payload, setPayload] = useState<NodePayload | null>(null);
++  const [page, setPage] = useState(0);
++  const [loading, setLoading] = useState(false);
++
++  const load = async (refresh = false) => {
++    setLoading(true);
++    try {
++      const response = await fetch(
++        refresh ? "/api/linkray/nodes/refresh" : "/api/linkray/nodes",
++        { method: refresh ? "POST" : "GET", cache: "no-store" }
++      );
++      setPayload(await response.json());
++      setPage(0);
++    } finally {
++      setLoading(false);
++    }
++  };
++
++  useEffect(() => {
++    load();
++    const timer = window.setInterval(() => load(), 30000);
++    return () => window.clearInterval(timer);
++  }, []);
++
++  const pageCount = Math.max(1, Math.ceil((payload?.results.length || 0) / PAGE_SIZE));
++  const rows = useMemo(() => {
++    const start = page * PAGE_SIZE;
++    return (payload?.results || []).slice(start, start + PAGE_SIZE);
++  }, [payload, page]);
++
++  return (
++    <Box mt={4} p={5} rounded="md" borderWidth="1px" bg="white" _dark={{ bg: "gray.750" }}>
++      <HStack justifyContent="space-between" mb={4}>
++        <VStack alignItems="flex-start" spacing={1}>
++          <Text fontWeight="bold">节点信息</Text>
++          <Text fontSize="sm" color="gray.500">服务端端口状态，每 30 秒自动刷新</Text>
++        </VStack>
++        <Button size="sm" onClick={() => load(true)} isLoading={loading}>刷新</Button>
++      </HStack>
++      <SimpleGrid columns={{ base: 1, md: 3 }} gap={3} mb={4}>
++        <Box p={3} rounded="md" borderWidth="1px"><Text fontSize="xs">总端口</Text><Text fontWeight="bold">{payload?.total || 0}</Text></Box>
++        <Box p={3} rounded="md" borderWidth="1px"><Text fontSize="xs">Open</Text><Text fontWeight="bold">{payload?.open || 0}</Text></Box>
++        <Box p={3} rounded="md" borderWidth="1px"><Text fontSize="xs">Closed</Text><Text fontWeight="bold">{payload?.closed || 0}</Text></Box>
++      </SimpleGrid>
++      <Text fontSize="xs" color="gray.500" mb={3}>更新时间：{payload?.generated_at || "-"}</Text>
++      <Table size="sm">
++        <Thead>
++          <Tr><Th>节点</Th><Th>域名</Th><Th>协议入站</Th><Th>端口</Th><Th>状态</Th><Th>TCP 延迟</Th></Tr>
++        </Thead>
++        <Tbody>
++          {rows.map((row) => (
++            <Tr key={`${row.node}-${row.protocol}-${row.port}`}>
++              <Td>{row.node}</Td>
++              <Td>{row.host}</Td>
++              <Td>{row.protocol}</Td>
++              <Td>{row.port}</Td>
++              <Td><Badge colorScheme={row.status === "open" ? "green" : "red"}>{row.status}</Badge></Td>
++              <Td>{row.latency_ms == null ? "-" : `${row.latency_ms} ms`}</Td>
++            </Tr>
++          ))}
++        </Tbody>
++      </Table>
++      <HStack justifyContent="flex-end" mt={4}>
++        <Button size="sm" isDisabled={page === 0} onClick={() => setPage(page - 1)}>上一页</Button>
++        <Text fontSize="sm">{page + 1} / {pageCount}</Text>
++        <Button size="sm" isDisabled={page + 1 >= pageCount} onClick={() => setPage(page + 1)}>下一页</Button>
++      </HStack>
++    </Box>
++  );
++};
+diff --git a/app/dashboard/src/components/LinkRaySubscriptionLinks.tsx b/app/dashboard/src/components/LinkRaySubscriptionLinks.tsx
+new file mode 100644
+index 0000000..fe62c96
+--- /dev/null
++++ b/app/dashboard/src/components/LinkRaySubscriptionLinks.tsx
+@@ -0,0 +1,62 @@
++import {
++  Button,
++  HStack,
++  Input,
++  Modal,
++  ModalBody,
++  ModalCloseButton,
++  ModalContent,
++  ModalHeader,
++  ModalOverlay,
++  Text,
++  VStack,
++} from "@chakra-ui/react";
++import { FC, useEffect, useState } from "react";
++import CopyToClipboard from "react-copy-to-clipboard";
++
++const rows = (base: string): [string, string][] => [
++  ["自动识别订阅", base],
++  ["Clash/Mihomo", `${base}/clash-meta`],
++  ["Egern", `${base}/egern`],
++  ["Shadowrocket", `${base}/shadowrocket`],
++  ["sing-box", `${base}/sing-box`],
++  ["通用节点订阅", base],
++  ["v2ray-json", `${base}/v2ray-json`],
++];
++
++export const LinkRaySubscriptionLinks: FC = () => {
++  const [base, setBase] = useState<string | null>(null);
++
++  useEffect(() => {
++    window.linkrayShowSubscriptionLinks = (value: string) => setBase(value);
++  }, []);
++
++  return (
++    <Modal isOpen={!!base} onClose={() => setBase(null)} size="4xl">
++      <ModalOverlay />
++      <ModalContent>
++        <ModalHeader>客户端订阅链接</ModalHeader>
++        <ModalCloseButton />
++        <ModalBody pb={8}>
++          <VStack alignItems="stretch" spacing={3}>
++            {base && rows(base).map(([label, url]) => (
++              <HStack key={label}>
++                <Text minW="140px" fontWeight="bold">{label}</Text>
++                <Input value={url} isReadOnly />
++                <CopyToClipboard text={url}>
++                  <Button colorScheme="primary">复制</Button>
++                </CopyToClipboard>
++              </HStack>
++            ))}
++          </VStack>
++        </ModalBody>
++      </ModalContent>
++    </Modal>
++  );
++};
++
++declare global {
++  interface Window {
++    linkrayShowSubscriptionLinks?: (base: string) => void;
++  }
++}
+diff --git a/app/dashboard/src/components/UsersTable.tsx b/app/dashboard/src/components/UsersTable.tsx
+index 62bb074..78ddd48 100644
+--- a/app/dashboard/src/components/UsersTable.tsx
++++ b/app/dashboard/src/components/UsersTable.tsx
+@@ -48,6 +48,8 @@ import { OnlineBadge } from "./OnlineBadge";
+ import { OnlineStatus } from "./OnlineStatus";
+ import { Pagination } from "./Pagination";
+ import { StatusBadge } from "./StatusBadge";
++import { LinkRayNodeInfo } from "./LinkRayNodeInfo";
++import { LinkRaySubscriptionLinks } from "./LinkRaySubscriptionLinks";
+ 
+ const EmptySectionIcon = chakra(AddFileIcon);
+ 
+@@ -240,7 +242,8 @@ export const UsersTable: FC<UsersTableProps> = (props) => {
+   };
+ 
+   return (
+-    <Box id="users-table" overflowX={{ base: "unset", md: "unset" }}>
++    <>
++      <Box id="users-table" overflowX={{ base: "unset", md: "unset" }}>
+       <Accordion
+         allowMultiple
+         display={{ base: "block", md: "none" }}
+@@ -628,7 +631,10 @@ export const UsersTable: FC<UsersTableProps> = (props) => {
+         </Tbody>
+       </Table>
+       <Pagination />
+-    </Box>
++      </Box>
++      <LinkRayNodeInfo />
++      <LinkRaySubscriptionLinks />
++    </>
+   );
+ };
+ 
+@@ -665,6 +671,11 @@ const ActionButtons: FC<ActionButtonsProps> = ({ user }) => {
+         }
+         onCopy={() => {
+           setCopied([0, true]);
++          window.linkrayShowSubscriptionLinks?.(
++            user.subscription_url.startsWith("/")
++              ? window.location.origin + user.subscription_url
++              : user.subscription_url
++          );
+         }}
+       >
+         <div>

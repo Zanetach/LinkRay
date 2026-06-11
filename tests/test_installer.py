@@ -19,6 +19,7 @@ class InstallerTests(unittest.TestCase):
         self.assertNotIn("index.linkray.20260518061008.js", script)
         self.assertIn("var/lib/marzban/linkray/hosts.sql", script)
         self.assertIn("var/lib/marzban/linkray/linkray-manifest.json", script)
+        self.assertIn("var/lib/marzban/linkray/source-patches/marzban-dashboard/linkray-dashboard.patch", script)
         self.assertIn("var/lib/marzban/linkray/patches/clash.py", script)
         self.assertIn("var/lib/marzban/templates/subscription/index.html", script)
         self.assertIn("etc/systemd/system/linkray-api.service", script)

@@ -46,7 +46,14 @@ LinkRay renders these inbound families for every node:
 | VMess HTTPUpgrade TLS | HTTPUpgrade + TLS |
 | Trojan gRPC TLS | gRPC + TLS |
 
-Clash/Mihomo and sing-box are supported as client subscription formats through LinkRay sidecars. LinkRay still uses Marzban-managed Xray-core as the proxy runtime. Hysteria2, TUIC, and AnyTLS remain out of scope for v1 because they need a separate stats and subscription integration layer before they can fit the Marzban-first model.
+Clash/Mihomo and sing-box are supported as client subscription formats through LinkRay sidecars. LinkRay still uses Marzban-managed Xray-core as the proxy runtime.
+
+Hysteria2, TUIC, and AnyTLS are tracked as planned sing-box runtime protocols, not production-supported Marzban protocols yet. They require a separate sing-box service, user credential generation, subscription rendering, and Marzban-compatible traffic stats before enablement. Check the explicit matrix with:
+
+```bash
+linkray protocols
+linkray protocols --json
+```
 
 ## Install
 
@@ -189,6 +196,7 @@ The same `--inbound key=port` flags are supported by `linkray api` and `linkray 
 | `linkray sub-auto` | Route the base subscription URL to the best identifiable format |
 | `linkray relay` | Expose master-side relay ports for secondary nodes |
 | `linkray rules update` | Refresh CN domain and IP CIDR routing rule files |
+| `linkray protocols` | Show supported and planned protocol capability status |
 
 ## Subscription Routes
 
@@ -219,6 +227,22 @@ Rendered master deployments include these LinkRay-managed systemd units:
 | `linkray-relay.service` | Relays secondary-node ports from the master |
 
 For a two-node topology, LinkRay publishes secondary nodes through master relay ports by default. The first secondary node uses each inbound port plus `100` for its public subscription port, while TLS SNI and WebSocket Host still point at the real secondary-node domain.
+
+## Dashboard Patch Maintenance
+
+Runtime installs use the compiled compatibility snapshot in:
+
+```text
+patches/marzban-dashboard/current/
+```
+
+For Marzban upgrades, LinkRay also ships a source-level patch in:
+
+```text
+patches/marzban-dashboard/source/linkray-dashboard.patch
+```
+
+Apply that patch to a Marzban source checkout, rebuild `app/dashboard`, then refresh the compatibility snapshot only after validating the LinkRay subscription dialog and Node Info panel.
 
 ## Deploy Rendered Files
 

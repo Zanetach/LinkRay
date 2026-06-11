@@ -11,6 +11,7 @@ from .doctor import exit_code, run_doctor
 from .egern import serve_egern
 from .install import install_master, install_node
 from .ports import write_ports_json
+from .protocols import PROTOCOL_CAPABILITIES, protocol_capabilities_json
 from .relay import serve_relay
 from .render import render_master, render_node, validate_rendered
 from .rules import DEFAULT_RULE_DIR, update_route_rules
@@ -207,6 +208,11 @@ def add_relay_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPar
     relay.add_argument("--log-level", default="info")
 
 
+def add_protocols_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    protocols = subparsers.add_parser("protocols", help="Show LinkRay protocol capability status")
+    protocols.add_argument("--json", action="store_true", help="Print machine-readable JSON")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="linkray")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -222,6 +228,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_sub_auto_parser(subparsers)
     add_rules_parser(subparsers)
     add_relay_parser(subparsers)
+    add_protocols_parser(subparsers)
 
     validate = subparsers.add_parser("validate", help="Validate rendered deployment files")
     validate.add_argument("--path", required=True, type=Path)
@@ -337,6 +344,17 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "relay":
         args.inbound_ports = parse_inbound_ports(args.inbound)
         return serve_relay(args)
+
+    if args.command == "protocols":
+        if args.json:
+            print(protocol_capabilities_json(), end="")
+        else:
+            for capability in PROTOCOL_CAPABILITIES:
+                print(
+                    f"{capability.status}\t{capability.runtime}\t"
+                    f"{capability.name}\t{capability.transport}/{capability.security}"
+                )
+        return 0
 
     if args.command == "bootstrap" and args.role == "master":
         actions = bootstrap_master(

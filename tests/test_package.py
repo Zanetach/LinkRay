@@ -76,6 +76,7 @@ class PackageTests(unittest.TestCase):
                 "examples/master.example.json",
                 "templates/marzban/clash/default.yml",
                 "patches/marzban-dashboard/current/index.linkray.js",
+                "patches/marzban-dashboard/source/linkray-dashboard.patch",
             ]:
                 self.assertIn(item, sdist_suffixes)
 
@@ -84,6 +85,7 @@ class PackageTests(unittest.TestCase):
             for item in [
                 "linkray/assets/templates/marzban/clash/default.yml",
                 "linkray/assets/patches/marzban-dashboard/current/index.linkray.js",
+                "linkray/assets/source-patches/marzban-dashboard/linkray-dashboard.patch",
                 "linkray/assets/patches/marzban-subscription/current/clash.py",
             ]:
                 self.assertIn(item, wheel_names)

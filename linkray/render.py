@@ -26,6 +26,10 @@ def first_existing_path(*paths: Path) -> Path:
 
 TEMPLATE_ROOT = first_existing_path(PROJECT_ROOT / "templates", PACKAGE_ROOT / "assets/templates")
 PATCH_ROOT = first_existing_path(PROJECT_ROOT / "patches", PACKAGE_ROOT / "assets/patches")
+DASHBOARD_SOURCE_PATCH_ROOT = first_existing_path(
+    PROJECT_ROOT / "patches/marzban-dashboard/source",
+    PACKAGE_ROOT / "assets/source-patches/marzban-dashboard",
+)
 
 
 def tls_stream(config: LinkRayConfig) -> dict:
@@ -628,6 +632,14 @@ def render_master(
         write_text(output / "etc/systemd/system/linkray-relay.service", linkray_relay_service(effective_nodes, config)),
         write_text(output / "var/lib/marzban/linkray/hosts.sql", hosts_sql(config, effective_nodes)),
         write_text(output / "var/lib/marzban/linkray/linkray-manifest.json", render_manifest(config, effective_nodes)),
+        copy_file(
+            DASHBOARD_SOURCE_PATCH_ROOT / "README.md",
+            output / "var/lib/marzban/linkray/source-patches/marzban-dashboard/README.md",
+        ),
+        copy_file(
+            DASHBOARD_SOURCE_PATCH_ROOT / "linkray-dashboard.patch",
+            output / "var/lib/marzban/linkray/source-patches/marzban-dashboard/linkray-dashboard.patch",
+        ),
         output / "var/lib/marzban/linkray/rules/cn-domains.txt",
         output / "var/lib/marzban/linkray/rules/cn-ip-cidrs.txt",
         copy_file(TEMPLATE_ROOT / "marzban/clash/default.yml", output / "var/lib/marzban/templates/clash/default.yml"),

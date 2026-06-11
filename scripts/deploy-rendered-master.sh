@@ -21,6 +21,8 @@ test -f "$src/etc/systemd/system/linkray-rules-update.service"
 test -f "$src/etc/systemd/system/linkray-rules-update.timer"
 test -f "$src/var/lib/marzban/linkray/hosts.sql"
 test -f "$src/var/lib/marzban/linkray/linkray-manifest.json"
+test -f "$src/var/lib/marzban/linkray/source-patches/marzban-dashboard/README.md"
+test -f "$src/var/lib/marzban/linkray/source-patches/marzban-dashboard/linkray-dashboard.patch"
 test -f "$src/var/lib/marzban/linkray/rules/cn-domains.txt"
 test -f "$src/var/lib/marzban/linkray/rules/cn-ip-cidrs.txt"
 test -f "$src/var/lib/marzban/linkray/patches/clash.py"
@@ -33,6 +35,7 @@ install -d \
   /var/lib/marzban/templates/subscription \
   /var/lib/marzban/dashboard-patches \
   /var/lib/marzban/linkray/patches \
+  /var/lib/marzban/linkray/source-patches/marzban-dashboard \
   /var/lib/marzban/linkray/rules \
   /opt/marzban \
   /etc/nginx/conf.d \
@@ -42,6 +45,8 @@ install -m 0644 "$src/var/lib/marzban/templates/clash/default.yml" /var/lib/marz
 install -m 0644 "$src/var/lib/marzban/templates/subscription/index.html" /var/lib/marzban/templates/subscription/index.html
 install -m 0644 "$src/var/lib/marzban/linkray/hosts.sql" /var/lib/marzban/linkray/hosts.sql
 install -m 0644 "$src/var/lib/marzban/linkray/linkray-manifest.json" /var/lib/marzban/linkray/linkray-manifest.json
+install -m 0644 "$src/var/lib/marzban/linkray/source-patches/marzban-dashboard/README.md" /var/lib/marzban/linkray/source-patches/marzban-dashboard/README.md
+install -m 0644 "$src/var/lib/marzban/linkray/source-patches/marzban-dashboard/linkray-dashboard.patch" /var/lib/marzban/linkray/source-patches/marzban-dashboard/linkray-dashboard.patch
 install -m 0644 "$src/var/lib/marzban/linkray/rules/cn-domains.txt" /var/lib/marzban/linkray/rules/cn-domains.txt
 install -m 0644 "$src/var/lib/marzban/linkray/rules/cn-ip-cidrs.txt" /var/lib/marzban/linkray/rules/cn-ip-cidrs.txt
 install -m 0644 "$src/var/lib/marzban/linkray/patches/clash.py" /var/lib/marzban/linkray/patches/clash.py
