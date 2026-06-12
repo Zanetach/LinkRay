@@ -186,6 +186,11 @@ class RenderTests(unittest.TestCase):
             self.assertIn("app/dashboard/src/components/LinkRaySubscriptionLinks.tsx", source_patch)
             self.assertIn("app/dashboard/src/components/UsersTable.tsx", source_patch)
             compose = (output / "opt/marzban/docker-compose.yml").read_text()
+            self.assertIn("  linkray:", compose)
+            self.assertIn("image: linkray:latest", compose)
+            self.assertIn("container_name: linkray", compose)
+            self.assertNotIn("gozargah/marzban:latest", compose)
+            self.assertNotIn("  marzban:", compose)
             self.assertIn("/var/lib/marzban/linkray/bin/xray:/usr/local/bin/xray:ro", compose)
             self.assertIn("/var/lib/marzban/linkray/patches/clash.py:/code/app/subscription/clash.py:ro", compose)
             self.assertIn(
@@ -263,6 +268,18 @@ class RenderTests(unittest.TestCase):
             self.assertIn("OnCalendar=daily", rules_timer)
             relay_service = (output / "etc/systemd/system/linkray-relay.service").read_text()
             self.assertIn("ExecStart=/usr/local/bin/linkray relay --listen 0.0.0.0 --node edge-b=edge-b.example.com:100", relay_service)
+
+    def test_render_node_uses_linkray_container_and_image_names(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp)
+            render_node(output)
+
+            compose = (output / "opt/marzban-node/docker-compose.yml").read_text()
+            self.assertIn("  linkray-node:", compose)
+            self.assertIn("image: linkray-node:latest", compose)
+            self.assertIn("container_name: linkray-node", compose)
+            self.assertNotIn("gozargah/marzban-node:latest", compose)
+            self.assertNotIn("  marzban-node:", compose)
 
     def test_render_master_can_emit_linkray_managed_xray_runtime(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -1,6 +1,7 @@
 services:
-  marzban:
-    image: gozargah/marzban:latest
+  linkray:
+    image: linkray:latest
+    container_name: linkray
     restart: always
     env_file: .env
     network_mode: host

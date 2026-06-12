@@ -76,6 +76,8 @@ class BootstrapTests(unittest.TestCase):
             self.assertTrue(any("github.com/sagernet/sing-box/cmd/sing-box@v1.12.0" in command for command in runner.commands))
             self.assertTrue(any("snell-server-v5.0.1-linux" in command for command in runner.commands))
             self.assertTrue(any("nftables" in command for command in runner.commands))
+            self.assertTrue(any("docker tag gozargah/marzban:latest linkray:latest" in command for command in runner.commands))
+            self.assertTrue(any("docker rm -f marzban-marzban-1" in command for command in runner.commands))
             self.assertTrue(any("systemctl enable --now linkray-api" in command for command in runner.commands))
             self.assertTrue(any("systemctl enable --now linkray-clash" in command for command in runner.commands))
             self.assertTrue(any("systemctl enable --now linkray-egern" in command for command in runner.commands))
@@ -89,7 +91,7 @@ class BootstrapTests(unittest.TestCase):
             self.assertTrue(any("systemctl enable --now linkray-relay" in command for command in runner.commands))
             self.assertTrue(any("rm -f /etc/cron.d/linkray-port-status" in command for command in runner.commands))
             self.assertFalse(any("linkray ports" in command for command in runner.commands))
-            self.assertTrue(any("docker compose up -d" in command for command in runner.commands))
+            self.assertTrue(any("docker compose up -d --force-recreate --remove-orphans linkray" in command for command in runner.commands))
             self.assertTrue(any("sqlite3 /var/lib/marzban/db.sqlite3" in command for command in runner.commands))
             self.assertTrue(any("nginx -t" in command for command in runner.commands))
             self.assertTrue(all(action.ok for action in actions))
@@ -162,7 +164,9 @@ class BootstrapTests(unittest.TestCase):
             actions = bootstrap_node(root=root, apply=True, runtime=True, runner=runner)
 
             self.assertTrue((root / "opt/marzban-node/docker-compose.yml").exists())
-            self.assertTrue(any("docker compose up -d" in command for command in runner.commands))
+            self.assertTrue(any("docker tag gozargah/marzban-node:latest linkray-node:latest" in command for command in runner.commands))
+            self.assertTrue(any("docker rm -f marzban-node-marzban-node-1" in command for command in runner.commands))
+            self.assertTrue(any("docker compose up -d --force-recreate --remove-orphans linkray-node" in command for command in runner.commands))
             self.assertTrue(all(action.ok for action in actions))
 
     def test_bootstrap_node_can_pull_certificate_from_master(self):

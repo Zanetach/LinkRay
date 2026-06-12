@@ -203,10 +203,10 @@ def runtime_checks(role: str, runner: Runner, root: Path = Path("/")) -> list[Ch
         ]
         if xray_runtime_mode == "linkray":
             expected_ports.append(LINKRAY_XRAY_API_PORT)
-        checks.append(docker_check("marzban-marzban-1", runner))
+        checks.append(docker_check("linkray", runner))
     else:
         expected_ports = [62050, 62051, *expected_ports]
-        checks.append(docker_check("marzban-node-marzban-node-1", runner))
+        checks.append(docker_check("linkray-node", runner))
 
     for port in expected_ports:
         listening = has_listening_port(ss_output, port)

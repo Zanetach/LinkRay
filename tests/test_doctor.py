@@ -25,9 +25,9 @@ class DoctorTests(unittest.TestCase):
         self.assertFalse(has_listening_port(output, 18081))
 
     def test_docker_has_container(self):
-        output = "marzban-marzban-1|Up 1 hour\nother|Up 1 hour\n"
-        self.assertTrue(docker_has_container(output, "marzban-marzban-1"))
-        self.assertFalse(docker_has_container(output, "marzban-node-marzban-node-1"))
+        output = "linkray|Up 1 hour\nother|Up 1 hour\n"
+        self.assertTrue(docker_has_container(output, "linkray"))
+        self.assertFalse(docker_has_container(output, "linkray-node"))
 
     def test_file_doctor_master_against_rendered_root(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -76,7 +76,7 @@ class DoctorTests(unittest.TestCase):
                 ("systemctl", "is-active", "linkray-sub-auto"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "linkray-rules-update.timer"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "linkray-relay"): CommandResult(0, "active\n"),
-                ("docker", "ps", "--format", "{{.Names}}|{{.Status}}"): CommandResult(0, "marzban-marzban-1|Up 1 hour\n"),
+                ("docker", "ps", "--format", "{{.Names}}|{{.Status}}"): CommandResult(0, "linkray|Up 1 hour\n"),
             }
         )
         with tempfile.TemporaryDirectory() as tmp:
@@ -118,7 +118,7 @@ class DoctorTests(unittest.TestCase):
                 ("systemctl", "is-active", "linkray-sub-auto"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "linkray-rules-update.timer"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "linkray-relay"): CommandResult(0, "active\n"),
-                ("docker", "ps", "--format", "{{.Names}}|{{.Status}}"): CommandResult(0, "marzban-marzban-1|Up 1 hour\n"),
+                ("docker", "ps", "--format", "{{.Names}}|{{.Status}}"): CommandResult(0, "linkray|Up 1 hour\n"),
             }
         )
         with tempfile.TemporaryDirectory() as tmp:
@@ -160,7 +160,7 @@ class DoctorTests(unittest.TestCase):
                 ("systemctl", "is-active", "linkray-sub-auto"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "linkray-rules-update.timer"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "linkray-relay"): CommandResult(0, "active\n"),
-                ("docker", "ps", "--format", "{{.Names}}|{{.Status}}"): CommandResult(0, "marzban-marzban-1|Up 1 hour\n"),
+                ("docker", "ps", "--format", "{{.Names}}|{{.Status}}"): CommandResult(0, "linkray|Up 1 hour\n"),
             }
         )
         with tempfile.TemporaryDirectory() as tmp:

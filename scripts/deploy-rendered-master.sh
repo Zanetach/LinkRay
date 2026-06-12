@@ -101,7 +101,10 @@ else
 fi
 
 cd /opt/marzban
-docker compose up -d
+docker image inspect gozargah/marzban:latest >/dev/null 2>&1 || docker pull gozargah/marzban:latest
+docker tag gozargah/marzban:latest linkray:latest
+docker rm -f marzban-marzban-1 2>/dev/null || true
+docker compose up -d --force-recreate --remove-orphans linkray
 sqlite3 /var/lib/marzban/db.sqlite3 < /var/lib/marzban/linkray/hosts.sql
 systemctl daemon-reload
 if [[ "$linkray_xray_enabled" -eq 1 ]]; then

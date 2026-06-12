@@ -230,8 +230,9 @@ def master_compose(config: LinkRayConfig) -> str:
     )
     volume_block = "\n".join(volumes)
     return f"""services:
-  marzban:
-    image: gozargah/marzban:latest
+  linkray:
+    image: linkray:latest
+    container_name: linkray
     restart: always
     env_file: .env
     network_mode: host
@@ -242,8 +243,9 @@ def master_compose(config: LinkRayConfig) -> str:
 
 def node_compose() -> str:
     return """services:
-  marzban-node:
-    image: gozargah/marzban-node:latest
+  linkray-node:
+    image: linkray-node:latest
+    container_name: linkray-node
     restart: always
     network_mode: host
     environment:

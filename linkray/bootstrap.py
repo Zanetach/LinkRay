@@ -70,6 +70,20 @@ def dependency_commands() -> list[str]:
     ]
 
 
+def master_image_alias_commands() -> list[str]:
+    return [
+        "docker image inspect gozargah/marzban:latest >/dev/null 2>&1 || docker pull gozargah/marzban:latest",
+        "docker tag gozargah/marzban:latest linkray:latest",
+    ]
+
+
+def node_image_alias_commands() -> list[str]:
+    return [
+        "docker image inspect gozargah/marzban-node:latest >/dev/null 2>&1 || docker pull gozargah/marzban-node:latest",
+        "docker tag gozargah/marzban-node:latest linkray-node:latest",
+    ]
+
+
 def xray_binary_commands(version: str = "v25.3.6") -> list[str]:
     binary = "/var/lib/marzban/linkray/bin/xray"
     geoip = "/var/lib/marzban/linkray/bin/geoip.dat"
@@ -259,7 +273,9 @@ def master_preinstall_runtime_commands(
 
 def master_postinstall_runtime_commands(config: LinkRayConfig) -> list[str]:
     commands = [
-        "cd /opt/marzban && docker compose up -d --force-recreate marzban",
+        *master_image_alias_commands(),
+        "docker rm -f marzban-marzban-1 2>/dev/null || true",
+        "cd /opt/marzban && docker compose up -d --force-recreate --remove-orphans linkray",
         "sqlite3 /var/lib/marzban/db.sqlite3 < /var/lib/marzban/linkray/hosts.sql",
         "nginx -t",
         "systemctl reload nginx",
@@ -295,7 +311,9 @@ def node_runtime_commands(
         commands.extend(pull_node_cert_commands(pull_cert_from, remote_cert_path, local_cert_path))
     commands.extend(
         [
-            "cd /opt/marzban-node && docker compose up -d",
+            *node_image_alias_commands(),
+            "docker rm -f marzban-node-marzban-node-1 2>/dev/null || true",
+            "cd /opt/marzban-node && docker compose up -d --force-recreate --remove-orphans linkray-node",
             "linkray doctor --role node",
         ]
     )

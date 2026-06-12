@@ -1,6 +1,7 @@
 services:
-  marzban-node:
-    image: gozargah/marzban-node:latest
+  linkray-node:
+    image: linkray-node:latest
+    container_name: linkray-node
     restart: always
     network_mode: host
     environment:
