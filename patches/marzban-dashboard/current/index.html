@@ -162,7 +162,7 @@
           }
 
           function titleElements(name) {
-            return Array.from(document.querySelectorAll("div,span,p,h1,h2,h3,h4,h5,h6"))
+            return Array.from(document.querySelectorAll("label,div,span,p,h1,h2,h3,h4,h5,h6"))
               .filter((node) => ownTextOf(node) === name || textOf(node) === name);
           }
 
@@ -180,7 +180,15 @@
           }
 
           function createDialog() {
-            const candidates = Array.from(document.querySelectorAll("div[role='dialog'],section,div"))
+            const roleDialogs = Array.from(document.querySelectorAll("[role='dialog']"))
+              .filter((node) => {
+                const text = textOf(node);
+                const box = node.getBoundingClientRect();
+                return text.includes("创建新用户") && text.includes("协议") && box.width >= 300 && box.height >= 260;
+              })
+              .sort((a, b) => textOf(a).length - textOf(b).length);
+            if (roleDialogs[0]) return roleDialogs[0];
+            const candidates = Array.from(document.querySelectorAll("section,div"))
               .filter((node) => {
                 const text = textOf(node);
                 const box = node.getBoundingClientRect();
@@ -188,6 +196,27 @@
               })
               .sort((a, b) => textOf(a).length - textOf(b).length);
             return candidates[0] || null;
+          }
+
+          function protocolSection(dialog) {
+            const title = Array.from(dialog.querySelectorAll("label,div,span,p,h1,h2,h3,h4,h5,h6"))
+              .find((node) => ownTextOf(node) === "协议" || textOf(node) === "协议");
+            let current = title ? title.parentElement : null;
+            while (current && current !== dialog) {
+              const text = textOf(current);
+              const box = current.getBoundingClientRect();
+              if (
+                text.includes("协议") &&
+                text.includes("Vmess") &&
+                text.includes("Vless") &&
+                box.width >= 120 &&
+                box.height >= 180
+              ) {
+                return current;
+              }
+              current = current.parentElement;
+            }
+            return dialog.querySelector(".chakra-modal__body") || dialog;
           }
 
           function selectedAdvancedProtocols() {
@@ -224,13 +253,7 @@
               if (!card) return;
               card.setAttribute("data-enabled", card.getAttribute("data-enabled") === "true" ? "false" : "true");
             });
-            const protocolTitle = titleElements("协议")[0];
-            const target = protocolTitle ? detailTarget(protocolTitle) : dialog;
-            const host =
-              target && dialog.contains(target) && target.parentElement && dialog.contains(target.parentElement)
-                ? target.parentElement
-                : dialog;
-            host.appendChild(panel);
+            protocolSection(dialog).appendChild(panel);
           }
 
           function parseCreateUserBody(body) {
