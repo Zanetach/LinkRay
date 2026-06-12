@@ -10,13 +10,13 @@ from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, unquote, urlparse
 
-from ._http import PASS_HEADERS, AdapterHandler, fetch_subscription_username, fetch_upstream, first_query_value, parse_link_netloc
+from ._http import PASS_HEADERS, AdapterHandler, fetch_upstream, first_query_value, parse_link_netloc
 from .config import LinkRayConfig
 from .native import b64decode_text, decode_subscription_links
-from .protocol_prefs import DEFAULT_PROTOCOL_PREFS_PATH, ProtocolPreferences, enabled_protocols_for_user, load_protocol_preferences
+from .protocol_prefs import DEFAULT_PROTOCOL_PREFS_PATH, ProtocolPreferences
 from .rules import COMPACT_CN_DOMAIN_SUFFIXES, FOREIGN_DOMAIN_SUFFIXES, RouteRules, load_route_rules
 from .snell_runtime import DEFAULT_RUNTIME_DIR as SNELL_RUNTIME_DIR
-from .snell_runtime import SnellUser, ensure_runtime_user, snell_clash_proxy
+from .snell_runtime import SnellUser
 
 
 TOKEN_RE = re.compile(r"^/sub/([^/]+)/clash-meta/?$")
@@ -345,7 +345,7 @@ def build_rules(route_rules: RouteRules) -> list[str]:
     for cidr in route_rules.cn_ip_cidrs:
         rules.append(f"IP-CIDR,{cidr},国内站点")
     rules.append("GEOIP,CN,国内站点")
-    rules.append("FINAL,漏网之鱼")
+    rules.append("MATCH,漏网之鱼")
     return rules
 
 
@@ -367,13 +367,6 @@ def build_clash_meta_yaml(
             continue
         seen.add(name)
         proxies.append(proxy)
-    if config and snell_user and "snell" in enabled_protocols_for_user(protocol_preferences, snell_user.name):
-        proxy = snell_clash_proxy(config, snell_user)
-        name = str(proxy["name"])
-        if name not in seen:
-            seen.add(name)
-            proxies.append(proxy)
-
     names = [str(proxy["name"]) for proxy in proxies]
     effective_rules = route_rules or load_route_rules()
     data = {
@@ -394,6 +387,13 @@ def build_clash_meta_yaml(
             "default-nameserver": ["223.5.5.5", "119.29.29.29"],
             "nameserver": ["https://doh.pub/dns-query", "https://dns.alidns.com/dns-query"],
             "fallback": ["https://dns.google/dns-query"],
+            "direct-nameserver": [
+                "https://doh.pub/dns-query",
+                "https://dns.alidns.com/dns-query",
+                "223.5.5.5",
+                "119.29.29.29",
+            ],
+            "proxy-server-nameserver": ["223.5.5.5", "119.29.29.29"],
             "respect-rules": True,
         },
         "proxies": proxies,
@@ -421,29 +421,7 @@ class ClashHandler(AdapterHandler):
         token = match.group(1)
         try:
             _, upstream_headers, raw = fetch_upstream(self.marzban_url, token, {"Accept": "text/plain"})
-            config = None
-            snell_user = None
-            protocol_preferences = None
-            if self.server_domain:
-                config = LinkRayConfig(domain=self.server_domain)
-                username = fetch_subscription_username(self.marzban_url, token)
-                if not username:
-                    raise ValueError("missing Marzban username for Snell runtime user")
-                protocol_preferences = load_protocol_preferences(Path(self.protocol_preferences_path))
-                if "snell" in enabled_protocols_for_user(protocol_preferences, username):
-                    snell_user, _ = ensure_runtime_user(
-                        token,
-                        config,
-                        runtime_dir=Path(self.snell_runtime_dir),
-                        reload_command=self.snell_reload_command or None,
-                        name=username,
-                    )
-            body = build_clash_meta_yaml(
-                raw,
-                config=config,
-                snell_user=snell_user,
-                protocol_preferences=protocol_preferences,
-            ).encode("utf-8")
+            body = build_clash_meta_yaml(raw).encode("utf-8")
         except HTTPError as exc:
             self.send_bytes(exc.code, dict(exc.headers.items()), exc.read() or b"upstream error\n")
             return

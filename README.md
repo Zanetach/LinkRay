@@ -74,7 +74,7 @@ Snell is experimental but usable for supported clients:
 - `linkray-snell-usage.service` exposes local Snell usage deltas for the LinkRay job.
 - The generated config lives at `/var/lib/marzban/linkray/snell/snell-server.conf`.
 - Per-user configs are written under `/var/lib/marzban/linkray/snell/users/`.
-- Shadowrocket config and Clash/Mihomo subscriptions can append per-user Snell nodes.
+- Shadowrocket config can append per-user Snell v5 nodes; Clash/Mihomo subscriptions deliberately exclude Snell to avoid core validation failures on clients that do not support Snell v5.
 - LinkRay traffic sync for Snell uses per-user port counters and writes usage into the same user, admin, and hourly tables as the sing-box sync job.
 
 ```bash

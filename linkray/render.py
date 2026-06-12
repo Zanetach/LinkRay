@@ -566,7 +566,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/linkray clash --listen 127.0.0.1 --port 61991 --marzban-url http://127.0.0.1:{config.marzban_http_port} --server-domain {shlex.quote(config.domain)} --snell-runtime-dir {SNELL_RUNTIME_DIR} --snell-reload-command 'systemctl enable --now linkray-snell@{{instance}}'
+ExecStart=/usr/local/bin/linkray clash --listen 127.0.0.1 --port 61991 --marzban-url http://127.0.0.1:{config.marzban_http_port} --server-domain {shlex.quote(config.domain)}
 Restart=always
 RestartSec=3
 

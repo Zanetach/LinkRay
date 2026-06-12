@@ -24,6 +24,8 @@ class ClashTests(unittest.TestCase):
         self.assertIn("proxies:", text)
         self.assertIn("proxy-groups:", text)
         self.assertIn("rules:", text)
+        self.assertIn("direct-nameserver:", text)
+        self.assertIn("proxy-server-nameserver:", text)
         self.assertIn("name: ca-VLESS_TLS_Vision", text)
         self.assertIn("type: vless", text)
         self.assertIn("flow: xtls-rprx-vision", text)
@@ -36,7 +38,7 @@ class ClashTests(unittest.TestCase):
         self.assertIn("name: 全球代理", text)
         self.assertIn("DOMAIN-SUFFIX,google.com,Google", text)
         self.assertIn("GEOIP,CN,国内站点", text)
-        self.assertIn("FINAL,漏网之鱼", text)
+        self.assertIn("MATCH,漏网之鱼", text)
 
     def test_build_clash_meta_yaml_filters_xhttp_until_mihomo_support_is_stable(self):
         payload = encoded_subscription(
@@ -49,7 +51,7 @@ class ClashTests(unittest.TestCase):
         self.assertNotIn("ca-VLESS_XHTTP_Reality", text)
         self.assertIn("name: ca-Shadowsocks", text)
 
-    def test_build_clash_meta_yaml_can_append_snell_user_node(self):
+    def test_build_clash_meta_yaml_does_not_append_snell_v5_node(self):
         user = credential_for_token("subscription-token", "server-secret", name="cyclelink", port=40123)
         payload = encoded_subscription(
             "trojan://secret@ca.example.com:8443?security=tls&type=tcp&sni=ca.example.com#ca-Trojan_TLS"
@@ -61,13 +63,10 @@ class ClashTests(unittest.TestCase):
             snell_user=user,
         )
 
-        self.assertIn("name: cyclelink-Snell", text)
-        self.assertIn("type: snell", text)
-        self.assertIn("server: edge-a.example.com", text)
-        self.assertIn("port: 40123", text)
-        self.assertIn(f"psk: {user.psk}", text)
-        self.assertIn("version: 5", text)
-        self.assertIn("- cyclelink-Snell", text)
+        self.assertNotIn("cyclelink-Snell", text)
+        self.assertNotIn("type: snell", text)
+        self.assertNotIn("version: 5", text)
+        self.assertIn("name: ca-Trojan_TLS", text)
 
         filtered = build_clash_meta_yaml(
             payload,

@@ -23,8 +23,8 @@ class ProtocolCapabilityTests(unittest.TestCase):
             self.assertIn("stats", by_key[key].notes.lower())
         self.assertEqual(by_key["snell"].runtime, "snell")
         self.assertEqual(by_key["snell"].status, "experimental")
-        self.assertEqual(by_key["snell"].subscription_formats, ("shadowrocket", "clash-meta"))
-        self.assertIn("stats", by_key["snell"].notes.lower())
+        self.assertEqual(by_key["snell"].subscription_formats, ("shadowrocket",))
+        self.assertIn("clash/mihomo output excludes snell", by_key["snell"].notes.lower())
 
     def test_capabilities_by_status_groups_without_losing_protocols(self):
         grouped = capabilities_by_status()
