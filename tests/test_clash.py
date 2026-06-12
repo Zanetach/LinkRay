@@ -40,6 +40,29 @@ class ClashTests(unittest.TestCase):
         self.assertIn("GEOIP,CN,国内站点", text)
         self.assertIn("MATCH,漏网之鱼", text)
 
+    def test_build_clash_meta_yaml_uses_local_metacubex_rule_assets(self):
+        payload = encoded_subscription(
+            "trojan://secret@ca.example.com:8443?security=tls&type=tcp&sni=ca.example.com#ca-Trojan_TLS"
+        )
+
+        text = build_clash_meta_yaml(
+            payload,
+            rules_base_url="https://edge-a.example.com:9443/linkray/rules",
+        )
+
+        self.assertIn("geox-url:", text)
+        self.assertIn("geoip: https://edge-a.example.com:9443/linkray/rules/geoip.dat", text)
+        self.assertIn("geosite: https://edge-a.example.com:9443/linkray/rules/geosite.dat", text)
+        self.assertIn("mmdb: https://edge-a.example.com:9443/linkray/rules/country.mmdb", text)
+        self.assertIn("asn: https://edge-a.example.com:9443/linkray/rules/GeoLite2-ASN.mmdb", text)
+        self.assertIn("rule-providers:", text)
+        self.assertIn("url: https://edge-a.example.com:9443/linkray/rules/mihomo/geosite-cn.mrs", text)
+        self.assertIn("url: https://edge-a.example.com:9443/linkray/rules/mihomo/geoip-cn.mrs", text)
+        self.assertIn("RULE-SET,linkray-cn-domain,国内站点", text)
+        self.assertIn("RULE-SET,linkray-cn-ip,国内站点", text)
+        self.assertNotIn("raw.githubusercontent.com", text)
+        self.assertNotIn("github.com/MetaCubeX", text)
+
     def test_build_clash_meta_yaml_filters_xhttp_until_mihomo_support_is_stable(self):
         payload = encoded_subscription(
             "vless://11111111-1111-1111-1111-111111111111@ca.example.com:443?encryption=none&security=reality&type=xhttp&sni=www.microsoft.com&pbk=abc&sid=1234#ca-VLESS_XHTTP_Reality",

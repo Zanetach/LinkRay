@@ -68,6 +68,40 @@ class SingBoxTests(unittest.TestCase):
         self.assertNotIn("download_detour", output)
         self.assertNotIn("raw.githubusercontent.com", output)
 
+    def test_build_singbox_json_uses_local_metacubex_rule_sets(self):
+        from linkray.singbox import build_singbox_json
+
+        links = "trojan://password@edge-a.example.com:18083?security=tls&type=tcp&sni=edge-a.example.com#edge-a-Trojan_TLS"
+        output = build_singbox_json(
+            base64.b64encode(links.encode()),
+            rules_base_url="https://edge-a.example.com:9443/linkray/rules",
+        )
+        data = json.loads(output)
+
+        self.assertEqual(
+            data["route"]["rule_set"],
+            [
+                {
+                    "tag": "linkray-geosite-cn",
+                    "type": "remote",
+                    "format": "binary",
+                    "url": "https://edge-a.example.com:9443/linkray/rules/sing-box/geosite-cn.srs",
+                    "download_detour": "DIRECT",
+                },
+                {
+                    "tag": "linkray-geoip-cn",
+                    "type": "remote",
+                    "format": "binary",
+                    "url": "https://edge-a.example.com:9443/linkray/rules/sing-box/geoip-cn.srs",
+                    "download_detour": "DIRECT",
+                },
+            ],
+        )
+        self.assertIn({"rule_set": ["linkray-geosite-cn"], "outbound": "国内站点"}, data["route"]["rules"])
+        self.assertIn({"rule_set": ["linkray-geoip-cn"], "outbound": "国内站点"}, data["route"]["rules"])
+        self.assertNotIn("raw.githubusercontent.com", output)
+        self.assertNotIn("github.com/MetaCubeX", output)
+
     def test_build_singbox_json_keeps_large_domain_rules_compact_but_keeps_cn_cidrs(self):
         from linkray.singbox import build_singbox_json
 

@@ -214,6 +214,19 @@ nginx -t
 systemctl reload nginx
 ```
 
+`linkray-rules-update.service` downloads local MetaCubeX rule assets into `/var/lib/marzban/linkray/rules`. After it runs, these paths should exist:
+
+```bash
+test -s /var/lib/marzban/linkray/rules/geosite.dat
+test -s /var/lib/marzban/linkray/rules/geoip.dat
+test -s /var/lib/marzban/linkray/rules/mihomo/geosite-cn.mrs
+test -s /var/lib/marzban/linkray/rules/mihomo/geoip-cn.mrs
+test -s /var/lib/marzban/linkray/rules/sing-box/geosite-cn.srs
+test -s /var/lib/marzban/linkray/rules/sing-box/geoip-cn.srs
+```
+
+Clash/Mihomo and sing-box subscriptions point to these same-origin files through `/linkray/rules/`, so clients do not need to fetch rule assets from GitHub directly.
+
 The helper script performs the same copy and service steps for a prepared host:
 
 ```bash

@@ -7,7 +7,9 @@ from linkray.rules import (
     BUILTIN_CN_IP_CIDRS,
     COMPACT_CN_DOMAIN_SUFFIXES,
     FOREIGN_DOMAIN_SUFFIXES,
+    METACUBEX_ASSETS,
     RouteRules,
+    download_metacubex_assets,
     load_route_rules,
     parse_cidr_lines,
     parse_domain_lines,
@@ -100,6 +102,36 @@ class RouteRuleTests(unittest.TestCase):
         self.assertTrue(expected.issubset(set(FOREIGN_DOMAIN_SUFFIXES)))
         self.assertNotIn("baidu.com", FOREIGN_DOMAIN_SUFFIXES)
         self.assertNotIn("qq.com", FOREIGN_DOMAIN_SUFFIXES)
+
+    def test_download_metacubex_assets_writes_expected_local_cache_files(self):
+        requested: list[str] = []
+
+        def fake_fetch(url: str, timeout: float = 20.0) -> bytes:
+            requested.append(url)
+            return f"asset:{url}".encode("utf-8")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            paths = download_metacubex_assets(root, fetcher=fake_fetch)
+
+            relative = {path.relative_to(root).as_posix() for path in paths}
+            self.assertEqual(relative, {asset.path for asset in METACUBEX_ASSETS})
+            self.assertTrue((root / "geosite.dat").read_bytes().startswith(b"asset:https://"))
+            self.assertTrue((root / "mihomo/geosite-cn.mrs").read_bytes().startswith(b"asset:https://"))
+            self.assertTrue((root / "sing-box/geosite-cn.srs").read_bytes().startswith(b"asset:https://"))
+
+        self.assertIn(
+            "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat",
+            requested,
+        )
+        self.assertIn(
+            "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/cn.mrs",
+            requested,
+        )
+        self.assertIn(
+            "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/cn.srs",
+            requested,
+        )
 
 
 if __name__ == "__main__":

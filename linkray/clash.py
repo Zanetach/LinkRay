@@ -284,6 +284,40 @@ def convert_link(link: str) -> dict[str, Any] | None:
     return None
 
 
+def clean_rules_base_url(rules_base_url: str | None) -> str:
+    return (rules_base_url or "").rstrip("/")
+
+
+def metacubex_geox_url(rules_base_url: str) -> dict[str, str]:
+    return {
+        "geoip": f"{rules_base_url}/geoip.dat",
+        "geosite": f"{rules_base_url}/geosite.dat",
+        "mmdb": f"{rules_base_url}/country.mmdb",
+        "asn": f"{rules_base_url}/GeoLite2-ASN.mmdb",
+    }
+
+
+def metacubex_rule_providers(rules_base_url: str) -> dict[str, dict[str, Any]]:
+    return {
+        "linkray-cn-domain": {
+            "type": "http",
+            "behavior": "domain",
+            "format": "mrs",
+            "url": f"{rules_base_url}/mihomo/geosite-cn.mrs",
+            "path": "./ruleset/linkray-geosite-cn.mrs",
+            "interval": 86400,
+        },
+        "linkray-cn-ip": {
+            "type": "http",
+            "behavior": "ipcidr",
+            "format": "mrs",
+            "url": f"{rules_base_url}/mihomo/geoip-cn.mrs",
+            "path": "./ruleset/linkray-geoip-cn.mrs",
+            "interval": 86400,
+        },
+    }
+
+
 def build_proxy_groups(names: list[str]) -> list[dict[str, Any]]:
     default = names[0] if names else "DIRECT"
     selector = names if names else ["DIRECT"]
@@ -312,7 +346,7 @@ def build_proxy_groups(names: list[str]) -> list[dict[str, Any]]:
     ]
 
 
-def build_rules(route_rules: RouteRules) -> list[str]:
+def build_rules(route_rules: RouteRules, use_rule_sets: bool = False) -> list[str]:
     rules = [
         "DOMAIN-SUFFIX,google.com,Google",
         "DOMAIN-SUFFIX,gstatic.com,Google",
@@ -344,6 +378,9 @@ def build_rules(route_rules: RouteRules) -> list[str]:
         rules.append(f"DOMAIN-SUFFIX,{domain},国内站点")
     for cidr in route_rules.cn_ip_cidrs:
         rules.append(f"IP-CIDR,{cidr},国内站点")
+    if use_rule_sets:
+        rules.append("RULE-SET,linkray-cn-domain,国内站点")
+        rules.append("RULE-SET,linkray-cn-ip,国内站点")
     rules.append("GEOIP,CN,国内站点")
     rules.append("MATCH,漏网之鱼")
     return rules
@@ -355,6 +392,7 @@ def build_clash_meta_yaml(
     config: LinkRayConfig | None = None,
     snell_user: SnellUser | None = None,
     protocol_preferences: ProtocolPreferences | None = None,
+    rules_base_url: str | None = None,
 ) -> str:
     proxies: list[dict[str, Any]] = []
     seen: set[str] = set()
@@ -369,6 +407,7 @@ def build_clash_meta_yaml(
         proxies.append(proxy)
     names = [str(proxy["name"]) for proxy in proxies]
     effective_rules = route_rules or load_route_rules()
+    clean_base = clean_rules_base_url(rules_base_url)
     data = {
         "mixed-port": 7890,
         "allow-lan": False,
@@ -398,8 +437,11 @@ def build_clash_meta_yaml(
         },
         "proxies": proxies,
         "proxy-groups": build_proxy_groups(names),
-        "rules": build_rules(effective_rules),
+        "rules": build_rules(effective_rules, use_rule_sets=bool(clean_base)),
     }
+    if clean_base:
+        data["geox-url"] = metacubex_geox_url(clean_base)
+        data["rule-providers"] = metacubex_rule_providers(clean_base)
     return "\n".join(yaml_lines(data)) + "\n"
 
 
@@ -408,6 +450,7 @@ class ClashHandler(AdapterHandler):
     snell_runtime_dir = SNELL_RUNTIME_DIR
     snell_reload_command = ""
     protocol_preferences_path = DEFAULT_PROTOCOL_PREFS_PATH
+    rules_base_url = ""
 
     def do_GET(self) -> None:
         path = urlparse(self.path).path
@@ -421,7 +464,7 @@ class ClashHandler(AdapterHandler):
         token = match.group(1)
         try:
             _, upstream_headers, raw = fetch_upstream(self.marzban_url, token, {"Accept": "text/plain"})
-            body = build_clash_meta_yaml(raw).encode("utf-8")
+            body = build_clash_meta_yaml(raw, rules_base_url=self.rules_base_url).encode("utf-8")
         except HTTPError as exc:
             self.send_bytes(exc.code, dict(exc.headers.items()), exc.read() or b"upstream error\n")
             return
@@ -441,6 +484,7 @@ def make_clash_server(
     snell_runtime_dir=SNELL_RUNTIME_DIR,
     snell_reload_command: str = "",
     protocol_preferences_path=DEFAULT_PROTOCOL_PREFS_PATH,
+    rules_base_url: str = "",
 ) -> ThreadingHTTPServer:
     class Handler(ClashHandler):
         pass
@@ -450,6 +494,7 @@ def make_clash_server(
     Handler.snell_runtime_dir = snell_runtime_dir
     Handler.snell_reload_command = snell_reload_command
     Handler.protocol_preferences_path = protocol_preferences_path
+    Handler.rules_base_url = rules_base_url
     return ThreadingHTTPServer((listen, port), Handler)
 
 
@@ -461,6 +506,7 @@ def serve_clash(args: argparse.Namespace) -> int:
         server_domain=getattr(args, "server_domain", ""),
         snell_runtime_dir=getattr(args, "snell_runtime_dir", SNELL_RUNTIME_DIR),
         snell_reload_command=getattr(args, "snell_reload_command", ""),
+        rules_base_url=getattr(args, "rules_base_url", ""),
     )
     try:
         server.serve_forever()

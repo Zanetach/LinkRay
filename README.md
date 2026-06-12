@@ -155,6 +155,7 @@ linkray protocols --json
 | `/sub/<token>/v2ray-json` | v2ray JSON path from the underlying subscription layer when available |
 | `/linkray/ports.html` | Compatibility redirect to `/dashboard/` |
 | `/linkray/ports.json` | Proxy to `/api/linkray/nodes` |
+| `/linkray/rules/` | Locally cached MetaCubeX rule assets for client subscriptions |
 
 The dashboard link dialog is intentionally client-oriented:
 
@@ -163,6 +164,15 @@ The dashboard link dialog is intentionally client-oriented:
 - sing-box: use for sing-box clients and LinkRay advanced sing-box outbounds.
 - Shadowrocket: use `/shadowrocket` for normal node subscriptions; use `/shadowrocket-conf` only when importing a full configuration.
 - Native/Base subscription: use for v2rayN/v2rayNG and generic import paths.
+
+## Rule Assets
+
+`linkray rules update` refreshes two layers of routing data:
+
+- Compact text rules used by LinkRay's built-in Shadowrocket, Egern, Clash/Mihomo, and sing-box generators.
+- Locally cached [MetaCubeX/meta-rules-dat](https://github.com/MetaCubeX/meta-rules-dat) assets under `/var/lib/marzban/linkray/rules`, including `geoip.dat`, `geosite.dat`, `country.mmdb`, `GeoLite2-ASN.mmdb`, Mihomo `.mrs` rule sets, and sing-box `.srs` rule sets.
+
+The master Nginx config exposes those cached files at `/linkray/rules/`. Clash/Mihomo subscriptions use that local URL for `geox-url` and CN `rule-providers`; sing-box subscriptions use it for remote binary `rule_set` entries. Clients no longer need to download these rule assets directly from GitHub at startup.
 
 ## Sidecar Services
 
@@ -448,7 +458,7 @@ For secondary nodes, LinkRay can advertise master-side relay ports. The first se
 | `linkray snell-usage` | Run the Snell usage sidecar |
 | `linkray sub-auto` | Route base subscription URLs by client headers |
 | `linkray relay` | Expose master-side relay ports for secondary nodes |
-| `linkray rules update` | Refresh CN domain and IP CIDR routing rule files |
+| `linkray rules update` | Refresh CN routing text files and MetaCubeX client rule assets |
 | `linkray protocols` | Show protocol capability status |
 
 ## Verify

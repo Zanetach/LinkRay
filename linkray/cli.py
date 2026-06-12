@@ -247,6 +247,7 @@ def add_clash_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPar
     clash.add_argument("--server-domain", default="")
     clash.add_argument("--snell-runtime-dir", type=Path, default=Path("/var/lib/marzban/linkray/snell"))
     clash.add_argument("--snell-reload-command", default="")
+    clash.add_argument("--rules-base-url", default="")
 
 
 def add_shadowrocket_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -267,6 +268,7 @@ def add_singbox_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentP
     singbox.add_argument("--server-domain", default="")
     singbox.add_argument("--runtime-dir", type=Path, default=Path("/var/lib/marzban/linkray/singbox"))
     singbox.add_argument("--reload-command", default="")
+    singbox.add_argument("--rules-base-url", default="")
     singbox.add_argument(
         "--singbox-inbound",
         action="append",

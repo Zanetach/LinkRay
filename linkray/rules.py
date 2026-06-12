@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ipaddress
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.request import urlopen
@@ -16,6 +17,10 @@ DEFAULT_CN_DOMAIN_SOURCES = (
 DEFAULT_CN_IP_SOURCES = (
     "https://raw.githubusercontent.com/17mon/china_ip_list/master/china_ip_list.txt",
 )
+
+METACUBEX_RELEASE_BASE = "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest"
+METACUBEX_MIHOMO_BASE = "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta"
+METACUBEX_SINGBOX_BASE = "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing"
 
 BUILTIN_CN_DOMAIN_SUFFIXES = (
     "cn",
@@ -132,6 +137,24 @@ class RouteRules:
     cn_ip_cidrs: list[str]
 
 
+@dataclass(frozen=True)
+class MetaCubeXAsset:
+    path: str
+    url: str
+
+
+METACUBEX_ASSETS: tuple[MetaCubeXAsset, ...] = (
+    MetaCubeXAsset("geosite.dat", f"{METACUBEX_RELEASE_BASE}/geosite.dat"),
+    MetaCubeXAsset("geoip.dat", f"{METACUBEX_RELEASE_BASE}/geoip.dat"),
+    MetaCubeXAsset("country.mmdb", f"{METACUBEX_RELEASE_BASE}/country.mmdb"),
+    MetaCubeXAsset("GeoLite2-ASN.mmdb", f"{METACUBEX_RELEASE_BASE}/GeoLite2-ASN.mmdb"),
+    MetaCubeXAsset("mihomo/geosite-cn.mrs", f"{METACUBEX_MIHOMO_BASE}/geo/geosite/cn.mrs"),
+    MetaCubeXAsset("mihomo/geoip-cn.mrs", f"{METACUBEX_MIHOMO_BASE}/geo/geoip/cn.mrs"),
+    MetaCubeXAsset("sing-box/geosite-cn.srs", f"{METACUBEX_SINGBOX_BASE}/geo/geosite/cn.srs"),
+    MetaCubeXAsset("sing-box/geoip-cn.srs", f"{METACUBEX_SINGBOX_BASE}/geo/geoip/cn.srs"),
+)
+
+
 def unique_sorted(values: list[str]) -> list[str]:
     return sorted({value.strip().lower() for value in values if value and value.strip()})
 
@@ -219,6 +242,34 @@ def fetch_text(url: str, timeout: float = 20.0) -> str:
         return response.read().decode("utf-8", errors="ignore")
 
 
+def fetch_bytes(url: str, timeout: float = 20.0) -> bytes:
+    with urlopen(url, timeout=timeout) as response:
+        return response.read()
+
+
+def write_bytes_atomic(path: Path, data: bytes) -> Path:
+    if not data:
+        raise ValueError(f"{path}: refusing to cache empty MetaCubeX asset")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f".{path.name}.tmp")
+    tmp.write_bytes(data)
+    tmp.replace(path)
+    return path
+
+
+def download_metacubex_assets(
+    root: Path,
+    assets: Sequence[MetaCubeXAsset] = METACUBEX_ASSETS,
+    timeout: float = 20.0,
+    fetcher: Callable[[str, float], bytes] = fetch_bytes,
+) -> list[Path]:
+    paths: list[Path] = []
+    for asset in assets:
+        target = root / asset.path
+        paths.append(write_bytes_atomic(target, fetcher(asset.url, timeout)))
+    return paths
+
+
 def update_route_rules(
     output: Path = DEFAULT_RULE_DIR,
     domain_sources: tuple[str, ...] = DEFAULT_CN_DOMAIN_SOURCES,
@@ -233,4 +284,5 @@ def update_route_rules(
         cidrs.extend(parse_cidr_lines(fetch_text(source, timeout=timeout)))
     rules = RouteRules(cn_domain_suffixes=unique_sorted(domains), cn_ip_cidrs=unique_sorted(cidrs))
     write_route_rules(output, rules)
+    download_metacubex_assets(output, timeout=timeout)
     return rules

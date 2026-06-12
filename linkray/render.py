@@ -414,6 +414,12 @@ def nginx_panel(config: LinkRayConfig) -> str:
         proxy_set_header X-Forwarded-Proto $scheme;
         add_header Cache-Control "no-store" always;
     }}
+
+    location /linkray/rules/ {{
+        alias /var/lib/marzban/linkray/rules/;
+        default_type application/octet-stream;
+        add_header Cache-Control "public, max-age=3600" always;
+    }}
 }}
 """
 
@@ -576,6 +582,7 @@ def linkray_egern_service(config: LinkRayConfig) -> str:
 
 
 def linkray_clash_service(config: LinkRayConfig) -> str:
+    rules_base_url = f"https://{config.domain}:{config.panel_port}/linkray/rules"
     return f"""[Unit]
 Description=LinkRay Clash/Mihomo subscription adapter
 After=network-online.target
@@ -583,7 +590,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/linkray clash --listen 127.0.0.1 --port 61991 --marzban-url http://127.0.0.1:{config.marzban_http_port} --server-domain {shlex.quote(config.domain)}
+ExecStart=/usr/local/bin/linkray clash --listen 127.0.0.1 --port 61991 --marzban-url http://127.0.0.1:{config.marzban_http_port} --server-domain {shlex.quote(config.domain)} --rules-base-url {shlex.quote(rules_base_url)}
 Restart=always
 RestartSec=3
 
@@ -615,6 +622,7 @@ def linkray_singbox_service(config: LinkRayConfig) -> str:
     )
     if inbound_flags:
         inbound_flags = " " + inbound_flags
+    rules_base_url = f"https://{config.domain}:{config.panel_port}/linkray/rules"
     return f"""[Unit]
 Description=LinkRay sing-box subscription adapter
 After=network-online.target linkray-singbox-runtime.service
@@ -622,7 +630,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/linkray sing-box --listen 127.0.0.1 --port 61995 --marzban-url http://127.0.0.1:{config.marzban_http_port} --server-domain {shlex.quote(config.domain)} --runtime-dir {DEFAULT_RUNTIME_DIR}{inbound_flags} --reload-command 'systemctl try-restart linkray-singbox-runtime'
+ExecStart=/usr/local/bin/linkray sing-box --listen 127.0.0.1 --port 61995 --marzban-url http://127.0.0.1:{config.marzban_http_port} --server-domain {shlex.quote(config.domain)} --runtime-dir {DEFAULT_RUNTIME_DIR}{inbound_flags} --reload-command 'systemctl try-restart linkray-singbox-runtime' --rules-base-url {shlex.quote(rules_base_url)}
 Restart=always
 RestartSec=3
 

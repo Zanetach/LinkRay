@@ -239,6 +239,29 @@ def convert_link(link: str) -> dict[str, Any] | None:
     return None
 
 
+def clean_rules_base_url(rules_base_url: str | None) -> str:
+    return (rules_base_url or "").rstrip("/")
+
+
+def metacubex_rule_sets(rules_base_url: str) -> list[dict[str, Any]]:
+    return [
+        {
+            "tag": "linkray-geosite-cn",
+            "type": "remote",
+            "format": "binary",
+            "url": f"{rules_base_url}/sing-box/geosite-cn.srs",
+            "download_detour": "DIRECT",
+        },
+        {
+            "tag": "linkray-geoip-cn",
+            "type": "remote",
+            "format": "binary",
+            "url": f"{rules_base_url}/sing-box/geoip-cn.srs",
+            "download_detour": "DIRECT",
+        },
+    ]
+
+
 def build_group_outbounds(names: list[str]) -> list[dict[str, Any]]:
     if not names:
         return [
@@ -264,7 +287,7 @@ def build_group_outbounds(names: list[str]) -> list[dict[str, Any]]:
     ]
 
 
-def build_route_rules(route_rules: RouteRules) -> list[dict[str, Any]]:
+def build_route_rules(route_rules: RouteRules, use_rule_sets: bool = False) -> list[dict[str, Any]]:
     rules: list[dict[str, Any]] = [
         {"ip_is_private": True, "outbound": "国内站点"},
         {"domain_suffix": ["local"], "outbound": "国内站点"},
@@ -276,6 +299,9 @@ def build_route_rules(route_rules: RouteRules) -> list[dict[str, Any]]:
         rules.append({"domain_suffix": [domain], "outbound": "国内站点"})
     if route_rules.cn_ip_cidrs:
         rules.append({"ip_cidr": route_rules.cn_ip_cidrs, "outbound": "国内站点"})
+    if use_rule_sets:
+        rules.append({"rule_set": ["linkray-geosite-cn"], "outbound": "国内站点"})
+        rules.append({"rule_set": ["linkray-geoip-cn"], "outbound": "国内站点"})
     return rules
 
 
@@ -285,6 +311,7 @@ def build_singbox_json(
     config: LinkRayConfig | None = None,
     advanced_user: SingBoxUser | None = None,
     protocol_preferences: ProtocolPreferences | None = None,
+    rules_base_url: str | None = None,
 ) -> str:
     outbounds: list[dict[str, Any]] = []
     seen: set[str] = set()
@@ -310,6 +337,7 @@ def build_singbox_json(
 
     names = [str(outbound["tag"]) for outbound in outbounds]
     effective_rules = route_rules or load_route_rules()
+    clean_base = clean_rules_base_url(rules_base_url)
     data = {
         "log": {"level": "warning"},
         "dns": {
@@ -344,7 +372,7 @@ def build_singbox_json(
             *build_group_outbounds(names),
         ],
         "route": {
-            "rules": build_route_rules(effective_rules),
+            "rules": build_route_rules(effective_rules, use_rule_sets=bool(clean_base)),
             "final": "漏网之鱼",
             "auto_detect_interface": True,
         },
@@ -355,6 +383,8 @@ def build_singbox_json(
             }
         },
     }
+    if clean_base:
+        data["route"]["rule_set"] = metacubex_rule_sets(clean_base)
     return json.dumps(data, ensure_ascii=False, indent=2, separators=(",", ": ")) + "\n"
 
 
@@ -364,6 +394,7 @@ class SingBoxHandler(AdapterHandler):
     reload_command = ""
     singbox_inbound_ports = ()
     protocol_preferences_path = DEFAULT_PROTOCOL_PREFS_PATH
+    rules_base_url = ""
 
     def do_GET(self) -> None:
         path = urlparse(self.path).path
@@ -400,6 +431,7 @@ class SingBoxHandler(AdapterHandler):
                 config=config,
                 advanced_user=advanced_user,
                 protocol_preferences=protocol_preferences,
+                rules_base_url=self.rules_base_url,
             ).encode("utf-8")
         except HTTPError as exc:
             self.send_bytes(exc.code, dict(exc.headers.items()), exc.read() or b"upstream error\n")
@@ -447,6 +479,7 @@ def make_singbox_server(
     reload_command: str = "",
     singbox_inbound_ports=(),
     protocol_preferences_path=DEFAULT_PROTOCOL_PREFS_PATH,
+    rules_base_url: str = "",
 ) -> ThreadingHTTPServer:
     class Handler(SingBoxHandler):
         pass
@@ -457,6 +490,7 @@ def make_singbox_server(
     Handler.reload_command = reload_command
     Handler.singbox_inbound_ports = singbox_inbound_ports
     Handler.protocol_preferences_path = protocol_preferences_path
+    Handler.rules_base_url = rules_base_url
     return ThreadingHTTPServer((listen, port), Handler)
 
 
@@ -469,6 +503,7 @@ def serve_singbox(args: argparse.Namespace) -> int:
         runtime_dir=getattr(args, "runtime_dir", DEFAULT_RUNTIME_DIR),
         reload_command=getattr(args, "reload_command", ""),
         singbox_inbound_ports=parse_singbox_inbound_ports(getattr(args, "singbox_inbound", None)),
+        rules_base_url=getattr(args, "rules_base_url", ""),
     )
     try:
         server.serve_forever()
