@@ -50,7 +50,8 @@ v0.1.1 adds production network acceleration to the deployment contract. Fresh ma
               |                             |
               | Docker: LinkRay panel       |
               | Host: Nginx                 |
-              | Host: linkray-* sidecars    |
+              | Host: subscription/API sidecars |
+              | Host: usage accounting sidecars |
               | Host: Xray-core runtime     |
               | Host: sing-box runtime      |
               | Host: Snell runtime         |
@@ -67,7 +68,7 @@ v0.1.1 adds production network acceleration to the deployment contract. Fresh ma
               | Host: Xray-core runtime     |
               | Host: sing-box runtime      |
               | Host: Snell runtime         |
-              | Host: usage sidecars        |
+              | Host: usage accounting sidecars |
               +-----------------------------+
 ```
 
@@ -164,6 +165,8 @@ The dashboard link dialog is intentionally client-oriented:
 - Native/Base subscription: use for v2rayN/v2rayNG and generic import paths.
 
 ## Sidecar Services
+
+Usage accounting sidecars are the small LinkRay services and jobs that collect traffic from runtimes that are not counted directly by the panel runtime path, then write those deltas back into the internal usage tables. On the master this includes the mounted `linkray_singbox_usages.py` panel job plus `linkray-snell-usage.service`. On a node this includes the host `linkray-snell-usage.service` for local Snell traffic deltas.
 
 Rendered master deployments include these LinkRay-managed units:
 
