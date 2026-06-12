@@ -135,6 +135,9 @@
             .linkray-hidden-dashboard-donate {
               display: none !important;
             }
+            .linkray-hidden-dashboard-footer {
+              display: none !important;
+            }
           `;
 
           function ensureStyle() {
@@ -264,6 +267,30 @@
               });
           }
 
+          function hideMarzbanFooter() {
+            const footerText = /(Marzban|Gozargah|Made with)/i;
+            const footerLinks = Array.from(document.querySelectorAll("a"))
+              .filter((node) => footerText.test(textOf(node)) || footerText.test(node.getAttribute("href") || ""));
+            footerLinks.forEach((node) => {
+              let target = null;
+              for (let current = node; current && current !== document.body; current = current.parentElement) {
+                const text = textOf(current);
+                const box = current.getBoundingClientRect();
+                if (
+                  footerText.test(text) &&
+                  box.width <= 700 &&
+                  box.height <= 120 &&
+                  text.length <= 180
+                ) {
+                  target = current;
+                }
+              }
+              if (!target) return;
+              target.classList.add("linkray-hidden-dashboard-footer");
+              target.setAttribute("aria-hidden", "true");
+            });
+          }
+
           function parseCreateUserBody(body) {
             if (!body) return null;
             if (typeof body === "string") {
@@ -322,6 +349,7 @@
               ensureStyle();
               injectAdvancedProtocolSelector();
               hideDonateEntry();
+              hideMarzbanFooter();
               protocols.forEach((protocol) => {
                 titleElements(protocol.name).forEach((titleNode) => {
                   const target = detailTarget(titleNode);
