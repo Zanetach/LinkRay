@@ -209,6 +209,12 @@ class RenderTests(unittest.TestCase):
             self.assertIn("location ~ ^/sub/[^/]+/sing-box/?$", nginx)
             self.assertIn("proxy_pass http://127.0.0.1:61995", nginx)
             self.assertIn("location = /statics/index.linkray.js", nginx)
+            self.assertIn('add_header Cache-Control "no-store" always;', nginx)
+            self.assertRegex(
+                nginx,
+                r"location / \{[\s\S]*?proxy_pass http://127\.0\.0\.1:8000;[\s\S]*?"
+                r'add_header Cache-Control "no-store" always;',
+            )
             self.assertIn("location /api/linkray/", nginx)
             self.assertIn("location = /linkray/ports.html", nginx)
             self.assertIn("return 302 /dashboard/", nginx)

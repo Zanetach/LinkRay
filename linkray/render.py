@@ -267,13 +267,13 @@ def nginx_panel(config: LinkRayConfig) -> str:
     location = /statics/{DASHBOARD_PATCH_JS} {{
         alias /var/lib/marzban/dashboard-patches/{DASHBOARD_PATCH_JS};
         default_type application/javascript;
-        add_header Cache-Control "no-store";
+        add_header Cache-Control "no-store" always;
     }}
 
     location = /statics/index.a1cce931.js {{
         alias /var/lib/marzban/dashboard-patches/index.original.js;
         default_type application/javascript;
-        add_header Cache-Control "no-store";
+        add_header Cache-Control "no-store" always;
     }}
 
     location ~ ^/sub/[^/]+/?$ {{
@@ -286,7 +286,7 @@ def nginx_panel(config: LinkRayConfig) -> str:
         proxy_set_header User-Agent $http_user_agent;
         proxy_set_header Accept $http_accept;
         proxy_set_header Accept-Language $http_accept_language;
-        add_header Cache-Control "no-store";
+        add_header Cache-Control "no-store" always;
     }}
 
     location ~ ^/sub/[^/]+/clash-meta/?$ {{
@@ -299,7 +299,7 @@ def nginx_panel(config: LinkRayConfig) -> str:
         proxy_set_header User-Agent $http_user_agent;
         proxy_set_header Accept $http_accept;
         proxy_set_header Accept-Language $http_accept_language;
-        add_header Cache-Control "no-store";
+        add_header Cache-Control "no-store" always;
     }}
 
     location ~ ^/sub/[^/]+/egern/?$ {{
@@ -312,7 +312,7 @@ def nginx_panel(config: LinkRayConfig) -> str:
         proxy_set_header User-Agent $http_user_agent;
         proxy_set_header Accept $http_accept;
         proxy_set_header Accept-Language $http_accept_language;
-        add_header Cache-Control "no-store";
+        add_header Cache-Control "no-store" always;
     }}
 
     location ~ ^/sub/[^/]+/(shadowrocket|shadowrocket-conf)/?$ {{
@@ -325,7 +325,7 @@ def nginx_panel(config: LinkRayConfig) -> str:
         proxy_set_header User-Agent $http_user_agent;
         proxy_set_header Accept $http_accept;
         proxy_set_header Accept-Language $http_accept_language;
-        add_header Cache-Control "no-store";
+        add_header Cache-Control "no-store" always;
     }}
 
     location ~ ^/sub/[^/]+/sing-box/?$ {{
@@ -338,7 +338,7 @@ def nginx_panel(config: LinkRayConfig) -> str:
         proxy_set_header User-Agent $http_user_agent;
         proxy_set_header Accept $http_accept;
         proxy_set_header Accept-Language $http_accept_language;
-        add_header Cache-Control "no-store";
+        add_header Cache-Control "no-store" always;
     }}
 
     location / {{
@@ -350,6 +350,7 @@ def nginx_panel(config: LinkRayConfig) -> str:
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
+        add_header Cache-Control "no-store" always;
     }}
 
     location /api/linkray/ {{
@@ -359,7 +360,7 @@ def nginx_panel(config: LinkRayConfig) -> str:
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-        add_header Cache-Control "no-store";
+        add_header Cache-Control "no-store" always;
     }}
 
     location = /linkray/ports.html {{
@@ -373,7 +374,7 @@ def nginx_panel(config: LinkRayConfig) -> str:
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-        add_header Cache-Control "no-store";
+        add_header Cache-Control "no-store" always;
     }}
 }}
 """
