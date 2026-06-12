@@ -82,6 +82,7 @@
             { key: "anytls", name: "AnyTLS", detail: "sing-box TLS，通用兼容" },
             { key: "snell", name: "Snell", detail: "Shadowrocket / Surge 优先" },
           ];
+          const linkrayRepoUrl = "https://github.com/Zanetach/LinkRay";
 
           const styleText = `
             .linkray-protocol-card-detail {
@@ -291,6 +292,40 @@
             });
           }
 
+          function retargetStarEntry() {
+            const legacyRepo = /github\.com\/Gozargah\/Marzban|github\.com\/Gozargah/i;
+            const starText = /(^|\s)Star(\s|$)|Star Marzban/i;
+            Array.from(document.querySelectorAll("a[href],button,[role='button']"))
+              .filter((node) => {
+                const href = node.getAttribute("href") || "";
+                const label = node.getAttribute("aria-label") || "";
+                return legacyRepo.test(href) || starText.test(textOf(node)) || starText.test(label);
+              })
+              .forEach((node) => {
+                if (node.tagName === "A") {
+                  node.setAttribute("href", linkrayRepoUrl);
+                  node.setAttribute("target", "_blank");
+                  node.setAttribute("rel", "noopener noreferrer");
+                }
+                node.setAttribute("aria-label", "Star LinkRay on GitHub");
+                node.setAttribute("title", "Star LinkRay on GitHub");
+              });
+
+            Array.from(document.querySelectorAll("iframe"))
+              .filter((node) => /github|ghbtn|button/i.test(node.getAttribute("src") || ""))
+              .forEach((node) => {
+                try {
+                  const src = new URL(node.getAttribute("src"), window.location.origin);
+                  src.searchParams.set("user", "Zanetach");
+                  src.searchParams.set("repo", "LinkRay");
+                  node.setAttribute("src", src.toString());
+                  node.setAttribute("title", "Star LinkRay on GitHub");
+                } catch (_) {
+                  node.setAttribute("title", "Star LinkRay on GitHub");
+                }
+              });
+          }
+
           function parseCreateUserBody(body) {
             if (!body) return null;
             if (typeof body === "string") {
@@ -350,6 +385,7 @@
               injectAdvancedProtocolSelector();
               hideDonateEntry();
               hideMarzbanFooter();
+              retargetStarEntry();
               protocols.forEach((protocol) => {
                 titleElements(protocol.name).forEach((titleNode) => {
                   const target = detailTarget(titleNode);
