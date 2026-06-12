@@ -28,6 +28,7 @@ class PortProbeResult:
     node: str
     domain: str
     runtime: str
+    transport: str
     inbound_tag: str
     port: int
     status: str
@@ -39,6 +40,7 @@ class PortProbeResult:
             "node": self.node,
             "domain": self.domain,
             "runtime": self.runtime,
+            "transport": self.transport,
             "inbound_tag": self.inbound_tag,
             "port": self.port,
             "status": self.status,
@@ -51,6 +53,7 @@ class PortProbeResult:
 class PortSpec:
     key: str
     runtime: str
+    transport: str
     inbound_tag: str
     port: int
 
@@ -61,12 +64,23 @@ def _runtime_specs(
     tags: Sequence[str],
     defaults: dict[str, int],
     overrides: Sequence[tuple[str, int]] | None = None,
+    transports: dict[str, str] | None = None,
 ) -> list[PortSpec]:
     tag_map = dict(zip(keys, tags))
     ports = dict(defaults)
     if overrides:
         ports.update(dict(overrides))
-    return [PortSpec(key=key, runtime=runtime, inbound_tag=tag_map[key], port=ports[key]) for key in keys]
+    transport_map = transports or {}
+    return [
+        PortSpec(
+            key=key,
+            runtime=runtime,
+            transport=transport_map.get(key, "tcp"),
+            inbound_tag=tag_map[key],
+            port=ports[key],
+        )
+        for key in keys
+    ]
 
 
 def port_specs(
@@ -82,6 +96,7 @@ def port_specs(
             SINGBOX_INBOUND_TAGS,
             SINGBOX_DEFAULT_PORTS,
             singbox_inbound_ports,
+            transports={"hysteria2": "udp", "tuic": "udp"},
         ),
         *_runtime_specs("snell", SNELL_PORT_KEYS, SNELL_INBOUND_TAGS, SNELL_DEFAULT_PORTS, snell_inbound_ports),
     ]
@@ -100,6 +115,25 @@ def tcp_probe(host: str, port: int, timeout: float) -> tuple[str, int | None, st
     return "open", max(0, round((time.monotonic() - start) * 1000)), None
 
 
+def udp_probe(host: str, port: int, timeout: float) -> tuple[str, int | None, str | None]:
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.settimeout(timeout)
+    try:
+        sock.connect((host, port))
+        sock.send(b"\x00")
+    except OSError as exc:
+        return "closed", None, str(exc)
+    finally:
+        sock.close()
+    return "open", None, None
+
+
+def probe_spec(host: str, spec: PortSpec, timeout: float) -> tuple[str, int | None, str | None]:
+    if spec.transport == "udp":
+        return udp_probe(host, spec.port, timeout=timeout)
+    return tcp_probe(host, spec.port, timeout=timeout)
+
+
 def probe_ports(
     nodes: Sequence[NodeHost],
     timeout: float = 2.0,
@@ -116,12 +150,13 @@ def probe_ports(
     for node in nodes:
         node.validate()
         for spec in specs:
-            status, latency_ms, error = tcp_probe(node.domain, spec.port, timeout=timeout)
+            status, latency_ms, error = probe_spec(node.domain, spec, timeout=timeout)
             results.append(
                 PortProbeResult(
                     node=node.name,
                     domain=node.domain,
                     runtime=spec.runtime,
+                    transport=spec.transport,
                     inbound_tag=spec.inbound_tag,
                     port=spec.port,
                     status=status,

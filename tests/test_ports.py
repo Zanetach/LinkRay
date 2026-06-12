@@ -14,7 +14,9 @@ class PortStatusTests(unittest.TestCase):
                 return "closed", None, "timeout"
             return "open", 12, None
 
-        with patch("linkray.ports.tcp_probe", side_effect=fake_probe):
+        with patch("linkray.ports.tcp_probe", side_effect=fake_probe), patch(
+            "linkray.ports.udp_probe", side_effect=fake_probe
+        ):
             data = probe_ports(
                 [
                     NodeHost("edge-a", "edge-a.example.com"),
@@ -28,6 +30,7 @@ class PortStatusTests(unittest.TestCase):
         self.assertEqual(data["closed"], 1)
         self.assertIn("Snell", {item["inbound_tag"] for item in data["results"]})
         self.assertIn("snell", {item["runtime"] for item in data["results"]})
+        self.assertIn("udp", {item["transport"] for item in data["results"]})
         failed = [item for item in data["results"] if item["status"] == "closed"]
         self.assertEqual(failed[0]["node"], "edge-a")
         self.assertEqual(failed[0]["port"], 18081)
@@ -39,7 +42,9 @@ class PortStatusTests(unittest.TestCase):
             seen_ports.append(port)
             return "open", 7, None
 
-        with patch("linkray.ports.tcp_probe", side_effect=fake_probe):
+        with patch("linkray.ports.tcp_probe", side_effect=fake_probe), patch(
+            "linkray.ports.udp_probe", side_effect=fake_probe
+        ):
             data = probe_ports(
                 [NodeHost("edge-a", "edge-a.example.com")],
                 timeout=0.1,
@@ -60,13 +65,16 @@ class PortStatusTests(unittest.TestCase):
     def test_write_ports_json_creates_parent_directory(self):
         with tempfile.TemporaryDirectory() as tmp:
             output = Path(tmp) / "nested/ports.json"
-            with patch("linkray.ports.tcp_probe", return_value=("open", 8, None)):
+            with patch("linkray.ports.tcp_probe", return_value=("open", 8, None)), patch(
+                "linkray.ports.udp_probe", return_value=("open", None, None)
+            ):
                 write_ports_json([NodeHost("edge-a", "edge-a.example.com")], output)
 
             text = output.read_text()
             self.assertIn('"total": 16', text)
             self.assertIn('"open": 16', text)
             self.assertIn('"inbound_tag": "Snell"', text)
+            self.assertIn('"transport": "udp"', text)
 
 
 if __name__ == "__main__":

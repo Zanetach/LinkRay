@@ -44,7 +44,9 @@ class ApiTests(unittest.TestCase):
             return "open", 7, None
 
         base = self.start_server(ttl=60)
-        with patch("linkray.ports.tcp_probe", side_effect=fake_probe):
+        with patch("linkray.ports.tcp_probe", side_effect=fake_probe), patch(
+            "linkray.ports.udp_probe", side_effect=fake_probe
+        ):
             _, first = self.get_json(f"{base}/nodes")
             _, second = self.get_json(f"{base}/nodes")
 
@@ -53,6 +55,7 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(second["total"], 32)
         self.assertEqual(len(calls), 32)
         self.assertIn("Snell", {item["inbound_tag"] for item in first["results"]})
+        self.assertIn("udp", {item["transport"] for item in first["results"]})
 
     def test_refresh_endpoint_forces_new_probe(self):
         calls = []
@@ -62,7 +65,9 @@ class ApiTests(unittest.TestCase):
             return "open", 7, None
 
         base = self.start_server(ttl=60)
-        with patch("linkray.ports.tcp_probe", side_effect=fake_probe):
+        with patch("linkray.ports.tcp_probe", side_effect=fake_probe), patch(
+            "linkray.ports.udp_probe", side_effect=fake_probe
+        ):
             self.get_json(f"{base}/nodes")
             request = Request(f"{base}/nodes/refresh", method="POST")
             with urlopen(request, timeout=3) as response:
