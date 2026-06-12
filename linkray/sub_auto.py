@@ -64,6 +64,9 @@ class SubAutoHandler(BaseHTTPRequestHandler):
     def log_message(self, format: str, *args: object) -> None:
         return
 
+    def do_HEAD(self) -> None:
+        self.do_GET()
+
     def do_GET(self) -> None:
         path = urlparse(self.path).path
         if path == "/health":
@@ -106,7 +109,8 @@ class SubAutoHandler(BaseHTTPRequestHandler):
                 self.send_header(name, value)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
-        self.wfile.write(body)
+        if self.command != "HEAD":
+            self.wfile.write(body)
 
 
 def make_sub_auto_server(

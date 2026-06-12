@@ -1,7 +1,10 @@
+import http.client
+import threading
 import unittest
+from http.server import ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-from linkray._http import first_query_value, parse_link_netloc
+from linkray._http import AdapterHandler, first_query_value, parse_link_netloc
 
 
 class FirstQueryValueTests(unittest.TestCase):
@@ -47,6 +50,33 @@ class ParseLinkNetlocTests(unittest.TestCase):
     def test_handles_ip_address(self):
         result = parse_link_netloc(self._p("vless://uuid@1.2.3.4:443"))
         self.assertEqual(result, ("1.2.3.4", 443))
+
+
+class AdapterHandlerTests(unittest.TestCase):
+    def test_head_reuses_get_headers_without_body(self):
+        body = b"adapter body\n"
+
+        class Handler(AdapterHandler):
+            def do_GET(self) -> None:
+                self.send_bytes(200, {"Content-Type": "text/plain"}, body)
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            conn = http.client.HTTPConnection("127.0.0.1", server.server_address[1], timeout=3)
+            conn.request("HEAD", "/sub/token/shadowrocket")
+            response = conn.getresponse()
+            payload = response.read()
+            conn.close()
+
+            self.assertEqual(response.status, 200)
+            self.assertEqual(response.getheader("Content-Type"), "text/plain")
+            self.assertEqual(response.getheader("Content-Length"), str(len(body)))
+            self.assertEqual(payload, b"")
+        finally:
+            server.shutdown()
+            server.server_close()
 
 
 if __name__ == "__main__":

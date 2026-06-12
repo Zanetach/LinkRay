@@ -54,6 +54,9 @@ class AdapterHandler(BaseHTTPRequestHandler):
     def log_message(self, format: str, *args: object) -> None:
         return
 
+    def do_HEAD(self) -> None:
+        self.do_GET()  # type: ignore[attr-defined]
+
     def send_bytes(self, status: int, headers: Mapping[str, str], body: bytes) -> None:
         self.send_response(status)
         self.send_header("Cache-Control", "no-store")
@@ -62,4 +65,5 @@ class AdapterHandler(BaseHTTPRequestHandler):
                 self.send_header(name, value)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
-        self.wfile.write(body)
+        if self.command != "HEAD":
+            self.wfile.write(body)

@@ -1,6 +1,9 @@
+import http.client
+import threading
 import unittest
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from linkray.sub_auto import PASS_HEADERS, choose_suffix, parse_token, upstream_url_for_suffix
+from linkray.sub_auto import PASS_HEADERS, choose_suffix, make_sub_auto_server, parse_token, upstream_url_for_suffix
 
 
 class SubAutoTests(unittest.TestCase):
@@ -34,6 +37,55 @@ class SubAutoTests(unittest.TestCase):
 
     def test_forwarded_headers_do_not_expose_internal_profile_url(self):
         self.assertNotIn("profile-web-page-url", PASS_HEADERS)
+
+    def test_head_returns_headers_without_body(self):
+        body = b"proxies: []\n"
+
+        class UpstreamHandler(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:
+                if self.path == "/sub/token/egern":
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/yaml")
+                    self.end_headers()
+                    self.wfile.write(body)
+                    return
+                self.send_response(404)
+                self.end_headers()
+
+            def log_message(self, format: str, *args: object) -> None:
+                return
+
+        upstream = ThreadingHTTPServer(("127.0.0.1", 0), UpstreamHandler)
+        upstream_thread = threading.Thread(target=upstream.serve_forever, daemon=True)
+        upstream_thread.start()
+        upstream_url = f"http://127.0.0.1:{upstream.server_address[1]}"
+        adapter = make_sub_auto_server(
+            "127.0.0.1",
+            0,
+            marzban_url=upstream_url,
+            clash_url=upstream_url,
+            egern_url=upstream_url,
+            shadowrocket_url=upstream_url,
+            singbox_url=upstream_url,
+        )
+        adapter_thread = threading.Thread(target=adapter.serve_forever, daemon=True)
+        adapter_thread.start()
+        try:
+            conn = http.client.HTTPConnection("127.0.0.1", adapter.server_address[1], timeout=3)
+            conn.request("HEAD", "/sub/token", headers={"User-Agent": "Egern/1.0", "Accept": "*/*"})
+            response = conn.getresponse()
+            payload = response.read()
+            conn.close()
+
+            self.assertEqual(response.status, 200)
+            self.assertEqual(response.getheader("Content-Type"), "text/yaml")
+            self.assertEqual(response.getheader("Content-Length"), str(len(body)))
+            self.assertEqual(payload, b"")
+        finally:
+            adapter.shutdown()
+            adapter.server_close()
+            upstream.shutdown()
+            upstream.server_close()
 
 
 if __name__ == "__main__":
