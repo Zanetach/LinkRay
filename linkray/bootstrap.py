@@ -11,7 +11,7 @@ from typing import Protocol
 
 from .config import LinkRayConfig, NodeHost
 from .install import install_master, install_node
-from .render import default_nodes
+from .render import default_nodes, network_tuning_modules, network_tuning_sysctl
 
 
 DEFAULT_NODE_REMOTE_CERT_PATH = "/var/lib/marzban/ssl_client_cert.pem"
@@ -63,7 +63,7 @@ def command_action(command: str, apply: bool, runner: ShellRunner) -> BootstrapA
 def dependency_commands(include_docker: bool = True) -> list[str]:
     commands = [
         "apt-get update",
-        "DEBIAN_FRONTEND=noninteractive apt-get install -y curl ca-certificates gnupg nginx sqlite3 socat cron unzip openssh-client git build-essential tar nftables python3 python3-venv python3-pip",
+        "DEBIAN_FRONTEND=noninteractive apt-get install -y curl ca-certificates gnupg nginx sqlite3 socat cron unzip openssh-client git build-essential tar nftables iproute2 kmod python3 python3-venv python3-pip",
     ]
     if include_docker:
         commands.extend(
@@ -90,6 +90,23 @@ def node_docker_cleanup_commands() -> list[str]:
         "if command -v docker >/dev/null 2>&1; then docker update --restart=no linkray-node 2>/dev/null || true; fi",
         "if command -v docker >/dev/null 2>&1; then docker stop linkray-node 2>/dev/null || true; fi",
         "if command -v docker >/dev/null 2>&1; then docker rm -f marzban-node-marzban-node-1 2>/dev/null || true; fi",
+    ]
+
+
+def network_tuning_commands() -> list[str]:
+    sysctl_text = shell_quote(network_tuning_sysctl())
+    modules_text = shell_quote(network_tuning_modules())
+    return [
+        "mkdir -p /etc/sysctl.d /etc/modules-load.d",
+        f"printf %s {modules_text} > /etc/modules-load.d/linkray-bbr.conf",
+        f"printf %s {sysctl_text} > /etc/sysctl.d/99-linkray-network.conf",
+        "modprobe tcp_bbr || true",
+        "sysctl --system",
+        (
+            "default_if=$(ip route show default 2>/dev/null | "
+            "sed -n 's/.* dev \\([^ ]*\\).*/\\1/p' | head -1) && "
+            "if [ -n \"$default_if\" ]; then tc qdisc replace dev \"$default_if\" root fq 2>/dev/null || true; fi"
+        ),
     ]
 
 
@@ -284,6 +301,7 @@ def master_preinstall_runtime_commands(
     cf_token_env: str,
 ) -> list[str]:
     commands = dependency_commands()
+    commands.extend(network_tuning_commands())
     if issue_cert:
         commands.extend(cert_commands(config, cf_token_env))
     commands.extend(xray_binary_commands())
@@ -329,6 +347,7 @@ def node_runtime_commands(
     advanced_runtime: bool = False,
 ) -> list[str]:
     commands = dependency_commands(include_docker=False)
+    commands.extend(network_tuning_commands())
     if pull_cert_from:
         commands.extend(pull_node_cert_commands(pull_cert_from, remote_cert_path, local_cert_path))
     commands.extend(xray_binary_commands())

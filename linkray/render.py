@@ -36,6 +36,23 @@ DASHBOARD_SOURCE_PATCH_ROOT = first_existing_path(
 NODE_APP_ROOT = first_existing_path(PROJECT_ROOT / "linkray/assets/marzban-node-host", PACKAGE_ROOT / "assets/marzban-node-host")
 
 
+def network_tuning_sysctl() -> str:
+    return "\n".join(
+        [
+            "net.core.default_qdisc=fq",
+            "net.ipv4.tcp_congestion_control=bbr",
+            "net.ipv4.tcp_mtu_probing=1",
+            "net.ipv4.tcp_slow_start_after_idle=0",
+            "net.ipv4.tcp_fastopen=3",
+            "",
+        ]
+    )
+
+
+def network_tuning_modules() -> str:
+    return "tcp_bbr\n"
+
+
 def tls_stream(config: LinkRayConfig) -> dict:
     return {
         "network": "tcp",
@@ -902,6 +919,8 @@ def render_master(
         write_text(output / "etc/systemd/system/linkray-rules-update.service", linkray_rules_update_service()),
         write_text(output / "etc/systemd/system/linkray-rules-update.timer", linkray_rules_update_timer()),
         write_text(output / "etc/systemd/system/linkray-relay.service", linkray_relay_service(effective_nodes, config)),
+        write_text(output / "etc/sysctl.d/99-linkray-network.conf", network_tuning_sysctl()),
+        write_text(output / "etc/modules-load.d/linkray-bbr.conf", network_tuning_modules()),
         write_text(output / "var/lib/marzban/linkray/hosts.sql", hosts_sql(config, effective_nodes)),
         write_text(output / "var/lib/marzban/linkray/linkray-manifest.json", render_manifest(config, effective_nodes)),
         write_text(
@@ -953,6 +972,8 @@ def render_node(output: Path, config: LinkRayConfig | None = None) -> RenderResu
         *copy_tree_files(NODE_APP_ROOT, output / "opt/linkray-node-app/current"),
         write_text(output / "etc/systemd/system/linkray-node.service", linkray_node_service()),
         write_text(output / "etc/systemd/system/linkray-xray.service", linkray_xray_service()),
+        write_text(output / "etc/sysctl.d/99-linkray-network.conf", network_tuning_sysctl()),
+        write_text(output / "etc/modules-load.d/linkray-bbr.conf", network_tuning_modules()),
     ]
     if config:
         files.extend(
@@ -1014,6 +1035,12 @@ def validate_rendered(path: Path) -> list[str]:
     ]
     if rendered_xray_runtime_mode(path) == "linkray":
         service_paths.append(path / "etc/systemd/system/linkray-xray.service")
+    service_paths.extend(
+        [
+            path / "etc/sysctl.d/99-linkray-network.conf",
+            path / "etc/modules-load.d/linkray-bbr.conf",
+        ]
+    )
     if (path / "opt/marzban/docker-compose.yml").exists():
         for service_path in service_paths:
             if not service_path.exists():
@@ -1023,6 +1050,8 @@ def validate_rendered(path: Path) -> list[str]:
             path / "opt/linkray-node-app/current/requirements.txt",
             path / "etc/systemd/system/linkray-node.service",
             path / "etc/systemd/system/linkray-xray.service",
+            path / "etc/sysctl.d/99-linkray-network.conf",
+            path / "etc/modules-load.d/linkray-bbr.conf",
         ]
         for required in node_required:
             if not required.exists():

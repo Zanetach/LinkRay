@@ -262,6 +262,8 @@ def file_checks(role: str, root: Path) -> list[Check]:
             "etc/systemd/system/linkray-rules-update.service",
             "etc/systemd/system/linkray-rules-update.timer",
             "etc/systemd/system/linkray-relay.service",
+            "etc/sysctl.d/99-linkray-network.conf",
+            "etc/modules-load.d/linkray-bbr.conf",
             "var/lib/marzban/linkray/rules/cn-domains.txt",
             "var/lib/marzban/linkray/rules/cn-ip-cidrs.txt",
             "var/lib/marzban/linkray/singbox/config.json",
@@ -281,6 +283,8 @@ def file_checks(role: str, root: Path) -> list[Check]:
             "opt/linkray-node-app/current/requirements.txt",
             "etc/systemd/system/linkray-node.service",
             "etc/systemd/system/linkray-xray.service",
+            "etc/sysctl.d/99-linkray-network.conf",
+            "etc/modules-load.d/linkray-bbr.conf",
         ]
         if node_has_advanced_runtime(root):
             required.extend(

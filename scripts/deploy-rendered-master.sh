@@ -34,6 +34,8 @@ test -f "$src/var/lib/marzban/linkray/xray/runtime.json"
 test -f "$src/var/lib/marzban/linkray/singbox/config.json"
 test -f "$src/var/lib/marzban/linkray/singbox/users.json"
 test -f "$src/var/lib/marzban/linkray/snell/snell-server.conf"
+test -f "$src/etc/sysctl.d/99-linkray-network.conf"
+test -f "$src/etc/modules-load.d/linkray-bbr.conf"
 test -f "$src/var/lib/marzban/linkray/rules/cn-domains.txt"
 test -f "$src/var/lib/marzban/linkray/rules/cn-ip-cidrs.txt"
 test -f "$src/var/lib/marzban/linkray/patches/clash.py"
@@ -57,7 +59,9 @@ install -d \
   /var/lib/marzban/linkray/rules \
   /opt/marzban \
   /etc/nginx/conf.d \
-  /etc/systemd/system
+  /etc/systemd/system \
+  /etc/sysctl.d \
+  /etc/modules-load.d
 install -m 0644 "$src/var/lib/marzban/xray_config.json" /var/lib/marzban/xray_config.json
 install -m 0644 "$src/var/lib/marzban/templates/clash/default.yml" /var/lib/marzban/templates/clash/default.yml
 install -m 0644 "$src/var/lib/marzban/templates/subscription/index.html" /var/lib/marzban/templates/subscription/index.html
@@ -69,6 +73,8 @@ install -m 0644 "$src/var/lib/marzban/linkray/xray/runtime.json" /var/lib/marzba
 install -m 0644 "$src/var/lib/marzban/linkray/singbox/config.json" /var/lib/marzban/linkray/singbox/config.json
 test -f /var/lib/marzban/linkray/singbox/users.json || install -m 0644 "$src/var/lib/marzban/linkray/singbox/users.json" /var/lib/marzban/linkray/singbox/users.json
 install -m 0600 "$src/var/lib/marzban/linkray/snell/snell-server.conf" /var/lib/marzban/linkray/snell/snell-server.conf
+install -m 0644 "$src/etc/sysctl.d/99-linkray-network.conf" /etc/sysctl.d/99-linkray-network.conf
+install -m 0644 "$src/etc/modules-load.d/linkray-bbr.conf" /etc/modules-load.d/linkray-bbr.conf
 install -m 0644 "$src/var/lib/marzban/linkray/rules/cn-domains.txt" /var/lib/marzban/linkray/rules/cn-domains.txt
 install -m 0644 "$src/var/lib/marzban/linkray/rules/cn-ip-cidrs.txt" /var/lib/marzban/linkray/rules/cn-ip-cidrs.txt
 install -m 0644 "$src/var/lib/marzban/linkray/patches/clash.py" /var/lib/marzban/linkray/patches/clash.py
@@ -109,6 +115,12 @@ fi
 docker rm -f marzban-marzban-1 2>/dev/null || true
 docker compose up -d --force-recreate --remove-orphans linkray
 sqlite3 /var/lib/marzban/db.sqlite3 < /var/lib/marzban/linkray/hosts.sql
+modprobe tcp_bbr || true
+sysctl --system
+default_if="$(ip route show default 2>/dev/null | sed -n 's/.* dev \([^ ]*\).*/\1/p' | head -1)"
+if [[ -n "$default_if" ]]; then
+  tc qdisc replace dev "$default_if" root fq 2>/dev/null || true
+fi
 systemctl daemon-reload
 if [[ "$linkray_xray_enabled" -eq 1 ]]; then
   systemctl enable --now linkray-xray

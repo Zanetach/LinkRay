@@ -681,6 +681,11 @@ class RenderTests(unittest.TestCase):
             self.assertTrue((root / "etc/systemd/system/linkray-rules-update.timer").exists())
             self.assertTrue((root / "var/lib/marzban/linkray/rules/cn-domains.txt").exists())
             self.assertTrue((root / "var/lib/marzban/linkray/rules/cn-ip-cidrs.txt").exists())
+            self.assertTrue((root / "etc/sysctl.d/99-linkray-network.conf").exists())
+            self.assertTrue((root / "etc/modules-load.d/linkray-bbr.conf").exists())
+            network = (root / "etc/sysctl.d/99-linkray-network.conf").read_text()
+            self.assertIn("net.core.default_qdisc=fq", network)
+            self.assertIn("net.ipv4.tcp_congestion_control=bbr", network)
 
     def test_install_node_apply_copies_host_app_and_services(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -690,6 +695,9 @@ class RenderTests(unittest.TestCase):
             self.assertTrue((root / "opt/linkray-node-app/current/main.py").exists())
             self.assertTrue((root / "etc/systemd/system/linkray-node.service").exists())
             self.assertTrue((root / "etc/systemd/system/linkray-xray.service").exists())
+            self.assertTrue((root / "etc/sysctl.d/99-linkray-network.conf").exists())
+            self.assertTrue((root / "etc/modules-load.d/linkray-bbr.conf").exists())
+            self.assertIn("tcp_bbr", (root / "etc/modules-load.d/linkray-bbr.conf").read_text())
             self.assertFalse((root / "opt/marzban-node/docker-compose.yml").exists())
 
     def test_install_node_with_config_copies_advanced_runtime_files(self):

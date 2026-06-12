@@ -41,6 +41,10 @@ class InstallerTests(unittest.TestCase):
         self.assertIn("var/lib/marzban/linkray/singbox/users.json", script)
         self.assertIn("var/lib/marzban/linkray/xray/runtime.json", script)
         self.assertIn("var/lib/marzban/linkray/snell/snell-server.conf", script)
+        self.assertIn("etc/sysctl.d/99-linkray-network.conf", script)
+        self.assertIn("etc/modules-load.d/linkray-bbr.conf", script)
+        self.assertIn("modprobe tcp_bbr", script)
+        self.assertIn("tc qdisc replace dev", script)
         self.assertIn("var/lib/marzban/linkray/patches/0_xray_core.py", script)
         self.assertIn("var/lib/marzban/linkray/patches/xray_init.py", script)
         self.assertIn("var/lib/marzban/linkray/jobs/linkray_singbox_usages.py", script)
@@ -85,6 +89,10 @@ class InstallerTests(unittest.TestCase):
         self.assertIn("var/lib/marzban/linkray/singbox/config.json", script)
         self.assertIn("var/lib/marzban/linkray/singbox/users.json", script)
         self.assertIn("var/lib/marzban/linkray/snell/snell-server.conf", script)
+        self.assertIn("etc/sysctl.d/99-linkray-network.conf", script)
+        self.assertIn("etc/modules-load.d/linkray-bbr.conf", script)
+        self.assertIn("modprobe tcp_bbr", script)
+        self.assertIn("tc qdisc replace dev", script)
         self.assertIn("systemctl enable --now linkray-singbox-runtime", script)
         self.assertIn("systemctl enable --now linkray-snell-runtime", script)
         self.assertIn("systemctl enable --now linkray-snell-usage", script)
@@ -95,6 +103,9 @@ class InstallerTests(unittest.TestCase):
         self.assertIn("Only the `master` role installs Docker", doc)
         self.assertIn("`linkray bootstrap node` must not install Docker", doc)
         self.assertIn("must not start a container", doc)
+        self.assertIn("BBR/fq network acceleration", doc)
+        self.assertIn("/etc/sysctl.d/99-linkray-network.conf", doc)
+        self.assertIn("tc qdisc replace dev <default-iface> root fq", doc)
 
         for service in [
             "linkray-api",

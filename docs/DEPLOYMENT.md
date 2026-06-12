@@ -49,7 +49,7 @@ linkray bootstrap master \
   --apply
 ```
 
-The master bootstrap writes LinkRay-managed files, installs required system packages, installs Docker when missing, builds sing-box with LinkRay-required tags, obtains the TLS certificate through acme.sh DNS Cloudflare, starts the LinkRay panel container, applies `hosts.sql`, validates Nginx, reloads Nginx, and runs `doctor`.
+The master bootstrap writes LinkRay-managed files, installs required system packages, installs Docker when missing, applies BBR/fq network acceleration, builds sing-box with LinkRay-required tags, obtains the TLS certificate through acme.sh DNS Cloudflare, starts the LinkRay panel container, applies `hosts.sql`, validates Nginx, reloads Nginx, and runs `doctor`.
 
 By default, Xray-core remains LinkRay panel-managed for compatibility with user, subscription, and traffic workflows. To render the optional unified runtime shape where LinkRay owns the Xray systemd unit, pass:
 
@@ -66,6 +66,15 @@ with_v2ray_api with_quic with_utls with_clash_api
 ```
 
 The ordinary upstream release binary does not include the V2Ray API stats service needed by the LinkRay sing-box usage sync job. That job also reconciles active LinkRay usernames with the local sing-box sidecar, pruning disabled, deleted, expired, or limited users from the sing-box runtime config.
+
+Both master and node bootstraps render, install, and apply these network acceleration defaults:
+
+```text
+/etc/sysctl.d/99-linkray-network.conf
+/etc/modules-load.d/linkray-bbr.conf
+```
+
+The sysctl file enables `fq` queueing, `bbr` congestion control, MTU probing, TCP Fast Open, and disables slow start after idle. Runtime bootstrap and rendered deployment scripts also run `modprobe tcp_bbr`, `sysctl --system`, and `tc qdisc replace dev <default-iface> root fq` so the active server benefits immediately without a reboot.
 
 LinkRay also installs the pinned Snell v5 server binary and renders:
 

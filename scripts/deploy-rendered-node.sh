@@ -11,13 +11,17 @@ test -f "$src/opt/linkray-node-app/current/main.py"
 test -f "$src/opt/linkray-node-app/current/requirements.txt"
 test -f "$src/etc/systemd/system/linkray-node.service"
 test -f "$src/etc/systemd/system/linkray-xray.service"
+test -f "$src/etc/sysctl.d/99-linkray-network.conf"
+test -f "$src/etc/modules-load.d/linkray-bbr.conf"
 
 install -d \
   /opt/linkray-node-app \
   /var/lib/marzban/linkray/xray \
   /var/lib/marzban/linkray/singbox \
   /var/lib/marzban/linkray/snell \
-  /etc/systemd/system
+  /etc/systemd/system \
+  /etc/sysctl.d \
+  /etc/modules-load.d
 
 tmp_app="/opt/linkray-node-app/current.tmp"
 rm -rf "$tmp_app"
@@ -32,6 +36,8 @@ python3 -m venv /opt/linkray-node-app/venv
 
 install -m 0644 "$src/etc/systemd/system/linkray-node.service" /etc/systemd/system/linkray-node.service
 install -m 0644 "$src/etc/systemd/system/linkray-xray.service" /etc/systemd/system/linkray-xray.service
+install -m 0644 "$src/etc/sysctl.d/99-linkray-network.conf" /etc/sysctl.d/99-linkray-network.conf
+install -m 0644 "$src/etc/modules-load.d/linkray-bbr.conf" /etc/modules-load.d/linkray-bbr.conf
 
 if [[ -f "$src/etc/systemd/system/linkray-singbox-runtime.service" ]]; then
   test -f "$src/etc/systemd/system/linkray-snell-runtime.service"
@@ -57,6 +63,13 @@ if command -v docker >/dev/null 2>&1; then
   docker update --restart=no linkray-node 2>/dev/null || true
   docker stop linkray-node 2>/dev/null || true
   docker rm -f marzban-node-marzban-node-1 2>/dev/null || true
+fi
+
+modprobe tcp_bbr || true
+sysctl --system
+default_if="$(ip route show default 2>/dev/null | sed -n 's/.* dev \([^ ]*\).*/\1/p' | head -1)"
+if [[ -n "$default_if" ]]; then
+  tc qdisc replace dev "$default_if" root fq 2>/dev/null || true
 fi
 
 systemctl daemon-reload

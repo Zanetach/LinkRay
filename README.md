@@ -155,6 +155,18 @@ with_v2ray_api with_quic with_utls with_clash_api
 
 These tags are required for the advanced runtime and for validating generated sing-box client configs. The ordinary upstream sing-box release binary does not include the V2Ray API stats service required for LinkRay usage sync.
 
+`bootstrap master` and `bootstrap node` also install and apply LinkRay network acceleration defaults:
+
+```text
+net.core.default_qdisc=fq
+net.ipv4.tcp_congestion_control=bbr
+net.ipv4.tcp_mtu_probing=1
+net.ipv4.tcp_slow_start_after_idle=0
+net.ipv4.tcp_fastopen=3
+```
+
+The settings are written to `/etc/sysctl.d/99-linkray-network.conf`, `tcp_bbr` is loaded through `/etc/modules-load.d/linkray-bbr.conf`, and the active default interface is switched to `fq` without requiring a reboot.
+
 ## Fresh Node Bootstrap
 
 Place the LinkRay node client certificate first:
