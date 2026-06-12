@@ -132,6 +132,9 @@
               font-weight: 600;
               margin-top: 2px;
             }
+            .linkray-hidden-dashboard-donate {
+              display: none !important;
+            }
           `;
 
           function ensureStyle() {
@@ -250,6 +253,17 @@
             protocolSection(dialog).appendChild(panel);
           }
 
+          function hideDonateEntry() {
+            const donateLabel = /^(捐赠|Donate)$/i;
+            Array.from(document.querySelectorAll("a,button,[role='button']"))
+              .filter((node) => donateLabel.test(textOf(node)))
+              .forEach((node) => {
+                node.classList.add("linkray-hidden-dashboard-donate");
+                node.setAttribute("aria-hidden", "true");
+                node.setAttribute("tabindex", "-1");
+              });
+          }
+
           function parseCreateUserBody(body) {
             if (!body) return null;
             if (typeof body === "string") {
@@ -307,6 +321,7 @@
             try {
               ensureStyle();
               injectAdvancedProtocolSelector();
+              hideDonateEntry();
               protocols.forEach((protocol) => {
                 titleElements(protocol.name).forEach((titleNode) => {
                   const target = detailTarget(titleNode);
