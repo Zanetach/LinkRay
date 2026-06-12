@@ -76,6 +76,12 @@
               inbounds: ["Shadowsocks TCP UDP"],
             },
           ];
+          const advancedProtocols = [
+            { key: "hysteria2", name: "Hysteria2", detail: "sing-box UDP，高速传输" },
+            { key: "tuic", name: "TUIC", detail: "sing-box UDP，低延迟" },
+            { key: "anytls", name: "AnyTLS", detail: "sing-box TLS，通用兼容" },
+            { key: "snell", name: "Snell", detail: "Shadowrocket / Surge 优先" },
+          ];
 
           const styleText = `
             .linkray-protocol-card-detail {
@@ -90,6 +96,46 @@
             .linkray-protocol-card-detail strong {
               color: #334155;
               font-weight: 700;
+            }
+            .linkray-advanced-protocols {
+              border: 1px solid #dbe4ff;
+              border-radius: 10px;
+              margin-top: 12px;
+              padding: 12px;
+              background: #f8fbff;
+            }
+            .linkray-advanced-protocols-title {
+              color: #0f172a;
+              font-size: 14px;
+              font-weight: 800;
+              margin-bottom: 8px;
+            }
+            .linkray-advanced-protocols-grid {
+              display: grid;
+              gap: 8px;
+              grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+            .linkray-advanced-protocol-card {
+              border: 1px solid #cbd5e1;
+              border-radius: 8px;
+              cursor: pointer;
+              padding: 8px 10px;
+              user-select: none;
+            }
+            .linkray-advanced-protocol-card[data-enabled="true"] {
+              border-color: #4d7de7;
+              background: #eef4ff;
+            }
+            .linkray-advanced-protocol-name {
+              color: #111827;
+              font-size: 13px;
+              font-weight: 800;
+            }
+            .linkray-advanced-protocol-detail {
+              color: #64748b;
+              font-size: 11px;
+              font-weight: 600;
+              margin-top: 2px;
             }
           `;
 
@@ -133,9 +179,113 @@
             return best;
           }
 
+          function createDialog() {
+            const candidates = Array.from(document.querySelectorAll("div[role='dialog'],section,div"))
+              .filter((node) => {
+                const text = textOf(node);
+                const box = node.getBoundingClientRect();
+                return text.includes("创建新用户") && text.includes("协议") && box.width >= 300 && box.height >= 260;
+              })
+              .sort((a, b) => textOf(a).length - textOf(b).length);
+            return candidates[0] || null;
+          }
+
+          function selectedAdvancedProtocols() {
+            const cards = Array.from(document.querySelectorAll(".linkray-advanced-protocol-card"));
+            if (!cards.length) return advancedProtocols.map((protocol) => protocol.key);
+            return cards
+              .filter((card) => card.getAttribute("data-enabled") === "true")
+              .map((card) => card.getAttribute("data-protocol"))
+              .filter(Boolean);
+          }
+
+          function injectAdvancedProtocolSelector() {
+            const dialog = createDialog();
+            if (!dialog || dialog.querySelector(".linkray-advanced-protocols")) return;
+            const panel = document.createElement("div");
+            panel.className = "linkray-advanced-protocols";
+            panel.innerHTML = `
+              <div class="linkray-advanced-protocols-title">LinkRay 高级协议</div>
+              <div class="linkray-advanced-protocols-grid">
+                ${advancedProtocols
+                  .map(
+                    (protocol) => `
+                      <div class="linkray-advanced-protocol-card" data-protocol="${protocol.key}" data-enabled="true" role="button" tabindex="0">
+                        <div class="linkray-advanced-protocol-name">${protocol.name}</div>
+                        <div class="linkray-advanced-protocol-detail">${protocol.detail}</div>
+                      </div>
+                    `,
+                  )
+                  .join("")}
+              </div>
+            `;
+            panel.addEventListener("click", (event) => {
+              const card = event.target.closest(".linkray-advanced-protocol-card");
+              if (!card) return;
+              card.setAttribute("data-enabled", card.getAttribute("data-enabled") === "true" ? "false" : "true");
+            });
+            const protocolTitle = titleElements("协议")[0];
+            const target = protocolTitle ? detailTarget(protocolTitle) : dialog;
+            (target && target.parentElement ? target.parentElement : dialog).appendChild(panel);
+          }
+
+          function parseCreateUserBody(body) {
+            if (!body) return null;
+            if (typeof body === "string") {
+              try {
+                return JSON.parse(body);
+              } catch (_) {
+                return null;
+              }
+            }
+            if (body instanceof URLSearchParams) return Object.fromEntries(body.entries());
+            return null;
+          }
+
+          function requestPath(input) {
+            try {
+              const raw = typeof input === "string" ? input : input && input.url;
+              if (!raw) return "";
+              return new URL(raw, window.location.origin).pathname;
+            } catch (_) {
+              return "";
+            }
+          }
+
+          function syncAdvancedProtocols(username, protocols) {
+            if (!username) return;
+            const token = localStorage.getItem("token") || "";
+            window.fetch("/api/linkray/user-protocols", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+              },
+              body: JSON.stringify({ username, protocols }),
+            }).catch((error) => console.warn("LinkRay advanced protocol sync failed", error));
+          }
+
+          function patchCreateUserFetch() {
+            if (window.linkrayCreateUserFetchPatched || !window.fetch) return;
+            window.linkrayCreateUserFetchPatched = true;
+            const originalFetch = window.fetch.bind(window);
+            window.fetch = async (input, init = {}) => {
+              const method = String((init && init.method) || (input && input.method) || "GET").toUpperCase();
+              const path = requestPath(input);
+              const body = parseCreateUserBody(init && init.body);
+              const protocols = method === "POST" && path.endsWith("/api/user") ? selectedAdvancedProtocols() : null;
+              const response = await originalFetch(input, init);
+              if (protocols && response.ok && body && body.username) {
+                syncAdvancedProtocols(String(body.username), protocols);
+              }
+              return response;
+            };
+          }
+
           function applyDetails() {
             try {
               ensureStyle();
+              injectAdvancedProtocolSelector();
               protocols.forEach((protocol) => {
                 titleElements(protocol.name).forEach((titleNode) => {
                   const target = detailTarget(titleNode);
@@ -154,6 +304,7 @@
           }
 
           function boot() {
+            patchCreateUserFetch();
             applyDetails();
             const observer = new MutationObserver(applyDetails);
             observer.observe(document.body, { childList: true, subtree: true });

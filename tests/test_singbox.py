@@ -123,6 +123,7 @@ class SingBoxTests(unittest.TestCase):
 
     def test_build_singbox_json_can_append_linkray_advanced_outbounds(self):
         from linkray.config import LinkRayConfig
+        from linkray.protocol_prefs import ProtocolPreferences
         from linkray.singbox import build_singbox_json
         from linkray.singbox_runtime import credential_for_token
 
@@ -142,6 +143,19 @@ class SingBoxTests(unittest.TestCase):
         self.assertIn("AnyTLS", outbounds)
         self.assertIn("Hysteria2", outbounds["全球代理"]["outbounds"])
         self.assertEqual(outbounds["TUIC"]["uuid"], user.uuid)
+
+        filtered = json.loads(
+            build_singbox_json(
+                base64.b64encode(b""),
+                config=LinkRayConfig(domain="edge-a.example.com"),
+                advanced_user=credential_for_token("token-b", "secret-a", name="lichen"),
+                protocol_preferences=ProtocolPreferences(users={"lichen": {"tuic"}}),
+            )
+        )
+        filtered_outbounds = {item["tag"]: item for item in filtered["outbounds"]}
+        self.assertNotIn("Hysteria2", filtered_outbounds)
+        self.assertIn("TUIC", filtered_outbounds)
+        self.assertNotIn("AnyTLS", filtered_outbounds)
 
     def test_singbox_sidecar_reconcile_endpoint_prunes_runtime_users(self):
         from linkray.config import LinkRayConfig

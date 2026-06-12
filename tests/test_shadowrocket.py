@@ -4,6 +4,7 @@ import json
 import unittest
 
 from linkray.config import LinkRayConfig
+from linkray.protocol_prefs import ProtocolPreferences
 from linkray.rules import RouteRules
 from linkray.snell_runtime import credential_for_token
 
@@ -83,6 +84,14 @@ class ShadowrocketTests(unittest.TestCase):
         self.assertIn(f"psk={user.psk}", output)
         self.assertIn("version=5", output)
         self.assertIn("手动切换 = select,edge-a-Trojan_TLS,cyclelink-Snell", output)
+
+        filtered = module.build_shadowrocket_conf(
+            base64.b64encode(links.encode()),
+            config=LinkRayConfig(domain="edge-a.example.com"),
+            snell_user=user,
+            protocol_preferences=ProtocolPreferences(users={"cyclelink": {"hysteria2"}}),
+        )
+        self.assertNotIn("cyclelink-Snell", filtered)
 
     def test_build_shadowrocket_conf_keeps_large_cn_rule_sets_compact(self):
         module = self.shadowrocket_module()

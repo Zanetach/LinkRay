@@ -340,6 +340,12 @@ class RenderTests(unittest.TestCase):
 
                 self.assertIn("linkray-protocol-card-detail", html)
                 self.assertIn("LinkRay 完整入站", html)
+                self.assertIn("LinkRay 高级协议", html)
+                self.assertIn("Hysteria2", html)
+                self.assertIn("TUIC", html)
+                self.assertIn("AnyTLS", html)
+                self.assertIn("Snell", html)
+                self.assertIn("/api/linkray/user-protocols", html)
                 self.assertIn("VLESS XHTTP REALITY", html)
                 self.assertIn("VMess HTTPUpgrade TLS", html)
                 self.assertIn("Trojan GRPC TLS", html)

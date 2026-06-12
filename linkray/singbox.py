@@ -13,6 +13,13 @@ from urllib.parse import parse_qs, unquote, urlparse
 from ._http import PASS_HEADERS, AdapterHandler, fetch_subscription_username, fetch_upstream, first_query_value, parse_link_netloc
 from .config import LinkRayConfig, parse_singbox_inbound_ports
 from .native import b64decode_text, decode_subscription_links
+from .protocol_prefs import (
+    DEFAULT_PROTOCOL_PREFS_PATH,
+    ProtocolPreferences,
+    SINGBOX_PROTOCOL_KEYS,
+    enabled_protocols_for_user,
+    load_protocol_preferences,
+)
 from .rules import COMPACT_CN_DOMAIN_SUFFIXES, FOREIGN_DOMAIN_SUFFIXES, RouteRules, load_route_rules
 from .singbox_runtime import (
     DEFAULT_RUNTIME_DIR,
@@ -277,6 +284,7 @@ def build_singbox_json(
     route_rules: RouteRules | None = None,
     config: LinkRayConfig | None = None,
     advanced_user: SingBoxUser | None = None,
+    protocol_preferences: ProtocolPreferences | None = None,
 ) -> str:
     outbounds: list[dict[str, Any]] = []
     seen: set[str] = set()
@@ -290,8 +298,12 @@ def build_singbox_json(
         seen.add(tag)
         outbounds.append(outbound)
     if config and advanced_user:
+        enabled = enabled_protocols_for_user(protocol_preferences, advanced_user.name)
+        tag_keys = {"Hysteria2": "hysteria2", "TUIC": "tuic", "AnyTLS": "anytls"}
         for outbound in singbox_user_outbounds(config, advanced_user):
             tag = outbound["tag"]
+            if tag_keys.get(str(tag)) not in enabled:
+                continue
             if tag not in seen:
                 seen.add(tag)
                 outbounds.append(outbound)
@@ -351,6 +363,7 @@ class SingBoxHandler(AdapterHandler):
     runtime_dir = DEFAULT_RUNTIME_DIR
     reload_command = ""
     singbox_inbound_ports = ()
+    protocol_preferences_path = DEFAULT_PROTOCOL_PREFS_PATH
 
     def do_GET(self) -> None:
         path = urlparse(self.path).path
@@ -366,19 +379,28 @@ class SingBoxHandler(AdapterHandler):
             _, upstream_headers, raw = fetch_upstream(self.marzban_url, token, {"Accept": "text/plain"})
             config = None
             advanced_user = None
+            protocol_preferences = None
             if self.server_domain:
                 config = LinkRayConfig(domain=self.server_domain, singbox_inbound_ports=self.singbox_inbound_ports)
                 username = fetch_subscription_username(self.marzban_url, token)
                 if not username:
                     raise ValueError("missing Marzban username for sing-box runtime user")
-                advanced_user, _ = ensure_runtime_user(
-                    token,
-                    config,
-                    runtime_dir=Path(self.runtime_dir),
-                    reload_command=self.reload_command or None,
-                    name=username,
-                )
-            body = build_singbox_json(raw, config=config, advanced_user=advanced_user).encode("utf-8")
+                protocol_preferences = load_protocol_preferences(Path(self.protocol_preferences_path))
+                enabled = enabled_protocols_for_user(protocol_preferences, username)
+                if enabled.intersection(SINGBOX_PROTOCOL_KEYS):
+                    advanced_user, _ = ensure_runtime_user(
+                        token,
+                        config,
+                        runtime_dir=Path(self.runtime_dir),
+                        reload_command=self.reload_command or None,
+                        name=username,
+                    )
+            body = build_singbox_json(
+                raw,
+                config=config,
+                advanced_user=advanced_user,
+                protocol_preferences=protocol_preferences,
+            ).encode("utf-8")
         except HTTPError as exc:
             self.send_bytes(exc.code, dict(exc.headers.items()), exc.read() or b"upstream error\n")
             return
@@ -424,6 +446,7 @@ def make_singbox_server(
     runtime_dir=DEFAULT_RUNTIME_DIR,
     reload_command: str = "",
     singbox_inbound_ports=(),
+    protocol_preferences_path=DEFAULT_PROTOCOL_PREFS_PATH,
 ) -> ThreadingHTTPServer:
     class Handler(SingBoxHandler):
         pass
@@ -433,6 +456,7 @@ def make_singbox_server(
     Handler.runtime_dir = runtime_dir
     Handler.reload_command = reload_command
     Handler.singbox_inbound_ports = singbox_inbound_ports
+    Handler.protocol_preferences_path = protocol_preferences_path
     return ThreadingHTTPServer((listen, port), Handler)
 
 

@@ -192,6 +192,11 @@ def add_api_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParse
     )
     api.add_argument("--timeout", default=2.0, type=float)
     api.add_argument("--ttl", default=60.0, type=float)
+    api.add_argument(
+        "--protocol-preferences-path",
+        type=Path,
+        default=Path("/var/lib/marzban/linkray/protocols/users.json"),
+    )
 
 
 def add_egern_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:

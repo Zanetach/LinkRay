@@ -12,6 +12,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 from ._http import PASS_HEADERS, AdapterHandler, fetch_subscription_username, fetch_upstream, first_query_value, parse_link_netloc
 from .config import LinkRayConfig
 from .native import b64decode_text, build_stable_native_subscription, decode_subscription_links
+from .protocol_prefs import DEFAULT_PROTOCOL_PREFS_PATH, ProtocolPreferences, enabled_protocols_for_user, load_protocol_preferences
 from .rules import COMPACT_CN_DOMAIN_SUFFIXES, FOREIGN_DOMAIN_SUFFIXES, RouteRules, load_route_rules
 from .snell_runtime import DEFAULT_RUNTIME_DIR as SNELL_RUNTIME_DIR
 from .snell_runtime import SnellUser, ensure_runtime_user, snell_shadowrocket_line
@@ -233,6 +234,7 @@ def build_shadowrocket_conf(
     route_rules: RouteRules | None = None,
     config: LinkRayConfig | None = None,
     snell_user: SnellUser | None = None,
+    protocol_preferences: ProtocolPreferences | None = None,
 ) -> str:
     names: list[str] = []
     proxy_lines: list[str] = []
@@ -247,7 +249,7 @@ def build_shadowrocket_conf(
         seen.add(name)
         names.append(name)
         proxy_lines.append(line)
-    if config and snell_user:
+    if config and snell_user and "snell" in enabled_protocols_for_user(protocol_preferences, snell_user.name):
         name = f"{snell_user.name}-Snell"
         if name not in seen:
             seen.add(name)
@@ -283,6 +285,7 @@ class ShadowrocketHandler(AdapterHandler):
     server_domain = ""
     snell_runtime_dir = SNELL_RUNTIME_DIR
     snell_reload_command = ""
+    protocol_preferences_path = DEFAULT_PROTOCOL_PREFS_PATH
 
     def do_GET(self) -> None:
         path = urlparse(self.path).path
@@ -300,19 +303,27 @@ class ShadowrocketHandler(AdapterHandler):
             if mode == "shadowrocket-conf":
                 config = None
                 snell_user = None
+                protocol_preferences = None
                 if self.server_domain:
                     config = LinkRayConfig(domain=self.server_domain)
                     username = fetch_subscription_username(self.marzban_url, token)
                     if not username:
                         raise ValueError("missing Marzban username for Snell runtime user")
-                    snell_user, _ = ensure_runtime_user(
-                        token,
-                        config,
-                        runtime_dir=Path(self.snell_runtime_dir),
-                        reload_command=self.snell_reload_command or None,
-                        name=username,
-                    )
-                body = build_shadowrocket_conf(raw, config=config, snell_user=snell_user).encode("utf-8")
+                    protocol_preferences = load_protocol_preferences(Path(self.protocol_preferences_path))
+                    if "snell" in enabled_protocols_for_user(protocol_preferences, username):
+                        snell_user, _ = ensure_runtime_user(
+                            token,
+                            config,
+                            runtime_dir=Path(self.snell_runtime_dir),
+                            reload_command=self.snell_reload_command or None,
+                            name=username,
+                        )
+                body = build_shadowrocket_conf(
+                    raw,
+                    config=config,
+                    snell_user=snell_user,
+                    protocol_preferences=protocol_preferences,
+                ).encode("utf-8")
             else:
                 body = build_shadowrocket_subscription(raw)
         except HTTPError as exc:
@@ -336,6 +347,7 @@ def make_shadowrocket_server(
     server_domain: str = "",
     snell_runtime_dir=SNELL_RUNTIME_DIR,
     snell_reload_command: str = "",
+    protocol_preferences_path=DEFAULT_PROTOCOL_PREFS_PATH,
 ) -> ThreadingHTTPServer:
     class Handler(ShadowrocketHandler):
         pass
@@ -344,6 +356,7 @@ def make_shadowrocket_server(
     Handler.server_domain = server_domain
     Handler.snell_runtime_dir = snell_runtime_dir
     Handler.snell_reload_command = snell_reload_command
+    Handler.protocol_preferences_path = protocol_preferences_path
     return ThreadingHTTPServer((listen, port), Handler)
 
 

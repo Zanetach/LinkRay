@@ -3,6 +3,7 @@ import unittest
 
 from linkray.clash import build_clash_meta_yaml
 from linkray.config import LinkRayConfig
+from linkray.protocol_prefs import ProtocolPreferences
 from linkray.snell_runtime import credential_for_token
 
 
@@ -67,6 +68,14 @@ class ClashTests(unittest.TestCase):
         self.assertIn(f"psk: {user.psk}", text)
         self.assertIn("version: 5", text)
         self.assertIn("- cyclelink-Snell", text)
+
+        filtered = build_clash_meta_yaml(
+            payload,
+            config=LinkRayConfig(domain="edge-a.example.com"),
+            snell_user=user,
+            protocol_preferences=ProtocolPreferences(users={"cyclelink": {"tuic"}}),
+        )
+        self.assertNotIn("cyclelink-Snell", filtered)
 
 
 if __name__ == "__main__":

@@ -5,10 +5,18 @@ import json
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from typing import Sequence
+from urllib.parse import unquote, urlparse
 
 from .config import NodeHost
 from .ports import probe_ports
+from .protocol_prefs import (
+    DEFAULT_PROTOCOL_PREFS_PATH,
+    enabled_protocols_for_user,
+    load_protocol_preferences,
+    set_user_protocols,
+)
 
 
 class PortStatusCache:
@@ -59,6 +67,7 @@ class PortStatusCache:
 
 class LinkRayAPIHandler(BaseHTTPRequestHandler):
     cache: PortStatusCache
+    protocol_preferences_path: Path
 
     def log_message(self, format: str, *args: object) -> None:
         return
@@ -72,18 +81,52 @@ class LinkRayAPIHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(payload)
 
+    def read_json_body(self) -> dict[str, object]:
+        length = int(self.headers.get("Content-Length") or "0")
+        if length <= 0:
+            return {}
+        data = json.loads(self.rfile.read(length).decode("utf-8"))
+        if not isinstance(data, dict):
+            raise ValueError("JSON body must be an object")
+        return data
+
     def do_GET(self) -> None:
-        if self.path == "/health":
+        path = urlparse(self.path).path
+        if path == "/health":
             self.send_json(200, {"status": "ok"})
             return
-        if self.path == "/nodes":
+        if path == "/nodes":
             self.send_json(200, self.cache.get())
+            return
+        if path.startswith("/user-protocols/"):
+            username = unquote(path.removeprefix("/user-protocols/")).strip()
+            if not username:
+                self.send_json(400, {"error": "username is required"})
+                return
+            prefs = load_protocol_preferences(self.protocol_preferences_path)
+            self.send_json(200, {"username": username, "protocols": sorted(enabled_protocols_for_user(prefs, username))})
             return
         self.send_json(404, {"error": "not found"})
 
     def do_POST(self) -> None:
-        if self.path == "/nodes/refresh":
+        path = urlparse(self.path).path
+        if path == "/nodes/refresh":
             self.send_json(200, self.cache.refresh())
+            return
+        if path == "/user-protocols":
+            if not self.headers.get("Authorization"):
+                self.send_json(401, {"error": "authorization required"})
+                return
+            try:
+                payload = self.read_json_body()
+                username = str(payload.get("username") or "").strip()
+                protocols = payload.get("protocols") or []
+                if not isinstance(protocols, list):
+                    raise ValueError("protocols must be a list")
+                prefs = set_user_protocols(self.protocol_preferences_path, username, protocols)
+                self.send_json(200, {"username": username, "protocols": sorted(enabled_protocols_for_user(prefs, username))})
+            except (OSError, ValueError, json.JSONDecodeError) as exc:
+                self.send_json(400, {"error": str(exc)})
             return
         self.send_json(404, {"error": "not found"})
 
@@ -97,6 +140,7 @@ def make_server(
     inbound_ports: Sequence[tuple[str, int]] | None = None,
     singbox_inbound_ports: Sequence[tuple[str, int]] | None = None,
     snell_inbound_ports: Sequence[tuple[str, int]] | None = None,
+    protocol_preferences_path: Path = DEFAULT_PROTOCOL_PREFS_PATH,
 ) -> ThreadingHTTPServer:
     cache = PortStatusCache(
         nodes=nodes,
@@ -111,6 +155,7 @@ def make_server(
         pass
 
     Handler.cache = cache
+    Handler.protocol_preferences_path = protocol_preferences_path
     return ThreadingHTTPServer((listen, port), Handler)
 
 
@@ -124,6 +169,7 @@ def serve_api(args: argparse.Namespace) -> int:
         inbound_ports=args.inbound_ports,
         singbox_inbound_ports=args.singbox_inbound_ports,
         snell_inbound_ports=args.snell_inbound_ports,
+        protocol_preferences_path=args.protocol_preferences_path,
     )
     try:
         server.serve_forever()
