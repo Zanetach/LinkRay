@@ -10,6 +10,17 @@ From the LinkRay repo on the server:
 
 This installs LinkRay into `/opt/linkray/venv` and creates `/usr/local/bin/linkray`, so operational commands use `linkray ...` instead of `python3 -m linkray ...`.
 
+## Architecture Boundary
+
+Only the `master` role installs Docker and runs the LinkRay panel container. The `node` role is intentionally host-native: it does not install Docker, does not run Docker Compose, and does not deploy a panel. Node deployment starts only systemd services for LinkRay Node, Xray-core, optional sing-box, optional Snell, and usage sync.
+
+This boundary is part of the packaging contract. Future release bundles and one-click installers must preserve it:
+
+- `linkray bootstrap master` may install Docker and start `container_name: linkray`.
+- `linkray bootstrap node` must not install Docker and must not start a container.
+- `scripts/deploy-rendered-master.sh` may run Docker Compose.
+- `scripts/deploy-rendered-node.sh` may stop/remove old legacy node containers, but must not install Docker or run Docker Compose.
+
 ## Fresh Server Bootstrap
 
 On a new master server, run the dry-run first:

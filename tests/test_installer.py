@@ -74,6 +74,9 @@ class InstallerTests(unittest.TestCase):
         self.assertIn("systemctl enable linkray-xray", script)
         self.assertIn("systemctl enable --now linkray-node", script)
         self.assertIn("docker update --restart=no linkray-node", script)
+        self.assertNotIn("get.docker.com", script)
+        self.assertNotIn("systemctl enable --now docker", script)
+        self.assertNotIn("docker compose up", script)
         self.assertNotIn("docker compose up -d --force-recreate --remove-orphans linkray-node", script)
         self.assertIn("etc/systemd/system/linkray-singbox-runtime.service", script)
         self.assertIn("etc/systemd/system/linkray-snell-runtime.service", script)
@@ -88,6 +91,10 @@ class InstallerTests(unittest.TestCase):
 
     def test_deployment_doc_master_service_commands_are_complete(self):
         doc = Path("docs/DEPLOYMENT.md").read_text()
+
+        self.assertIn("Only the `master` role installs Docker", doc)
+        self.assertIn("`linkray bootstrap node` must not install Docker", doc)
+        self.assertIn("must not start a container", doc)
 
         for service in [
             "linkray-api",

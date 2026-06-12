@@ -27,6 +27,15 @@ The goal is simple: stop hand-editing live container files as the primary workfl
 | Multi-node relay | Master-side TCP relay ports for secondary nodes, avoiding client-side proxy chaining |
 | Runtime checks | `linkray doctor` file, manifest, port, and runtime health checks for master and node roles |
 
+## Deployment Architecture Boundary
+
+LinkRay has one fixed production split:
+
+- `master` is the only role that installs Docker and runs the LinkRay panel container.
+- `node` never installs Docker, never runs the panel, and never depends on Docker Compose.
+- `node` runs host systemd services only: `linkray-node`, `linkray-xray`, optional `linkray-singbox-runtime`, optional `linkray-snell-runtime`, and usage services.
+- Packaging and one-click deployment must keep this split explicit. A packaged node install may clean up old Docker containers, but it must not install Docker or start a node container.
+
 ## Protocol Coverage
 
 LinkRay renders these inbound families for every node:
