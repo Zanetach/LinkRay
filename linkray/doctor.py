@@ -143,6 +143,19 @@ def rendered_snell_ports(root: Path) -> list[int]:
     return [int(match.group("port"))]
 
 
+def node_has_advanced_runtime(root: Path) -> bool:
+    manifest_path = root / "var/lib/marzban/linkray/linkray-manifest.json"
+    if manifest_path.exists():
+        try:
+            data = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return False
+        return data.get("role") == "node"
+    return (root / "var/lib/marzban/linkray/singbox/config.json").exists() or (
+        root / "var/lib/marzban/linkray/snell/snell-server.conf"
+    ).exists()
+
+
 def runtime_checks(role: str, runner: Runner, root: Path = Path("/")) -> list[Check]:
     checks: list[Check] = []
     ss_result = runner.run(["ss", "-lntup"])
@@ -167,6 +180,10 @@ def runtime_checks(role: str, runner: Runner, root: Path = Path("/")) -> list[Ch
         checks.append(service_check("linkray-sub-auto", "active", runner))
         checks.append(service_check("linkray-rules-update.timer", "active", runner))
         checks.append(service_check("linkray-relay", "active", runner))
+    if role == "node" and node_has_advanced_runtime(root):
+        checks.append(service_check("linkray-singbox-runtime", "active", runner))
+        checks.append(service_check("linkray-snell-runtime", "active", runner))
+        checks.append(service_check("linkray-snell-usage", "active", runner))
     if role == "master" and xray_runtime_mode == "linkray":
         pattern = "/var/lib/marzban/linkray/bin/xray run -config /var/lib/marzban/linkray/xray/runtime.json"
         checks.append(
@@ -206,6 +223,14 @@ def runtime_checks(role: str, runner: Runner, root: Path = Path("/")) -> list[Ch
         checks.append(docker_check("linkray", runner))
     else:
         expected_ports = [62050, 62051, *expected_ports]
+        if node_has_advanced_runtime(root):
+            expected_ports = [
+                *expected_ports,
+                61997,
+                SINGBOX_STATS_PORT,
+                *SINGBOX_DEFAULT_PORTS.values(),
+                *rendered_snell_ports(root),
+            ]
         checks.append(docker_check("linkray-node", runner))
 
     for port in expected_ports:
@@ -250,6 +275,19 @@ def file_checks(role: str, root: Path) -> list[Check]:
         recommended = ["var/lib/marzban/linkray/hosts.sql"]
     else:
         required = ["opt/marzban-node/docker-compose.yml"]
+        if node_has_advanced_runtime(root):
+            required.extend(
+                [
+                    "etc/systemd/system/linkray-singbox-runtime.service",
+                    "etc/systemd/system/linkray-snell-runtime.service",
+                    "etc/systemd/system/linkray-snell@.service",
+                    "etc/systemd/system/linkray-snell-usage.service",
+                    "var/lib/marzban/linkray/singbox/config.json",
+                    "var/lib/marzban/linkray/singbox/users.json",
+                    "var/lib/marzban/linkray/snell/snell-server.conf",
+                    "var/lib/marzban/linkray/linkray-manifest.json",
+                ]
+            )
         recommended = []
     checks = [check_file(root, item) for item in required]
     checks.extend(check_file(root, item, missing_status="WARN") for item in recommended)

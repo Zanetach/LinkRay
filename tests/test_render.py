@@ -538,6 +538,36 @@ class RenderTests(unittest.TestCase):
             self.assertTrue((output / "opt/marzban-node/docker-compose.yml").exists())
             self.assertEqual(validate_rendered(output), [])
 
+    def test_render_node_with_domain_writes_advanced_runtime_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp)
+            config = LinkRayConfig(domain="edge-b.example.com", snell_psk="node-snell-secret")
+
+            result = render_node(output, config=config)
+            relative = {str(path.relative_to(output)) for path in result.files}
+
+            self.assertIn("opt/marzban-node/docker-compose.yml", relative)
+            self.assertIn("etc/systemd/system/linkray-singbox-runtime.service", relative)
+            self.assertIn("etc/systemd/system/linkray-snell-runtime.service", relative)
+            self.assertIn("etc/systemd/system/linkray-snell@.service", relative)
+            self.assertIn("etc/systemd/system/linkray-snell-usage.service", relative)
+            self.assertIn("var/lib/marzban/linkray/singbox/config.json", relative)
+            self.assertIn("var/lib/marzban/linkray/singbox/users.json", relative)
+            self.assertIn("var/lib/marzban/linkray/snell/snell-server.conf", relative)
+            self.assertIn("var/lib/marzban/linkray/linkray-manifest.json", relative)
+
+            singbox_runtime = json.loads((output / "var/lib/marzban/linkray/singbox/config.json").read_text())
+            by_tag = {item["tag"]: item for item in singbox_runtime["inbounds"]}
+            self.assertEqual(by_tag["Hysteria2"]["tls"]["certificate_path"], config.cert_file)
+            self.assertEqual(by_tag["AnyTLS"]["listen_port"], 19082)
+            snell_config = (output / "var/lib/marzban/linkray/snell/snell-server.conf").read_text()
+            self.assertIn("listen = ::0:19180", snell_config)
+            self.assertIn("psk = node-snell-secret", snell_config)
+            manifest = json.loads((output / "var/lib/marzban/linkray/linkray-manifest.json").read_text())
+            self.assertEqual(manifest["role"], "node")
+            self.assertEqual(manifest["config"]["domain"], "edge-b.example.com")
+            self.assertEqual(validate_rendered(output), [])
+
     def test_hosts_sql_contains_two_node_rows(self):
         config = LinkRayConfig(domain="edge-a.example.com")
         nodes = [NodeHost("edge-a", "edge-a.example.com"), NodeHost("edge-b", "edge-b.example.com")]
@@ -612,6 +642,18 @@ class RenderTests(unittest.TestCase):
             actions = install_node(root=root, apply=True)
             self.assertEqual(len(actions), 1)
             self.assertTrue((root / "opt/marzban-node/docker-compose.yml").exists())
+
+    def test_install_node_with_config_copies_advanced_runtime_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            actions = install_node(root=root, apply=True, config=LinkRayConfig(domain="edge-b.example.com"))
+
+            self.assertGreater(len(actions), 1)
+            self.assertTrue((root / "opt/marzban-node/docker-compose.yml").exists())
+            self.assertTrue((root / "etc/systemd/system/linkray-singbox-runtime.service").exists())
+            self.assertTrue((root / "etc/systemd/system/linkray-snell-runtime.service").exists())
+            self.assertTrue((root / "var/lib/marzban/linkray/singbox/config.json").exists())
+            self.assertTrue((root / "var/lib/marzban/linkray/snell/snell-server.conf").exists())
 
 
 if __name__ == "__main__":

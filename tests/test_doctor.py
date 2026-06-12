@@ -47,6 +47,44 @@ class DoctorTests(unittest.TestCase):
             checks = run_doctor("node", root=root, runtime=False)
             self.assertEqual(exit_code(checks), 0)
 
+    def test_runtime_doctor_node_with_advanced_runtime(self):
+        ss_ports = "\n".join(
+            f'tcp LISTEN 0 4096 *:{port} *:* users:(("linkray",pid=1,fd=3))'
+            for port in [
+                62050,
+                62051,
+                61997,
+                SINGBOX_STATS_PORT,
+                *SINGBOX_DEFAULT_PORTS.values(),
+                *SNELL_DEFAULT_PORTS.values(),
+                *DEFAULT_PORTS.values(),
+            ]
+        )
+        runner = FakeRunner(
+            {
+                ("ss", "-lntup"): CommandResult(0, ss_ports),
+                ("ps", "-eo", "pid,ppid,cmd"): CommandResult(0, "1 0 /usr/local/bin/xray run -config stdin:\n"),
+                ("systemctl", "is-active", "nginx"): CommandResult(0, "active\n"),
+                ("systemctl", "is-active", "xray"): CommandResult(3, "inactive\n"),
+                ("systemctl", "is-active", "linkray-singbox-runtime"): CommandResult(0, "active\n"),
+                ("systemctl", "is-active", "linkray-snell-runtime"): CommandResult(0, "active\n"),
+                ("systemctl", "is-active", "linkray-snell-usage"): CommandResult(0, "active\n"),
+                ("docker", "ps", "--format", "{{.Names}}|{{.Status}}"): CommandResult(0, "linkray-node|Up 1 hour\n"),
+            }
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            install_node(root=root, apply=True, config=LinkRayConfig(domain="edge-b.example.com"))
+            checks = run_doctor("node", root=root, runtime=True, runner=runner)
+
+        check_names = {check.name for check in checks}
+        self.assertIn("systemd linkray-singbox-runtime", check_names)
+        self.assertIn("systemd linkray-snell-runtime", check_names)
+        self.assertIn("systemd linkray-snell-usage", check_names)
+        self.assertIn("port 19080", check_names)
+        self.assertIn("port 19180", check_names)
+        self.assertEqual(exit_code(checks), 0)
+
     def test_runtime_doctor_master_detects_healthy_runtime(self):
         ss_ports = "\n".join(
             f'tcp LISTEN 0 4096 *:{port} *:* users:(("xray",pid=1,fd=3))'

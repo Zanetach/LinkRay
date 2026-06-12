@@ -70,8 +70,8 @@ def install_master(
         return install_rendered(rendered, root, apply)
 
 
-def install_node(root: Path, apply: bool) -> list[InstallAction]:
+def install_node(root: Path, apply: bool, config: LinkRayConfig | None = None) -> list[InstallAction]:
     with tempfile.TemporaryDirectory(prefix="linkray-node-") as tmp:
         rendered = Path(tmp)
-        render_node(rendered)
+        render_node(rendered, config=config)
         return install_rendered(rendered, root, apply)

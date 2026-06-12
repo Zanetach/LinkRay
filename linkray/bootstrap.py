@@ -315,18 +315,34 @@ def node_runtime_commands(
     pull_cert_from: str | None = None,
     remote_cert_path: str = DEFAULT_NODE_REMOTE_CERT_PATH,
     local_cert_path: Path = Path("/") / NODE_CERT_PATH,
+    advanced_runtime: bool = False,
 ) -> list[str]:
     commands = dependency_commands()
     if pull_cert_from:
         commands.extend(pull_node_cert_commands(pull_cert_from, remote_cert_path, local_cert_path))
+    if advanced_runtime:
+        commands.extend(singbox_binary_commands())
+        commands.extend(snell_binary_commands())
     commands.extend(
         [
             *node_image_alias_commands(),
             "docker rm -f marzban-node-marzban-node-1 2>/dev/null || true",
             "cd /opt/marzban-node && docker compose up -d --force-recreate --remove-orphans linkray-node",
-            "linkray doctor --role node",
         ]
     )
+    if advanced_runtime:
+        commands.extend(
+            [
+                "systemctl daemon-reload",
+                "systemctl enable --now linkray-singbox-runtime",
+                "systemctl enable --now linkray-snell-runtime",
+                "systemctl enable --now linkray-snell-usage",
+                "systemctl restart linkray-singbox-runtime",
+                "systemctl restart linkray-snell-runtime",
+                "systemctl restart linkray-snell-usage",
+            ]
+        )
+    commands.append("linkray doctor --role node")
     return commands
 
 
@@ -417,6 +433,7 @@ def bootstrap_node(
     runner: ShellRunner | None = None,
     pull_cert_from: str | None = None,
     remote_cert_path: str = DEFAULT_NODE_REMOTE_CERT_PATH,
+    config: LinkRayConfig | None = None,
 ) -> list[BootstrapAction]:
     effective_runtime = root == Path("/") if runtime is None else runtime
     cert_path = root / NODE_CERT_PATH
@@ -428,10 +445,16 @@ def bootstrap_node(
                 ok=False,
             )
         ]
-    actions = install_actions_to_bootstrap(install_node(root=root, apply=apply))
+    effective_config = config_with_generated_secrets(config) if apply and config else config
+    actions = install_actions_to_bootstrap(install_node(root=root, apply=apply, config=effective_config))
     if effective_runtime:
         shell_runner = runner or SubprocessShellRunner()
-        for command in node_runtime_commands(pull_cert_from, remote_cert_path, cert_path):
+        for command in node_runtime_commands(
+            pull_cert_from,
+            remote_cert_path,
+            cert_path,
+            advanced_runtime=effective_config is not None,
+        ):
             action = command_action(command, apply, shell_runner)
             actions.append(action)
             if apply and not action.ok:

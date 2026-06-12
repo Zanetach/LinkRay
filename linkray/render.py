@@ -920,8 +920,27 @@ def render_master(
     return RenderResult(output=output, files=tuple(files))
 
 
-def render_node(output: Path) -> RenderResult:
+def render_node(output: Path, config: LinkRayConfig | None = None) -> RenderResult:
     files = [write_text(output / "opt/marzban-node/docker-compose.yml", node_compose())]
+    if config:
+        files.extend(
+            [
+                write_text(output / "etc/systemd/system/linkray-singbox-runtime.service", linkray_singbox_runtime_service()),
+                write_text(output / "etc/systemd/system/linkray-snell-runtime.service", linkray_snell_runtime_service()),
+                write_text(output / "etc/systemd/system/linkray-snell@.service", linkray_snell_user_service()),
+                write_text(output / "etc/systemd/system/linkray-snell-usage.service", linkray_snell_usage_service()),
+                write_text(
+                    output / "var/lib/marzban/linkray/singbox/config.json",
+                    json.dumps(server_config(config, []), indent=2) + "\n",
+                ),
+                write_text(
+                    output / "var/lib/marzban/linkray/singbox/users.json",
+                    json.dumps({"version": 1, "users": []}, indent=2) + "\n",
+                ),
+                write_text(output / "var/lib/marzban/linkray/snell/snell-server.conf", snell_server_config_text(config)),
+                write_text(output / "var/lib/marzban/linkray/linkray-manifest.json", render_manifest(config, [NodeHost("node", config.domain)], role="node")),
+            ]
+        )
     return RenderResult(output=output, files=tuple(files))
 
 

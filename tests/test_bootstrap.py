@@ -171,6 +171,31 @@ class BootstrapTests(unittest.TestCase):
             self.assertTrue(any("docker compose up -d --force-recreate --remove-orphans linkray-node" in command for command in runner.commands))
             self.assertTrue(all(action.ok for action in actions))
 
+    def test_bootstrap_node_with_config_installs_advanced_runtimes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cert = root / "var/lib/marzban-node/ssl_client_cert.pem"
+            cert.parent.mkdir(parents=True)
+            cert.write_text("certificate")
+            runner = RecordingRunner()
+            actions = bootstrap_node(
+                root=root,
+                apply=True,
+                runtime=True,
+                runner=runner,
+                config=LinkRayConfig(domain="edge-b.example.com"),
+            )
+
+            self.assertTrue((root / "etc/systemd/system/linkray-singbox-runtime.service").exists())
+            self.assertTrue((root / "etc/systemd/system/linkray-snell-runtime.service").exists())
+            self.assertTrue((root / "var/lib/marzban/linkray/singbox/config.json").exists())
+            self.assertTrue(any("github.com/sagernet/sing-box/cmd/sing-box@v1.12.0" in command for command in runner.commands))
+            self.assertTrue(any("snell-server-v5.0.1-linux" in command for command in runner.commands))
+            self.assertTrue(any("systemctl enable --now linkray-singbox-runtime" in command for command in runner.commands))
+            self.assertTrue(any("systemctl enable --now linkray-snell-runtime" in command for command in runner.commands))
+            self.assertTrue(any("systemctl enable --now linkray-snell-usage" in command for command in runner.commands))
+            self.assertTrue(all(action.ok for action in actions))
+
     def test_bootstrap_node_can_pull_certificate_from_master(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

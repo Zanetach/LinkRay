@@ -95,6 +95,36 @@ def config_from_args(args: argparse.Namespace) -> LinkRayConfig:
     )
 
 
+def add_common_node_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--domain", help="Node domain, for example edge-b.example.com. Enables advanced runtimes.")
+    parser.add_argument("--cert-file", default="/var/lib/marzban/certs/linkray/fullchain.cer")
+    parser.add_argument("--key-file", default="/var/lib/marzban/certs/linkray/linkray.key")
+    parser.add_argument("--snell-psk", default="REPLACE_WITH_SNELL_PSK")
+    parser.add_argument(
+        "--singbox-inbound",
+        action="append",
+        help="Override a sing-box inbound port in key=port form, for example hysteria2=19080. Repeat as needed.",
+    )
+    parser.add_argument(
+        "--snell-inbound",
+        action="append",
+        help="Override a Snell inbound port in key=port form, for example snell=19180.",
+    )
+
+
+def node_config_from_args(args: argparse.Namespace) -> LinkRayConfig | None:
+    if not getattr(args, "domain", None):
+        return None
+    return LinkRayConfig(
+        domain=args.domain,
+        cert_file=args.cert_file,
+        key_file=args.key_file,
+        snell_psk=args.snell_psk,
+        singbox_inbound_ports=parse_singbox_inbound_ports(args.singbox_inbound),
+        snell_inbound_ports=parse_snell_inbound_ports(args.snell_inbound),
+    )
+
+
 def add_render_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     render = subparsers.add_parser("render", help="Render deployment files")
     render_sub = render.add_subparsers(dest="role", required=True)
@@ -104,6 +134,7 @@ def add_render_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPa
     master.add_argument("--output", required=True, type=Path, help="Output directory")
 
     node = render_sub.add_parser("node", help="Render Marzban node files")
+    add_common_node_args(node)
     node.add_argument("--output", required=True, type=Path, help="Output directory")
 
 
@@ -117,6 +148,7 @@ def add_install_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentP
     master.add_argument("--apply", action="store_true", help="Actually write files. Omit for dry-run.")
 
     node = install_sub.add_parser("node", help="Install Marzban node files")
+    add_common_node_args(node)
     node.add_argument("--root", type=Path, default=Path("/"), help="Install root. Use a temp directory for dry testing.")
     node.add_argument("--apply", action="store_true", help="Actually write files. Omit for dry-run.")
 
@@ -133,6 +165,7 @@ def add_bootstrap_parser(subparsers: argparse._SubParsersAction[argparse.Argumen
     master.add_argument("--cf-token-env", default="CF_Token", help="Environment variable name containing the Cloudflare API token.")
 
     node = bootstrap_sub.add_parser("node", help="Bootstrap a Marzban node")
+    add_common_node_args(node)
     node.add_argument("--root", type=Path, default=Path("/"), help="Install root. Use a temp directory for dry testing.")
     node.add_argument("--apply", action="store_true", help="Actually change files/services. Omit for dry-run.")
     node.add_argument("--pull-cert-from", help="SSH source such as root@master.example.com for pulling ssl_client_cert.pem.")
@@ -332,7 +365,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "render" and args.role == "node":
-        result = render_node(args.output)
+        result = render_node(args.output, config=node_config_from_args(args))
         for path in result.files:
             print(path)
         return 0
@@ -364,7 +397,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "install" and args.role == "node":
-        actions = install_node(root=args.root, apply=args.apply)
+        actions = install_node(root=args.root, apply=args.apply, config=node_config_from_args(args))
         mode = "APPLY" if args.apply else "DRY-RUN"
         print(f"{mode}: node install root={args.root}")
         for action in actions:
@@ -465,6 +498,7 @@ def main(argv: list[str] | None = None) -> int:
             apply=args.apply,
             pull_cert_from=args.pull_cert_from,
             remote_cert_path=args.remote_cert_path,
+            config=node_config_from_args(args),
         )
         mode = "APPLY" if args.apply else "DRY-RUN"
         print(f"{mode}: node bootstrap root={args.root}")
