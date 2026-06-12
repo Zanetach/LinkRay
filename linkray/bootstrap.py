@@ -72,15 +72,25 @@ def dependency_commands() -> list[str]:
 
 def master_image_alias_commands() -> list[str]:
     return [
-        "docker image inspect gozargah/marzban:latest >/dev/null 2>&1 || docker pull gozargah/marzban:latest",
-        "docker tag gozargah/marzban:latest linkray:latest",
+        (
+            "if ! docker image inspect linkray:latest >/dev/null 2>&1; then "
+            "docker image inspect gozargah/marzban:latest >/dev/null 2>&1 || docker pull gozargah/marzban:latest; "
+            "docker tag gozargah/marzban:latest linkray:latest; "
+            "docker rmi gozargah/marzban:latest >/dev/null 2>&1 || true; "
+            "fi"
+        ),
     ]
 
 
 def node_image_alias_commands() -> list[str]:
     return [
-        "docker image inspect gozargah/marzban-node:latest >/dev/null 2>&1 || docker pull gozargah/marzban-node:latest",
-        "docker tag gozargah/marzban-node:latest linkray-node:latest",
+        (
+            "if ! docker image inspect linkray-node:latest >/dev/null 2>&1; then "
+            "docker image inspect gozargah/marzban-node:latest >/dev/null 2>&1 || docker pull gozargah/marzban-node:latest; "
+            "docker tag gozargah/marzban-node:latest linkray-node:latest; "
+            "docker rmi gozargah/marzban-node:latest >/dev/null 2>&1 || true; "
+            "fi"
+        ),
     ]
 
 

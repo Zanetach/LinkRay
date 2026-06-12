@@ -59,6 +59,7 @@ class InstallerTests(unittest.TestCase):
         self.assertIn("systemctl enable --now linkray-xray", script)
         self.assertIn("systemctl restart linkray-xray", script)
         self.assertIn("docker tag gozargah/marzban:latest linkray:latest", script)
+        self.assertIn("docker rmi gozargah/marzban:latest", script)
         self.assertIn("docker rm -f marzban-marzban-1", script)
         self.assertIn("docker compose up -d --force-recreate --remove-orphans linkray", script)
 

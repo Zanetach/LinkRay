@@ -101,8 +101,11 @@ else
 fi
 
 cd /opt/marzban
-docker image inspect gozargah/marzban:latest >/dev/null 2>&1 || docker pull gozargah/marzban:latest
-docker tag gozargah/marzban:latest linkray:latest
+if ! docker image inspect linkray:latest >/dev/null 2>&1; then
+  docker image inspect gozargah/marzban:latest >/dev/null 2>&1 || docker pull gozargah/marzban:latest
+  docker tag gozargah/marzban:latest linkray:latest
+  docker rmi gozargah/marzban:latest >/dev/null 2>&1 || true
+fi
 docker rm -f marzban-marzban-1 2>/dev/null || true
 docker compose up -d --force-recreate --remove-orphans linkray
 sqlite3 /var/lib/marzban/db.sqlite3 < /var/lib/marzban/linkray/hosts.sql

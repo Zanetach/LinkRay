@@ -77,6 +77,7 @@ class BootstrapTests(unittest.TestCase):
             self.assertTrue(any("snell-server-v5.0.1-linux" in command for command in runner.commands))
             self.assertTrue(any("nftables" in command for command in runner.commands))
             self.assertTrue(any("docker tag gozargah/marzban:latest linkray:latest" in command for command in runner.commands))
+            self.assertTrue(any("docker rmi gozargah/marzban:latest" in command for command in runner.commands))
             self.assertTrue(any("docker rm -f marzban-marzban-1" in command for command in runner.commands))
             self.assertTrue(any("systemctl enable --now linkray-api" in command for command in runner.commands))
             self.assertTrue(any("systemctl enable --now linkray-clash" in command for command in runner.commands))
@@ -165,6 +166,7 @@ class BootstrapTests(unittest.TestCase):
 
             self.assertTrue((root / "opt/marzban-node/docker-compose.yml").exists())
             self.assertTrue(any("docker tag gozargah/marzban-node:latest linkray-node:latest" in command for command in runner.commands))
+            self.assertTrue(any("docker rmi gozargah/marzban-node:latest" in command for command in runner.commands))
             self.assertTrue(any("docker rm -f marzban-node-marzban-node-1" in command for command in runner.commands))
             self.assertTrue(any("docker compose up -d --force-recreate --remove-orphans linkray-node" in command for command in runner.commands))
             self.assertTrue(all(action.ok for action in actions))
