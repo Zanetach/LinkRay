@@ -20,7 +20,7 @@ The goal is simple: stop hand-editing live container files as the primary workfl
 | Surface | LinkRay owns |
 |---|---|
 | Master render | Marzban Docker Compose, Nginx config, Xray config, SQL host initialization, dashboard patches, subscription templates, sidecar systemd units |
-| Node render | Marzban Node Docker Compose and install shape |
+| Node render | Host systemd Marzban Node service, LinkRay-managed Xray-core service, and optional host sing-box/Snell runtimes |
 | Inbound set | 12 Xray-core inbound protocol families plus 3 experimental sing-box inbound families plus per-user Snell runtime support, all with overridable ports |
 | Subscription routing | Browser/client-aware `/sub/<token>` routing plus Clash/Mihomo, Egern, Shadowrocket, and sing-box adapters |
 | Dashboard patch | User link ordering, concrete protocol card labels, and Node Info backed by `linkray api` |
@@ -46,7 +46,7 @@ LinkRay renders these inbound families for every node:
 | VMess HTTPUpgrade TLS | HTTPUpgrade + TLS |
 | Trojan gRPC TLS | gRPC + TLS |
 
-Clash/Mihomo and sing-box are supported as client subscription formats through LinkRay sidecars. LinkRay uses Marzban-managed Xray-core as the stable default runtime and can render an optional `linkray-xray.service` for deployments that want Xray-core under the same LinkRay-managed systemd model as sing-box and Snell.
+Clash/Mihomo and sing-box are supported as client subscription formats through LinkRay sidecars. The master keeps the Marzban dashboard/control plane in Docker. Secondary nodes run Marzban Node, Xray-core, sing-box, and Snell as host systemd services, so CA and LA use the same runtime shape outside the panel container.
 
 Hysteria2, TUIC, and AnyTLS are experimental production paths:
 
@@ -157,13 +157,16 @@ Place the Marzban node client certificate first:
 Then bootstrap the node:
 
 ```bash
-linkray bootstrap node --apply
+linkray bootstrap node \
+  --domain edge-b.example.com \
+  --apply
 ```
 
 Or pull the certificate from a master over SSH during bootstrap:
 
 ```bash
 linkray bootstrap node \
+  --domain edge-b.example.com \
   --pull-cert-from root@edge-a.example.com \
   --remote-cert-path /var/lib/marzban/ssl_client_cert.pem \
   --apply
@@ -197,7 +200,7 @@ linkray validate --path /tmp/linkray-master
 Render node files:
 
 ```bash
-linkray render node --output /tmp/linkray-node
+linkray render node --domain edge-b.example.com --output /tmp/linkray-node
 linkray validate --path /tmp/linkray-node
 ```
 
@@ -229,7 +232,7 @@ linkray render master \
 | Command | Purpose |
 |---|---|
 | `linkray render master` | Render master deployment files |
-| `linkray render node` | Render Marzban Node files |
+| `linkray render node` | Render host Marzban Node, Xray-core, sing-box, and Snell node files |
 | `linkray validate --path <dir>` | Validate a rendered tree |
 | `linkray install master` | Copy rendered master files into a root, dry-run by default |
 | `linkray install node` | Copy rendered node files into a root, dry-run by default |

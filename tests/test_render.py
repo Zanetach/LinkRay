@@ -271,17 +271,21 @@ class RenderTests(unittest.TestCase):
             relay_service = (output / "etc/systemd/system/linkray-relay.service").read_text()
             self.assertIn("ExecStart=/usr/local/bin/linkray relay --listen 0.0.0.0 --node edge-b=edge-b.example.com:100", relay_service)
 
-    def test_render_node_uses_linkray_container_and_image_names(self):
+    def test_render_node_uses_host_systemd_services(self):
         with tempfile.TemporaryDirectory() as tmp:
             output = Path(tmp)
             render_node(output)
 
-            compose = (output / "opt/marzban-node/docker-compose.yml").read_text()
-            self.assertIn("  linkray-node:", compose)
-            self.assertIn("image: linkray-node:latest", compose)
-            self.assertIn("container_name: linkray-node", compose)
-            self.assertNotIn("gozargah/marzban-node:latest", compose)
-            self.assertNotIn("  marzban-node:", compose)
+            self.assertFalse((output / "opt/marzban-node/docker-compose.yml").exists())
+            node_service = (output / "etc/systemd/system/linkray-node.service").read_text()
+            xray_service = (output / "etc/systemd/system/linkray-xray.service").read_text()
+            self.assertIn("Description=LinkRay Marzban Node control service", node_service)
+            self.assertIn("ExecStart=/opt/linkray-node-app/venv/bin/python /opt/linkray-node-app/current/main.py", node_service)
+            self.assertIn("LINKRAY_EXTERNAL_XRAY=true", node_service)
+            self.assertIn("Description=LinkRay Xray-core runtime", xray_service)
+            self.assertIn("Environment=XRAY_LOCATION_ASSET=/var/lib/marzban/linkray/bin", xray_service)
+            self.assertTrue((output / "opt/linkray-node-app/current/main.py").exists())
+            self.assertTrue((output / "opt/linkray-node-app/current/xray.py").exists())
 
     def test_render_master_can_emit_linkray_managed_xray_runtime(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -557,12 +561,16 @@ class RenderTests(unittest.TestCase):
         self.assertIn("XRAY_JSON = /var/lib/marzban/xray_config.json", env)
         self.assertIn("XRAY_SUBSCRIPTION_URL_PREFIX = https://edge-a.example.com:9443", env)
 
-    def test_render_node_writes_compose(self):
+    def test_render_node_writes_host_app_and_services(self):
         with tempfile.TemporaryDirectory() as tmp:
             output = Path(tmp)
             result = render_node(output)
-            self.assertEqual(len(result.files), 1)
-            self.assertTrue((output / "opt/marzban-node/docker-compose.yml").exists())
+            relative = {path.relative_to(output).as_posix() for path in result.files}
+            self.assertIn("opt/linkray-node-app/current/main.py", relative)
+            self.assertIn("opt/linkray-node-app/current/requirements.txt", relative)
+            self.assertIn("etc/systemd/system/linkray-node.service", relative)
+            self.assertIn("etc/systemd/system/linkray-xray.service", relative)
+            self.assertFalse((output / "opt/marzban-node/docker-compose.yml").exists())
             self.assertEqual(validate_rendered(output), [])
 
     def test_render_node_with_domain_writes_advanced_runtime_files(self):
@@ -573,7 +581,9 @@ class RenderTests(unittest.TestCase):
             result = render_node(output, config=config)
             relative = {str(path.relative_to(output)) for path in result.files}
 
-            self.assertIn("opt/marzban-node/docker-compose.yml", relative)
+            self.assertIn("opt/linkray-node-app/current/main.py", relative)
+            self.assertIn("etc/systemd/system/linkray-node.service", relative)
+            self.assertIn("etc/systemd/system/linkray-xray.service", relative)
             self.assertIn("etc/systemd/system/linkray-singbox-runtime.service", relative)
             self.assertIn("etc/systemd/system/linkray-snell-runtime.service", relative)
             self.assertIn("etc/systemd/system/linkray-snell@.service", relative)
@@ -663,12 +673,15 @@ class RenderTests(unittest.TestCase):
             self.assertTrue((root / "var/lib/marzban/linkray/rules/cn-domains.txt").exists())
             self.assertTrue((root / "var/lib/marzban/linkray/rules/cn-ip-cidrs.txt").exists())
 
-    def test_install_node_apply_copies_compose(self):
+    def test_install_node_apply_copies_host_app_and_services(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             actions = install_node(root=root, apply=True)
-            self.assertEqual(len(actions), 1)
-            self.assertTrue((root / "opt/marzban-node/docker-compose.yml").exists())
+            self.assertGreater(len(actions), 1)
+            self.assertTrue((root / "opt/linkray-node-app/current/main.py").exists())
+            self.assertTrue((root / "etc/systemd/system/linkray-node.service").exists())
+            self.assertTrue((root / "etc/systemd/system/linkray-xray.service").exists())
+            self.assertFalse((root / "opt/marzban-node/docker-compose.yml").exists())
 
     def test_install_node_with_config_copies_advanced_runtime_files(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -676,7 +689,9 @@ class RenderTests(unittest.TestCase):
             actions = install_node(root=root, apply=True, config=LinkRayConfig(domain="edge-b.example.com"))
 
             self.assertGreater(len(actions), 1)
-            self.assertTrue((root / "opt/marzban-node/docker-compose.yml").exists())
+            self.assertTrue((root / "opt/linkray-node-app/current/main.py").exists())
+            self.assertTrue((root / "etc/systemd/system/linkray-node.service").exists())
+            self.assertTrue((root / "etc/systemd/system/linkray-xray.service").exists())
             self.assertTrue((root / "etc/systemd/system/linkray-singbox-runtime.service").exists())
             self.assertTrue((root / "etc/systemd/system/linkray-snell-runtime.service").exists())
             self.assertTrue((root / "var/lib/marzban/linkray/singbox/config.json").exists())

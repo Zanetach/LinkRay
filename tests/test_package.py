@@ -1,4 +1,5 @@
 import subprocess
+import shutil
 import sys
 import tarfile
 import tempfile
@@ -46,6 +47,7 @@ class PackageTests(unittest.TestCase):
         script = (ROOT / "scripts/build-release.sh").read_text()
 
         self.assertIn("python3 -m build --sdist --wheel", script)
+        self.assertIn('rm -rf "${DIST_DIR}" build *.egg-info', script)
         self.assertIn("python3 -m venv", script)
         self.assertIn("--no-index", script)
         self.assertIn("/venv/bin/pip\" install", script)
@@ -54,6 +56,9 @@ class PackageTests(unittest.TestCase):
     def test_build_outputs_include_runtime_and_release_assets(self):
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp)
+            shutil.rmtree(ROOT / "build", ignore_errors=True)
+            for egg_info in ROOT.glob("*.egg-info"):
+                shutil.rmtree(egg_info, ignore_errors=True)
             subprocess.run(
                 [sys.executable, "-m", "build", "--sdist", "--wheel", "--outdir", str(out)],
                 cwd=ROOT,
@@ -77,6 +82,8 @@ class PackageTests(unittest.TestCase):
                 "templates/marzban/clash/default.yml",
                 "patches/marzban-dashboard/current/index.linkray.js",
                 "patches/marzban-dashboard/source/linkray-dashboard.patch",
+                "linkray/assets/marzban-node-host/main.py",
+                "linkray/assets/marzban-node-host/xray.py",
             ]:
                 self.assertIn(item, sdist_suffixes)
 
@@ -87,8 +94,12 @@ class PackageTests(unittest.TestCase):
                 "linkray/assets/patches/marzban-dashboard/current/index.linkray.js",
                 "linkray/assets/source-patches/marzban-dashboard/linkray-dashboard.patch",
                 "linkray/assets/patches/marzban-subscription/current/clash.py",
+                "linkray/assets/marzban-node-host/main.py",
+                "linkray/assets/marzban-node-host/xray.py",
+                "linkray/assets/marzban-node-host/requirements.txt",
             ]:
                 self.assertIn(item, wheel_names)
+            self.assertNotIn("linkray/assets/marzban-node-host/marzban.service", wheel_names)
             self.assertTrue(any(name.endswith(".dist-info/entry_points.txt") for name in wheel_names))
 
 

@@ -72,10 +72,12 @@ If Reality values are not provided through `--reality-private-key` and `--realit
 On a new node server, place the Marzban node client certificate at `/var/lib/marzban-node/ssl_client_cert.pem`, then run:
 
 ```bash
-linkray bootstrap node --apply
+linkray bootstrap node \
+  --domain edge-b.example.com \
+  --apply
 ```
 
-The node bootstrap installs required packages, installs Docker when missing, writes `/opt/marzban-node/docker-compose.yml`, starts Marzban Node, and runs `doctor`.
+The node bootstrap installs required packages, installs the LinkRay Marzban Node host app under `/opt/linkray-node-app/current`, creates `/opt/linkray-node-app/venv`, installs Xray-core under `/var/lib/marzban/linkray/bin`, starts `linkray-node.service`, enables `linkray-xray.service`, and runs `doctor`.
 
 ## Master Render
 
@@ -130,13 +132,22 @@ The rendered master tree contains:
 ## Node Render
 
 ```bash
-linkray render node --output /tmp/linkray-node
+linkray render node --domain edge-b.example.com --output /tmp/linkray-node
 linkray validate --path /tmp/linkray-node
 ```
 
 The rendered node tree contains:
 
-- `opt/marzban-node/docker-compose.yml`
+- `opt/linkray-node-app/current/*`
+- `etc/systemd/system/linkray-node.service`
+- `etc/systemd/system/linkray-xray.service`
+- `etc/systemd/system/linkray-singbox-runtime.service` when rendered with a node domain
+- `etc/systemd/system/linkray-snell-runtime.service` when rendered with a node domain
+- `etc/systemd/system/linkray-snell@.service` when rendered with a node domain
+- `etc/systemd/system/linkray-snell-usage.service` when rendered with a node domain
+- `var/lib/marzban/linkray/singbox/config.json` when rendered with a node domain
+- `var/lib/marzban/linkray/singbox/users.json` when rendered with a node domain
+- `var/lib/marzban/linkray/snell/snell-server.conf` when rendered with a node domain
 
 ## Master Deployment Shape
 
@@ -245,13 +256,25 @@ For two-node deployments, LinkRay advertises the second node through master-side
 
 ## Node Deployment Shape
 
-1. Install Docker and the Docker Compose plugin.
-2. Copy rendered `/tmp/linkray-node/opt/marzban-node/docker-compose.yml` into `/opt/marzban-node/docker-compose.yml`.
-3. Install the node certificate at `/var/lib/marzban-node/ssl_client_cert.pem`.
-4. Run:
+1. Install the node certificate at `/var/lib/marzban-node/ssl_client_cert.pem`.
+2. Copy rendered `/tmp/linkray-node/opt/linkray-node-app/current/*` into `/opt/linkray-node-app/current/`.
+3. Create `/opt/linkray-node-app/venv` and install `/opt/linkray-node-app/current/requirements.txt`.
+4. Copy rendered systemd units into `/etc/systemd/system/`.
+5. Install the Xray-core binary and geo data under `/var/lib/marzban/linkray/bin/`.
+6. Stop any old `linkray-node` Docker container if it exists.
+7. Run:
 
 ```bash
-cd /opt/marzban-node && docker compose up -d
+systemctl daemon-reload
+systemctl enable linkray-xray
+systemctl enable --now linkray-node
+systemctl restart linkray-node
+```
+
+Use the helper script for the same prepared-host steps:
+
+```bash
+sudo scripts/deploy-rendered-node.sh /tmp/linkray-node
 ```
 
 ## Post-Deployment Verification

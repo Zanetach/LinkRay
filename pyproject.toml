@@ -36,4 +36,5 @@ linkray = [
   "assets/patches/marzban-jobs/current/linkray_singbox_usages.py",
   "assets/source-patches/marzban-dashboard/README.md",
   "assets/source-patches/marzban-dashboard/linkray-dashboard.patch",
+  "assets/marzban-node-host/*",
 ]

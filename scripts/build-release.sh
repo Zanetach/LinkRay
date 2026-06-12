@@ -11,7 +11,7 @@ cleanup() {
 trap cleanup EXIT
 
 cd "${ROOT_DIR}"
-rm -rf "${DIST_DIR}"
+rm -rf "${DIST_DIR}" build *.egg-info
 python3 -m build --sdist --wheel --outdir "${DIST_DIR}"
 
 python3 -m venv "${SMOKE_DIR}/venv"

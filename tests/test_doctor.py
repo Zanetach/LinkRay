@@ -63,13 +63,17 @@ class DoctorTests(unittest.TestCase):
         runner = FakeRunner(
             {
                 ("ss", "-lntup"): CommandResult(0, ss_ports),
-                ("ps", "-eo", "pid,ppid,cmd"): CommandResult(0, "1 0 /usr/local/bin/xray run -config stdin:\n"),
+                ("ps", "-eo", "pid,ppid,cmd"): CommandResult(
+                    0,
+                    "1 0 /var/lib/marzban/linkray/bin/xray run -config /var/lib/marzban/linkray/xray/runtime.json\n",
+                ),
                 ("systemctl", "is-active", "nginx"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "xray"): CommandResult(3, "inactive\n"),
+                ("systemctl", "is-active", "linkray-node"): CommandResult(0, "active\n"),
+                ("systemctl", "is-active", "linkray-xray"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "linkray-singbox-runtime"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "linkray-snell-runtime"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "linkray-snell-usage"): CommandResult(0, "active\n"),
-                ("docker", "ps", "--format", "{{.Names}}|{{.Status}}"): CommandResult(0, "linkray-node|Up 1 hour\n"),
             }
         )
         with tempfile.TemporaryDirectory() as tmp:
@@ -78,6 +82,8 @@ class DoctorTests(unittest.TestCase):
             checks = run_doctor("node", root=root, runtime=True, runner=runner)
 
         check_names = {check.name for check in checks}
+        self.assertIn("systemd linkray-node", check_names)
+        self.assertIn("systemd linkray-xray", check_names)
         self.assertIn("systemd linkray-singbox-runtime", check_names)
         self.assertIn("systemd linkray-snell-runtime", check_names)
         self.assertIn("systemd linkray-snell-usage", check_names)

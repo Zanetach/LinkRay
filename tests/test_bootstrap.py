@@ -155,7 +155,7 @@ class BootstrapTests(unittest.TestCase):
         self.assertNotIn("'${CF_Token", details)
         self.assertIn('CF_Token="${CF_Token:?missing Cloudflare token env CF_Token}"', details)
 
-    def test_bootstrap_node_apply_writes_compose_and_runs_container(self):
+    def test_bootstrap_node_apply_writes_host_services(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             cert = root / "var/lib/marzban-node/ssl_client_cert.pem"
@@ -164,11 +164,18 @@ class BootstrapTests(unittest.TestCase):
             runner = RecordingRunner()
             actions = bootstrap_node(root=root, apply=True, runtime=True, runner=runner)
 
-            self.assertTrue((root / "opt/marzban-node/docker-compose.yml").exists())
-            self.assertTrue(any("docker tag gozargah/marzban-node:latest linkray-node:latest" in command for command in runner.commands))
-            self.assertTrue(any("docker rmi gozargah/marzban-node:latest" in command for command in runner.commands))
-            self.assertTrue(any("docker rm -f marzban-node-marzban-node-1" in command for command in runner.commands))
-            self.assertTrue(any("docker compose up -d --force-recreate --remove-orphans linkray-node" in command for command in runner.commands))
+            self.assertTrue((root / "opt/linkray-node-app/current/main.py").exists())
+            self.assertTrue((root / "etc/systemd/system/linkray-node.service").exists())
+            self.assertTrue((root / "etc/systemd/system/linkray-xray.service").exists())
+            self.assertFalse((root / "opt/marzban-node/docker-compose.yml").exists())
+            self.assertTrue(any("Xray-linux-64.zip" in command for command in runner.commands))
+            self.assertTrue(any("python3 -m venv /opt/linkray-node-app/venv" in command for command in runner.commands))
+            self.assertTrue(any("pip install -r /opt/linkray-node-app/current/requirements.txt" in command for command in runner.commands))
+            self.assertTrue(any("systemctl enable linkray-xray" in command for command in runner.commands))
+            self.assertTrue(any("systemctl enable --now linkray-node" in command for command in runner.commands))
+            self.assertTrue(any("docker update --restart=no linkray-node" in command for command in runner.commands))
+            self.assertFalse(any("docker tag gozargah/marzban-node:latest linkray-node:latest" in command for command in runner.commands))
+            self.assertFalse(any("docker compose up -d --force-recreate --remove-orphans linkray-node" in command for command in runner.commands))
             self.assertTrue(all(action.ok for action in actions))
 
     def test_bootstrap_node_with_config_installs_advanced_runtimes(self):
@@ -208,7 +215,7 @@ class BootstrapTests(unittest.TestCase):
                 pull_cert_from="root@edge-a.example.com",
             )
 
-            self.assertTrue((root / "opt/marzban-node/docker-compose.yml").exists())
+            self.assertTrue((root / "opt/linkray-node-app/current/main.py").exists())
             self.assertFalse(any(not action.ok and "ssl_client_cert.pem" in action.detail for action in actions))
             self.assertTrue(
                 any(
@@ -242,7 +249,7 @@ class BootstrapTests(unittest.TestCase):
             actions = bootstrap_node(root=root, apply=True, runtime=False)
 
             self.assertTrue(any(not action.ok and "ssl_client_cert.pem" in action.detail for action in actions))
-            self.assertFalse((root / "opt/marzban-node/docker-compose.yml").exists())
+            self.assertFalse((root / "opt/linkray-node-app/current/main.py").exists())
 
     def test_bootstrap_master_cli_dry_run(self):
         stdout = StringIO()

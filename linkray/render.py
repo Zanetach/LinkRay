@@ -33,6 +33,7 @@ DASHBOARD_SOURCE_PATCH_ROOT = first_existing_path(
     PROJECT_ROOT / "patches/marzban-dashboard/source",
     PACKAGE_ROOT / "assets/source-patches/marzban-dashboard",
 )
+NODE_APP_ROOT = first_existing_path(PROJECT_ROOT / "linkray/assets/marzban-node-host", PACKAGE_ROOT / "assets/marzban-node-host")
 
 
 def tls_stream(config: LinkRayConfig) -> dict:
@@ -241,19 +242,37 @@ def master_compose(config: LinkRayConfig) -> str:
 """
 
 
-def node_compose() -> str:
-    return """services:
-  linkray-node:
-    image: linkray-node:latest
-    container_name: linkray-node
-    restart: always
-    network_mode: host
-    environment:
-      SSL_CLIENT_CERT_FILE: "/var/lib/marzban-node/ssl_client_cert.pem"
-      SERVICE_PROTOCOL: "rest"
-    volumes:
-      - /var/lib/marzban-node:/var/lib/marzban-node
-      - /var/lib/marzban:/var/lib/marzban
+def linkray_node_service() -> str:
+    return """[Unit]
+Description=LinkRay Marzban Node control service
+After=network-online.target linkray-xray.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/linkray-node-app/current
+Environment=PYTHONUNBUFFERED=1
+Environment=SERVICE_HOST=0.0.0.0
+Environment=SERVICE_PORT=62050
+Environment=SERVICE_PROTOCOL=rest
+Environment=XRAY_API_HOST=0.0.0.0
+Environment=XRAY_API_PORT=62051
+Environment=XRAY_EXECUTABLE_PATH=/var/lib/marzban/linkray/bin/xray
+Environment=XRAY_ASSETS_PATH=/var/lib/marzban/linkray/bin
+Environment=SSL_CERT_FILE=/var/lib/marzban-node/ssl_cert.pem
+Environment=SSL_KEY_FILE=/var/lib/marzban-node/ssl_key.pem
+Environment=SSL_CLIENT_CERT_FILE=/var/lib/marzban-node/ssl_client_cert.pem
+Environment=LINKRAY_EXTERNAL_XRAY=true
+Environment=LINKRAY_XRAY_RUNTIME_CONFIG=/var/lib/marzban/linkray/xray/runtime.json
+Environment=LINKRAY_XRAY_SERVICE=linkray-xray
+ExecStart=/opt/linkray-node-app/venv/bin/python /opt/linkray-node-app/current/main.py
+Restart=always
+RestartSec=3
+KillSignal=SIGTERM
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target
 """
 
 
@@ -673,6 +692,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+Environment=XRAY_LOCATION_ASSET=/var/lib/marzban/linkray/bin
 ExecStartPre=/usr/bin/test -s /var/lib/marzban/linkray/xray/runtime.json
 ExecStart=/var/lib/marzban/linkray/bin/xray run -config /var/lib/marzban/linkray/xray/runtime.json
 Restart=always
@@ -843,6 +863,14 @@ def copy_file(src: Path, dst: Path) -> Path:
     return dst
 
 
+def copy_tree_files(src: Path, dst: Path) -> list[Path]:
+    copied: list[Path] = []
+    for source in sorted(path for path in src.rglob("*") if path.is_file()):
+        target = dst / source.relative_to(src)
+        copied.append(copy_file(source, target))
+    return copied
+
+
 def render_master(
     config: LinkRayConfig,
     output: Path,
@@ -921,7 +949,11 @@ def render_master(
 
 
 def render_node(output: Path, config: LinkRayConfig | None = None) -> RenderResult:
-    files = [write_text(output / "opt/marzban-node/docker-compose.yml", node_compose())]
+    files = [
+        *copy_tree_files(NODE_APP_ROOT, output / "opt/linkray-node-app/current"),
+        write_text(output / "etc/systemd/system/linkray-node.service", linkray_node_service()),
+        write_text(output / "etc/systemd/system/linkray-xray.service", linkray_xray_service()),
+    ]
     if config:
         files.extend(
             [
@@ -986,6 +1018,15 @@ def validate_rendered(path: Path) -> list[str]:
         for service_path in service_paths:
             if not service_path.exists():
                 errors.append(f"{path}: missing {service_path.relative_to(path)}")
+    if (path / "opt/linkray-node-app/current/main.py").exists():
+        node_required = [
+            path / "opt/linkray-node-app/current/requirements.txt",
+            path / "etc/systemd/system/linkray-node.service",
+            path / "etc/systemd/system/linkray-xray.service",
+        ]
+        for required in node_required:
+            if not required.exists():
+                errors.append(f"{path}: missing {required.relative_to(path)}")
     clash_patch_path = path / "var/lib/marzban/linkray/patches/clash.py"
     if (path / "opt/marzban/docker-compose.yml").exists() and not clash_patch_path.exists():
         errors.append(f"{path}: missing var/lib/marzban/linkray/patches/clash.py")
@@ -1004,8 +1045,8 @@ def validate_rendered(path: Path) -> list[str]:
         errors.append(f"{path}: missing var/lib/marzban/linkray/snell/snell-server.conf")
     required_any = [
         path / "opt/marzban/docker-compose.yml",
-        path / "opt/marzban-node/docker-compose.yml",
+        path / "opt/linkray-node-app/current/main.py",
     ]
     if not any(item.exists() for item in required_any):
-        errors.append(f"{path}: missing master or node docker-compose.yml")
+        errors.append(f"{path}: missing master docker-compose.yml or node app")
     return errors

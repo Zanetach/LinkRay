@@ -7,10 +7,31 @@ if [[ $# -ne 1 ]]; then
 fi
 
 src="$1"
-test -f "$src/opt/marzban-node/docker-compose.yml"
+test -f "$src/opt/linkray-node-app/current/main.py"
+test -f "$src/opt/linkray-node-app/current/requirements.txt"
+test -f "$src/etc/systemd/system/linkray-node.service"
+test -f "$src/etc/systemd/system/linkray-xray.service"
 
-install -d /opt/marzban-node
-install -m 0644 "$src/opt/marzban-node/docker-compose.yml" /opt/marzban-node/docker-compose.yml
+install -d \
+  /opt/linkray-node-app \
+  /var/lib/marzban/linkray/xray \
+  /var/lib/marzban/linkray/singbox \
+  /var/lib/marzban/linkray/snell \
+  /etc/systemd/system
+
+tmp_app="/opt/linkray-node-app/current.tmp"
+rm -rf "$tmp_app"
+install -d "$tmp_app"
+cp -a "$src/opt/linkray-node-app/current/." "$tmp_app/"
+rm -rf /opt/linkray-node-app/current
+mv "$tmp_app" /opt/linkray-node-app/current
+
+python3 -m venv /opt/linkray-node-app/venv
+/opt/linkray-node-app/venv/bin/python -m pip install --upgrade pip
+/opt/linkray-node-app/venv/bin/python -m pip install -r /opt/linkray-node-app/current/requirements.txt
+
+install -m 0644 "$src/etc/systemd/system/linkray-node.service" /etc/systemd/system/linkray-node.service
+install -m 0644 "$src/etc/systemd/system/linkray-xray.service" /etc/systemd/system/linkray-xray.service
 
 if [[ -f "$src/etc/systemd/system/linkray-singbox-runtime.service" ]]; then
   test -f "$src/etc/systemd/system/linkray-snell-runtime.service"
@@ -20,10 +41,6 @@ if [[ -f "$src/etc/systemd/system/linkray-singbox-runtime.service" ]]; then
   test -f "$src/var/lib/marzban/linkray/singbox/users.json"
   test -f "$src/var/lib/marzban/linkray/snell/snell-server.conf"
 
-  install -d \
-    /etc/systemd/system \
-    /var/lib/marzban/linkray/singbox \
-    /var/lib/marzban/linkray/snell
   install -m 0644 "$src/etc/systemd/system/linkray-singbox-runtime.service" /etc/systemd/system/linkray-singbox-runtime.service
   install -m 0644 "$src/etc/systemd/system/linkray-snell-runtime.service" /etc/systemd/system/linkray-snell-runtime.service
   install -m 0644 "$src/etc/systemd/system/linkray-snell@.service" /etc/systemd/system/linkray-snell@.service
@@ -36,17 +53,18 @@ if [[ -f "$src/etc/systemd/system/linkray-singbox-runtime.service" ]]; then
   fi
 fi
 
-cd /opt/marzban-node
-if ! docker image inspect linkray-node:latest >/dev/null 2>&1; then
-  docker image inspect gozargah/marzban-node:latest >/dev/null 2>&1 || docker pull gozargah/marzban-node:latest
-  docker tag gozargah/marzban-node:latest linkray-node:latest
-  docker rmi gozargah/marzban-node:latest >/dev/null 2>&1 || true
+if command -v docker >/dev/null 2>&1; then
+  docker update --restart=no linkray-node 2>/dev/null || true
+  docker stop linkray-node 2>/dev/null || true
+  docker rm -f marzban-node-marzban-node-1 2>/dev/null || true
 fi
-docker rm -f marzban-node-marzban-node-1 2>/dev/null || true
-docker compose up -d --force-recreate --remove-orphans linkray-node
+
+systemctl daemon-reload
+systemctl enable linkray-xray
+systemctl enable --now linkray-node
+systemctl restart linkray-node
 
 if [[ -f /etc/systemd/system/linkray-singbox-runtime.service ]]; then
-  systemctl daemon-reload
   systemctl enable --now linkray-singbox-runtime
   systemctl enable --now linkray-snell-runtime
   systemctl enable --now linkray-snell-usage

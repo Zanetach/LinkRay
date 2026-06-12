@@ -60,13 +60,36 @@ def command_action(command: str, apply: bool, runner: ShellRunner) -> BootstrapA
     return runner.run(command)
 
 
-def dependency_commands() -> list[str]:
-    return [
+def dependency_commands(include_docker: bool = True) -> list[str]:
+    commands = [
         "apt-get update",
-        "DEBIAN_FRONTEND=noninteractive apt-get install -y curl ca-certificates gnupg nginx sqlite3 socat cron unzip openssh-client git build-essential tar nftables",
-        "command -v docker >/dev/null 2>&1 || curl -fsSL https://get.docker.com | sh",
-        "systemctl enable --now docker",
-        "systemctl enable --now nginx",
+        "DEBIAN_FRONTEND=noninteractive apt-get install -y curl ca-certificates gnupg nginx sqlite3 socat cron unzip openssh-client git build-essential tar nftables python3 python3-venv python3-pip",
+    ]
+    if include_docker:
+        commands.extend(
+            [
+                "command -v docker >/dev/null 2>&1 || curl -fsSL https://get.docker.com | sh",
+                "systemctl enable --now docker",
+            ]
+        )
+    commands.append("systemctl enable --now nginx")
+    return commands
+
+
+def node_app_commands() -> list[str]:
+    return [
+        "test -f /opt/linkray-node-app/current/requirements.txt",
+        "python3 -m venv /opt/linkray-node-app/venv",
+        "/opt/linkray-node-app/venv/bin/python -m pip install --upgrade pip",
+        "/opt/linkray-node-app/venv/bin/python -m pip install -r /opt/linkray-node-app/current/requirements.txt",
+    ]
+
+
+def node_docker_cleanup_commands() -> list[str]:
+    return [
+        "if command -v docker >/dev/null 2>&1; then docker update --restart=no linkray-node 2>/dev/null || true; fi",
+        "if command -v docker >/dev/null 2>&1; then docker stop linkray-node 2>/dev/null || true; fi",
+        "if command -v docker >/dev/null 2>&1; then docker rm -f marzban-node-marzban-node-1 2>/dev/null || true; fi",
     ]
 
 
@@ -77,18 +100,6 @@ def master_image_alias_commands() -> list[str]:
             "docker image inspect gozargah/marzban:latest >/dev/null 2>&1 || docker pull gozargah/marzban:latest; "
             "docker tag gozargah/marzban:latest linkray:latest; "
             "docker rmi gozargah/marzban:latest >/dev/null 2>&1 || true; "
-            "fi"
-        ),
-    ]
-
-
-def node_image_alias_commands() -> list[str]:
-    return [
-        (
-            "if ! docker image inspect linkray-node:latest >/dev/null 2>&1; then "
-            "docker image inspect gozargah/marzban-node:latest >/dev/null 2>&1 || docker pull gozargah/marzban-node:latest; "
-            "docker tag gozargah/marzban-node:latest linkray-node:latest; "
-            "docker rmi gozargah/marzban-node:latest >/dev/null 2>&1 || true; "
             "fi"
         ),
     ]
@@ -317,23 +328,26 @@ def node_runtime_commands(
     local_cert_path: Path = Path("/") / NODE_CERT_PATH,
     advanced_runtime: bool = False,
 ) -> list[str]:
-    commands = dependency_commands()
+    commands = dependency_commands(include_docker=False)
     if pull_cert_from:
         commands.extend(pull_node_cert_commands(pull_cert_from, remote_cert_path, local_cert_path))
+    commands.extend(xray_binary_commands())
+    commands.extend(node_app_commands())
     if advanced_runtime:
         commands.extend(singbox_binary_commands())
         commands.extend(snell_binary_commands())
     commands.extend(
         [
-            *node_image_alias_commands(),
-            "docker rm -f marzban-node-marzban-node-1 2>/dev/null || true",
-            "cd /opt/marzban-node && docker compose up -d --force-recreate --remove-orphans linkray-node",
+            *node_docker_cleanup_commands(),
+            "systemctl daemon-reload",
+            "systemctl enable linkray-xray",
+            "systemctl enable --now linkray-node",
+            "systemctl restart linkray-node",
         ]
     )
     if advanced_runtime:
         commands.extend(
             [
-                "systemctl daemon-reload",
                 "systemctl enable --now linkray-singbox-runtime",
                 "systemctl enable --now linkray-snell-runtime",
                 "systemctl enable --now linkray-snell-usage",

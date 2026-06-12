@@ -180,11 +180,14 @@ def runtime_checks(role: str, runner: Runner, root: Path = Path("/")) -> list[Ch
         checks.append(service_check("linkray-sub-auto", "active", runner))
         checks.append(service_check("linkray-rules-update.timer", "active", runner))
         checks.append(service_check("linkray-relay", "active", runner))
+    if role == "node":
+        checks.append(service_check("linkray-node", "active", runner))
+        checks.append(service_check("linkray-xray", "active", runner))
     if role == "node" and node_has_advanced_runtime(root):
         checks.append(service_check("linkray-singbox-runtime", "active", runner))
         checks.append(service_check("linkray-snell-runtime", "active", runner))
         checks.append(service_check("linkray-snell-usage", "active", runner))
-    if role == "master" and xray_runtime_mode == "linkray":
+    if (role == "master" and xray_runtime_mode == "linkray") or role == "node":
         pattern = "/var/lib/marzban/linkray/bin/xray run -config /var/lib/marzban/linkray/xray/runtime.json"
         checks.append(
             Check(
@@ -231,7 +234,6 @@ def runtime_checks(role: str, runner: Runner, root: Path = Path("/")) -> list[Ch
                 *SINGBOX_DEFAULT_PORTS.values(),
                 *rendered_snell_ports(root),
             ]
-        checks.append(docker_check("linkray-node", runner))
 
     for port in expected_ports:
         listening = has_listening_port(ss_output, port)
@@ -274,7 +276,12 @@ def file_checks(role: str, root: Path) -> list[Check]:
             required.append("etc/systemd/system/linkray-xray.service")
         recommended = ["var/lib/marzban/linkray/hosts.sql"]
     else:
-        required = ["opt/marzban-node/docker-compose.yml"]
+        required = [
+            "opt/linkray-node-app/current/main.py",
+            "opt/linkray-node-app/current/requirements.txt",
+            "etc/systemd/system/linkray-node.service",
+            "etc/systemd/system/linkray-xray.service",
+        ]
         if node_has_advanced_runtime(root):
             required.extend(
                 [

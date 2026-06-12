@@ -66,6 +66,15 @@ class InstallerTests(unittest.TestCase):
     def test_deploy_rendered_node_script_supports_advanced_runtime_files(self):
         script = Path("scripts/deploy-rendered-node.sh").read_text()
 
+        self.assertIn("opt/linkray-node-app/current/main.py", script)
+        self.assertIn("etc/systemd/system/linkray-node.service", script)
+        self.assertIn("etc/systemd/system/linkray-xray.service", script)
+        self.assertIn("python3 -m venv /opt/linkray-node-app/venv", script)
+        self.assertIn("pip install -r /opt/linkray-node-app/current/requirements.txt", script)
+        self.assertIn("systemctl enable linkray-xray", script)
+        self.assertIn("systemctl enable --now linkray-node", script)
+        self.assertIn("docker update --restart=no linkray-node", script)
+        self.assertNotIn("docker compose up -d --force-recreate --remove-orphans linkray-node", script)
         self.assertIn("etc/systemd/system/linkray-singbox-runtime.service", script)
         self.assertIn("etc/systemd/system/linkray-snell-runtime.service", script)
         self.assertIn("etc/systemd/system/linkray-snell@.service", script)
