@@ -1,6 +1,6 @@
 <div align="center">
   <h1>LinkRay</h1>
-  <p><b>Repeatable Marzban + Xray-core + sing-box deployment tooling for multi-node proxy operations.</b></p>
+  <p><b>Repeatable LinkRay + Xray-core + sing-box + Snell deployment tooling for multi-node proxy operations.</b></p>
   <a href="https://github.com/Zanetach/LinkRay/stargazers"><img src="https://img.shields.io/github/stars/Zanetach/LinkRay?style=flat-square" alt="Stars"></a>
   <a href="https://github.com/Zanetach/LinkRay/releases"><img src="https://img.shields.io/github/v/tag/Zanetach/LinkRay?label=version&style=flat-square" alt="Version"></a>
   <a href="pyproject.toml"><img src="https://img.shields.io/badge/python-3.9%2B-3776ab?style=flat-square&logo=python&logoColor=white" alt="Python 3.9+"></a>
