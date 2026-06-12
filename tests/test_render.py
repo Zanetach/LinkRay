@@ -352,6 +352,8 @@ class RenderTests(unittest.TestCase):
                 self.assertIn("AnyTLS", html)
                 self.assertIn("Snell", html)
                 self.assertIn("/api/linkray/user-protocols", html)
+                self.assertIn('document.querySelector(".linkray-advanced-protocols")', html)
+                self.assertIn("dialog.contains(target)", html)
                 self.assertIn("VLESS XHTTP REALITY", html)
                 self.assertIn("VMess HTTPUpgrade TLS", html)
                 self.assertIn("Trojan GRPC TLS", html)

@@ -201,7 +201,7 @@
 
           function injectAdvancedProtocolSelector() {
             const dialog = createDialog();
-            if (!dialog || dialog.querySelector(".linkray-advanced-protocols")) return;
+            if (!dialog || document.querySelector(".linkray-advanced-protocols")) return;
             const panel = document.createElement("div");
             panel.className = "linkray-advanced-protocols";
             panel.innerHTML = `
@@ -226,7 +226,11 @@
             });
             const protocolTitle = titleElements("协议")[0];
             const target = protocolTitle ? detailTarget(protocolTitle) : dialog;
-            (target && target.parentElement ? target.parentElement : dialog).appendChild(panel);
+            const host =
+              target && dialog.contains(target) && target.parentElement && dialog.contains(target.parentElement)
+                ? target.parentElement
+                : dialog;
+            host.appendChild(panel);
           }
 
           function parseCreateUserBody(body) {
