@@ -144,10 +144,13 @@ class RenderTests(unittest.TestCase):
             self.assertIn("var/lib/marzban/linkray/source-patches/marzban-dashboard/README.md", relative)
             self.assertIn("var/lib/marzban/linkray/singbox/config.json", relative)
             self.assertIn("var/lib/marzban/linkray/singbox/users.json", relative)
+            self.assertIn("var/lib/marzban/linkray/xray/runtime.json", relative)
             self.assertIn("var/lib/marzban/linkray/snell/snell-server.conf", relative)
             self.assertIn("var/lib/marzban/linkray/rules/cn-domains.txt", relative)
             self.assertIn("var/lib/marzban/linkray/rules/cn-ip-cidrs.txt", relative)
             self.assertIn("var/lib/marzban/linkray/patches/clash.py", relative)
+            self.assertIn("var/lib/marzban/linkray/patches/0_xray_core.py", relative)
+            self.assertIn("var/lib/marzban/linkray/patches/xray_init.py", relative)
             self.assertIn("var/lib/marzban/linkray/jobs/linkray_singbox_usages.py", relative)
             self.assertNotIn("var/lib/marzban/linkray/public/ports.html", relative)
             self.assertNotIn("var/lib/marzban/linkray/public/ports.json", relative)
@@ -158,6 +161,9 @@ class RenderTests(unittest.TestCase):
 
             xray = json.loads((output / "var/lib/marzban/xray_config.json").read_text())
             self.assertEqual(xray["inbounds"][0]["tag"], "VLESS TCP TLS")
+            xray_runtime = json.loads((output / "var/lib/marzban/linkray/xray/runtime.json").read_text())
+            self.assertEqual(xray_runtime["inbounds"][0]["tag"], "API_INBOUND")
+            self.assertEqual(xray_runtime["inbounds"][0]["port"], 61998)
             manifest = json.loads((output / "var/lib/marzban/linkray/linkray-manifest.json").read_text())
             self.assertEqual(manifest["version"], 1)
             self.assertEqual(manifest["role"], "master")
@@ -257,14 +263,20 @@ class RenderTests(unittest.TestCase):
             relative = {path.relative_to(output).as_posix() for path in result.files}
 
             self.assertIn("etc/systemd/system/linkray-xray.service", relative)
+            self.assertIn("var/lib/marzban/linkray/xray/runtime.json", relative)
             service = (output / "etc/systemd/system/linkray-xray.service").read_text()
             self.assertIn("Description=LinkRay Xray-core runtime", service)
             self.assertIn(
-                "ExecStart=/var/lib/marzban/linkray/bin/xray run -config /var/lib/marzban/xray_config.json",
+                "ExecStart=/var/lib/marzban/linkray/bin/xray run -config /var/lib/marzban/linkray/xray/runtime.json",
                 service,
             )
             compose = (output / "opt/marzban/docker-compose.yml").read_text()
             self.assertNotIn("/var/lib/marzban/linkray/bin/xray:/usr/local/bin/xray:ro", compose)
+            self.assertIn("/var/lib/marzban/linkray/patches/xray_init.py:/code/app/xray/__init__.py:ro", compose)
+            self.assertIn("/var/lib/marzban/linkray/patches/0_xray_core.py:/code/app/jobs/0_xray_core.py:ro", compose)
+            env = (output / "opt/marzban/.env").read_text()
+            self.assertIn("LINKRAY_EXTERNAL_XRAY = True", env)
+            self.assertIn("LINKRAY_XRAY_API_PORT = 61998", env)
             manifest = json.loads((output / "var/lib/marzban/linkray/linkray-manifest.json").read_text())
             self.assertEqual(manifest["config"]["xray_runtime_mode"], "linkray")
             self.assertEqual(validate_rendered(output), [])

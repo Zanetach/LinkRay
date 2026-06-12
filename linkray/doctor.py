@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
-from .config import DEFAULT_PORTS
+from .config import DEFAULT_PORTS, LINKRAY_XRAY_API_PORT
 from .snell_runtime import SNELL_DEFAULT_PORTS
 from .singbox_runtime import SINGBOX_DEFAULT_PORTS, SINGBOX_STATS_PORT
 
@@ -168,7 +168,7 @@ def runtime_checks(role: str, runner: Runner, root: Path = Path("/")) -> list[Ch
         checks.append(service_check("linkray-rules-update.timer", "active", runner))
         checks.append(service_check("linkray-relay", "active", runner))
     if role == "master" and xray_runtime_mode == "linkray":
-        pattern = "/var/lib/marzban/linkray/bin/xray run -config /var/lib/marzban/xray_config.json"
+        pattern = "/var/lib/marzban/linkray/bin/xray run -config /var/lib/marzban/linkray/xray/runtime.json"
         checks.append(
             Check(
                 "PASS" if has_process(ps_output, pattern) else "FAIL",
@@ -201,6 +201,8 @@ def runtime_checks(role: str, runner: Runner, root: Path = Path("/")) -> list[Ch
             *rendered_snell_ports(root),
             *expected_ports,
         ]
+        if xray_runtime_mode == "linkray":
+            expected_ports.append(LINKRAY_XRAY_API_PORT)
         checks.append(docker_check("marzban-marzban-1", runner))
     else:
         expected_ports = [62050, 62051, *expected_ports]
@@ -237,7 +239,10 @@ def file_checks(role: str, root: Path) -> list[Check]:
             "var/lib/marzban/linkray/rules/cn-ip-cidrs.txt",
             "var/lib/marzban/linkray/singbox/config.json",
             "var/lib/marzban/linkray/singbox/users.json",
+            "var/lib/marzban/linkray/xray/runtime.json",
             "var/lib/marzban/linkray/snell/snell-server.conf",
+            "var/lib/marzban/linkray/patches/0_xray_core.py",
+            "var/lib/marzban/linkray/patches/xray_init.py",
             "var/lib/marzban/linkray/jobs/linkray_singbox_usages.py",
         ]
         if rendered_xray_runtime_mode(root) == "linkray":

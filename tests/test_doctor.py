@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from linkray.config import DEFAULT_PORTS, LinkRayConfig, parse_inbound_ports
+from linkray.config import DEFAULT_PORTS, LINKRAY_XRAY_API_PORT, LinkRayConfig, parse_inbound_ports
 from linkray.doctor import CommandResult, docker_has_container, exit_code, has_listening_port, run_doctor
 from linkray.install import install_master, install_node
 from linkray.snell_runtime import SNELL_DEFAULT_PORTS
@@ -55,6 +55,7 @@ class DoctorTests(unittest.TestCase):
                 SINGBOX_STATS_PORT,
                 *SINGBOX_DEFAULT_PORTS.values(),
                 *SNELL_DEFAULT_PORTS.values(),
+                LINKRAY_XRAY_API_PORT,
                 *DEFAULT_PORTS.values(),
             ]
         )
@@ -134,6 +135,7 @@ class DoctorTests(unittest.TestCase):
                 SINGBOX_STATS_PORT,
                 *SINGBOX_DEFAULT_PORTS.values(),
                 *SNELL_DEFAULT_PORTS.values(),
+                LINKRAY_XRAY_API_PORT,
                 *DEFAULT_PORTS.values(),
             ]
         )
@@ -142,7 +144,7 @@ class DoctorTests(unittest.TestCase):
                 ("ss", "-lntup"): CommandResult(0, ss_ports),
                 ("ps", "-eo", "pid,ppid,cmd"): CommandResult(
                     0,
-                    "1 0 /var/lib/marzban/linkray/bin/xray run -config /var/lib/marzban/xray_config.json\n",
+                    "1 0 /var/lib/marzban/linkray/bin/xray run -config /var/lib/marzban/linkray/xray/runtime.json\n",
                 ),
                 ("systemctl", "is-active", "nginx"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "xray"): CommandResult(3, "inactive\n"),

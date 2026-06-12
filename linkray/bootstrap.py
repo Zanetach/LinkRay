@@ -72,32 +72,43 @@ def dependency_commands() -> list[str]:
 
 def xray_binary_commands(version: str = "v25.3.6") -> list[str]:
     binary = "/var/lib/marzban/linkray/bin/xray"
+    geoip = "/var/lib/marzban/linkray/bin/geoip.dat"
+    geosite = "/var/lib/marzban/linkray/bin/geosite.dat"
     archive = f"https://github.com/XTLS/Xray-core/releases/download/{version}/Xray-linux-64.zip"
     return [
         "mkdir -p /var/lib/marzban/linkray/bin",
         (
-            f"test -x {binary} || "
+            f"if ! test -x {binary} -a -s {geoip} -a -s {geosite}; then "
             f"tmp=$(mktemp -d) && "
             f"curl -fL {shell_quote(archive)} -o \"$tmp/xray.zip\" && "
             f"unzip -p \"$tmp/xray.zip\" xray > {binary} && "
+            f"unzip -p \"$tmp/xray.zip\" geoip.dat > {geoip} && "
+            f"unzip -p \"$tmp/xray.zip\" geosite.dat > {geosite} && "
             f"chmod 755 {binary} && "
-            f"rm -rf \"$tmp\""
+            f"chmod 644 {geoip} {geosite} && "
+            f"rm -rf \"$tmp\"; "
+            "fi"
         ),
         f"{binary} version | head -1",
     ]
 
 
-def go_toolchain_commands(version: str = "1.23.12") -> list[str]:
+def go_toolchain_install_command(version: str = "1.23.12") -> str:
     archive = f"https://go.dev/dl/go{version}.linux-amd64.tar.gz"
+    return (
+        f"if ! (test -x /usr/local/go/bin/go && /usr/local/go/bin/go version | grep -q 'go{version}'); then "
+        f"go_tmp=$(mktemp -d) && "
+        f"curl -fL {shell_quote(archive)} -o \"$go_tmp/go.tar.gz\" && "
+        f"rm -rf /usr/local/go && "
+        f"tar -C /usr/local -xzf \"$go_tmp/go.tar.gz\" && "
+        f"rm -rf \"$go_tmp\"; "
+        "fi"
+    )
+
+
+def go_toolchain_commands(version: str = "1.23.12") -> list[str]:
     return [
-        (
-            f"test -x /usr/local/go/bin/go && /usr/local/go/bin/go version | grep -q 'go{version}' || "
-            f"tmp=$(mktemp -d) && "
-            f"curl -fL {shell_quote(archive)} -o \"$tmp/go.tar.gz\" && "
-            f"rm -rf /usr/local/go && "
-            f"tar -C /usr/local -xzf \"$tmp/go.tar.gz\" && "
-            f"rm -rf \"$tmp\""
-        ),
+        go_toolchain_install_command(version),
         "/usr/local/go/bin/go version",
     ]
 
@@ -105,17 +116,34 @@ def go_toolchain_commands(version: str = "1.23.12") -> list[str]:
 def singbox_binary_commands(version: str = "v1.12.0") -> list[str]:
     binary = "/usr/local/bin/sing-box"
     marker = f"/usr/local/share/linkray/sing-box-with-v2ray-api-quic-utls-clash-api-{version}"
+    prebuilt_url = (
+        f"https://github.com/Zanetach/LinkRay/releases/download/sing-box-{version}/"
+        f"sing-box-{version}-linux-${{linkray_arch}}.tar.gz"
+    )
     return [
-        *go_toolchain_commands(),
         (
-            f"test -f {marker} -a -x {binary} || "
+            f"if ! test -f {marker} -a -x {binary}; then "
+            "arch=$(uname -m) && "
+            "case \"$arch\" in x86_64|amd64) linkray_arch=amd64 ;; aarch64|arm64) linkray_arch=aarch64 ;; *) echo unsupported arch \"$arch\"; exit 1 ;; esac && "
             f"tmp=$(mktemp -d) && "
             f"mkdir -p /usr/local/share/linkray && "
+            f"prebuilt_url=\"${{LINKRAY_SING_BOX_URL:-{prebuilt_url}}}\" && "
+            "if curl -fsL \"$prebuilt_url\" -o \"$tmp/sing-box.tar.gz\" && "
+            "tar -xzf \"$tmp/sing-box.tar.gz\" -C \"$tmp\" && "
+            "prebuilt_bin=$(find \"$tmp\" -type f -name sing-box | head -1) && "
+            "test -n \"$prebuilt_bin\" && "
+            "\"$prebuilt_bin\" version | grep -q with_v2ray_api; then "
+            f"install -m 0755 \"$prebuilt_bin\" {binary}; "
+            "else "
+            f"{go_toolchain_install_command()} && "
             f"GOBIN=\"$tmp/bin\" /usr/local/go/bin/go install -trimpath -tags 'with_v2ray_api with_quic with_utls with_clash_api' "
             f"github.com/sagernet/sing-box/cmd/sing-box@{version} && "
-            f"install -m 0755 \"$tmp/bin/sing-box\" {binary} && "
+            f"install -m 0755 \"$tmp/bin/sing-box\" {binary}; "
+            "fi && "
+            f"{binary} version | grep -q with_v2ray_api && "
             f"touch {marker} && "
-            f"rm -rf \"$tmp\""
+            f"rm -rf \"$tmp\"; "
+            "fi"
         ),
         f"{binary} version | head -1",
     ]
@@ -126,7 +154,7 @@ def snell_binary_commands(version: str = "v5.0.1") -> list[str]:
     marker = f"/usr/local/share/linkray/snell-server-{version}"
     return [
         (
-            f"test -f {marker} -a -x {binary} || "
+            f"if ! test -f {marker} -a -x {binary}; then "
             "arch=$(uname -m) && "
             "case \"$arch\" in x86_64|amd64) snell_arch=amd64 ;; aarch64|arm64) snell_arch=aarch64 ;; *) echo unsupported arch \"$arch\"; exit 1 ;; esac && "
             "tmp=$(mktemp -d) && "
@@ -135,7 +163,8 @@ def snell_binary_commands(version: str = "v5.0.1") -> list[str]:
             f"unzip -p \"$tmp/snell-server.zip\" snell-server > {binary} && "
             f"chmod 755 {binary} && "
             f"touch {marker} && "
-            "rm -rf \"$tmp\""
+            "rm -rf \"$tmp\"; "
+            "fi"
         ),
         f"{binary} -version 2>&1 | head -1",
     ]
@@ -208,22 +237,42 @@ def master_runtime_commands(
     cf_token_env: str,
     nodes: list[NodeHost] | None = None,
 ) -> list[str]:
+    return [
+        *master_preinstall_runtime_commands(issue_cert, config, cf_token_env),
+        *master_postinstall_runtime_commands(config),
+    ]
+
+
+def master_preinstall_runtime_commands(
+    issue_cert: bool,
+    config: LinkRayConfig,
+    cf_token_env: str,
+) -> list[str]:
     commands = dependency_commands()
     if issue_cert:
         commands.extend(cert_commands(config, cf_token_env))
     commands.extend(xray_binary_commands())
     commands.extend(singbox_binary_commands())
     commands.extend(snell_binary_commands())
-    commands.extend(
-        [
-            "cd /opt/marzban && docker compose up -d --force-recreate marzban",
-            "sqlite3 /var/lib/marzban/db.sqlite3 < /var/lib/marzban/linkray/hosts.sql",
-            "nginx -t",
-            "systemctl reload nginx",
-        ]
-    )
+    return commands
+
+
+def master_postinstall_runtime_commands(config: LinkRayConfig) -> list[str]:
+    commands = [
+        "cd /opt/marzban && docker compose up -d --force-recreate marzban",
+        "sqlite3 /var/lib/marzban/db.sqlite3 < /var/lib/marzban/linkray/hosts.sql",
+        "nginx -t",
+        "systemctl reload nginx",
+    ]
     commands.extend(linkray_api_commands(config.xray_runtime_mode))
-    commands.append("linkray doctor --role master")
+    commands.append(
+        "tmp=$(mktemp) && "
+        "for i in $(seq 1 30); do "
+        "if linkray doctor --role master >\"$tmp\" 2>&1; then cat \"$tmp\"; rm -f \"$tmp\"; exit 0; fi; "
+        "sleep 2; "
+        "done; "
+        "cat \"$tmp\"; rm -f \"$tmp\"; exit 1"
+    )
     return commands
 
 
@@ -309,10 +358,23 @@ def bootstrap_master(
         ]
 
     effective_config = config_with_generated_secrets(config) if apply else config
+
+    if effective_runtime and apply:
+        shell_runner = runner or SubprocessShellRunner()
+        for command in master_preinstall_runtime_commands(issue_cert, effective_config, cf_token_env):
+            action = command_action(command, apply, shell_runner)
+            actions.append(action)
+            if not action.ok:
+                return actions
+
     actions.extend(install_actions_to_bootstrap(install_master(effective_config, root=root, apply=apply, nodes=nodes)))
     if effective_runtime:
         shell_runner = runner or SubprocessShellRunner()
-        for command in master_runtime_commands(issue_cert, effective_config, cf_token_env, nodes=nodes):
+        if apply:
+            commands = master_postinstall_runtime_commands(effective_config)
+        else:
+            commands = master_runtime_commands(issue_cert, effective_config, cf_token_env, nodes=nodes)
+        for command in commands:
             action = command_action(command, apply, shell_runner)
             actions.append(action)
             if apply and not action.ok:

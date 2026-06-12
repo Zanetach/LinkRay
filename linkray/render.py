@@ -8,7 +8,7 @@ from collections.abc import Sequence
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .config import DEFAULT_PORTS, RELAY_PORT_OFFSET, LinkRayConfig, NodeHost, RenderResult, relay_port
+from .config import DEFAULT_PORTS, LINKRAY_XRAY_API_PORT, RELAY_PORT_OFFSET, LinkRayConfig, NodeHost, RenderResult, relay_port
 from .rules import BUILTIN_CN_DOMAIN_SUFFIXES, BUILTIN_CN_IP_CIDRS, RouteRules, write_route_rules
 from .snell_runtime import DEFAULT_RUNTIME_DIR as SNELL_RUNTIME_DIR
 from .snell_runtime import server_config_text as snell_server_config_text
@@ -150,10 +150,75 @@ def xray_config(config: LinkRayConfig) -> dict:
     }
 
 
+def merge_dicts(a: dict, b: dict) -> dict:
+    for key, value in b.items():
+        if isinstance(value, dict) and key in a and isinstance(a[key], dict):
+            merge_dicts(a[key], value)
+        else:
+            a[key] = value
+    return a
+
+
+def xray_runtime_config(config: LinkRayConfig) -> dict:
+    data = xray_config(config)
+    data["api"] = {
+        "services": [
+            "HandlerService",
+            "StatsService",
+            "LoggerService",
+        ],
+        "tag": "API",
+    }
+    data["stats"] = {}
+    forced_policies = {
+        "levels": {
+            "0": {
+                "statsUserUplink": True,
+                "statsUserDownlink": True,
+            }
+        },
+        "system": {
+            "statsInboundDownlink": False,
+            "statsInboundUplink": False,
+            "statsOutboundDownlink": True,
+            "statsOutboundUplink": True,
+        },
+    }
+    data["policy"] = merge_dicts(data.get("policy", {}), forced_policies)
+    data["inbounds"].insert(
+        0,
+        {
+            "listen": "127.0.0.1",
+            "port": LINKRAY_XRAY_API_PORT,
+            "protocol": "dokodemo-door",
+            "settings": {
+                "address": "127.0.0.1",
+            },
+            "tag": "API_INBOUND",
+        },
+    )
+    data.setdefault("routing", {}).setdefault("rules", []).insert(
+        0,
+        {
+            "inboundTag": ["API_INBOUND"],
+            "outboundTag": "API",
+            "type": "field",
+        },
+    )
+    return data
+
+
 def master_compose(config: LinkRayConfig) -> str:
     volumes = ["      - /var/lib/marzban:/var/lib/marzban"]
     if config.xray_runtime_mode == "marzban":
         volumes.append("      - /var/lib/marzban/linkray/bin/xray:/usr/local/bin/xray:ro")
+    if config.xray_runtime_mode == "linkray":
+        volumes.extend(
+            [
+                "      - /var/lib/marzban/linkray/patches/xray_init.py:/code/app/xray/__init__.py:ro",
+                "      - /var/lib/marzban/linkray/patches/0_xray_core.py:/code/app/jobs/0_xray_core.py:ro",
+            ]
+        )
     volumes.extend(
         [
             "      - /var/lib/marzban/linkray/patches/clash.py:/code/app/subscription/clash.py:ro",
@@ -192,9 +257,8 @@ def node_compose() -> str:
 
 def nginx_panel(config: LinkRayConfig) -> str:
     return f"""server {{
-    listen {config.panel_port} ssl;
-    listen [::]:{config.panel_port} ssl;
-    http2 on;
+    listen {config.panel_port} ssl http2;
+    listen [::]:{config.panel_port} ssl http2;
     server_name {config.domain};
 
     ssl_certificate {config.cert_file};
@@ -320,8 +384,7 @@ def dotenv_value(value: str) -> str:
 
 
 def marzban_env(config: LinkRayConfig) -> str:
-    return "\n".join(
-        [
+    items = [
             'UVICORN_HOST = "0.0.0.0"',
             f"UVICORN_PORT = {config.marzban_http_port}",
             f"SUDO_USERNAME = {dotenv_value(config.admin_username)}",
@@ -337,7 +400,13 @@ def marzban_env(config: LinkRayConfig) -> str:
             "DOCS = False",
             "",
         ]
-    )
+    if config.xray_runtime_mode == "linkray":
+        items[7:7] = [
+            "LINKRAY_EXTERNAL_XRAY = True",
+            f"LINKRAY_XRAY_API_PORT = {LINKRAY_XRAY_API_PORT}",
+            "LINKRAY_XRAY_RUNTIME_CONFIG = /var/lib/marzban/linkray/xray/runtime.json",
+        ]
+    return "\n".join(items)
 
 
 def current_commit() -> str:
@@ -597,7 +666,8 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/var/lib/marzban/linkray/bin/xray run -config /var/lib/marzban/xray_config.json
+ExecStartPre=/usr/bin/test -s /var/lib/marzban/linkray/xray/runtime.json
+ExecStart=/var/lib/marzban/linkray/bin/xray run -config /var/lib/marzban/linkray/xray/runtime.json
 Restart=always
 RestartSec=3
 LimitNOFILE=1048576
@@ -799,6 +869,10 @@ def render_master(
         write_text(output / "etc/systemd/system/linkray-relay.service", linkray_relay_service(effective_nodes, config)),
         write_text(output / "var/lib/marzban/linkray/hosts.sql", hosts_sql(config, effective_nodes)),
         write_text(output / "var/lib/marzban/linkray/linkray-manifest.json", render_manifest(config, effective_nodes)),
+        write_text(
+            output / "var/lib/marzban/linkray/xray/runtime.json",
+            json.dumps(xray_runtime_config(config), indent=2) + "\n",
+        ),
         write_text(output / "var/lib/marzban/linkray/singbox/config.json", json.dumps(server_config(config, []), indent=2) + "\n"),
         write_text(output / "var/lib/marzban/linkray/singbox/users.json", json.dumps({"version": 1, "users": []}, indent=2) + "\n"),
         write_text(output / "var/lib/marzban/linkray/snell/snell-server.conf", snell_server_config_text(config)),
@@ -814,6 +888,14 @@ def render_master(
         output / "var/lib/marzban/linkray/rules/cn-ip-cidrs.txt",
         copy_file(TEMPLATE_ROOT / "marzban/clash/default.yml", output / "var/lib/marzban/templates/clash/default.yml"),
         copy_file(PATCH_ROOT / "marzban-subscription/current/clash.py", output / "var/lib/marzban/linkray/patches/clash.py"),
+        copy_file(
+            PATCH_ROOT / "marzban-xray/current/xray_init.py",
+            output / "var/lib/marzban/linkray/patches/xray_init.py",
+        ),
+        copy_file(
+            PATCH_ROOT / "marzban-xray/current/0_xray_core.py",
+            output / "var/lib/marzban/linkray/patches/0_xray_core.py",
+        ),
         copy_file(
             PATCH_ROOT / "marzban-jobs/current/linkray_singbox_usages.py",
             output / "var/lib/marzban/linkray/jobs/linkray_singbox_usages.py",
@@ -881,6 +963,13 @@ def validate_rendered(path: Path) -> list[str]:
     clash_patch_path = path / "var/lib/marzban/linkray/patches/clash.py"
     if (path / "opt/marzban/docker-compose.yml").exists() and not clash_patch_path.exists():
         errors.append(f"{path}: missing var/lib/marzban/linkray/patches/clash.py")
+    xray_runtime_path = path / "var/lib/marzban/linkray/xray/runtime.json"
+    if rendered_xray_runtime_mode(path) == "linkray" and not xray_runtime_path.exists():
+        errors.append(f"{path}: missing var/lib/marzban/linkray/xray/runtime.json")
+    for patch_name in ["0_xray_core.py", "xray_init.py"]:
+        patch_path = path / f"var/lib/marzban/linkray/patches/{patch_name}"
+        if rendered_xray_runtime_mode(path) == "linkray" and not patch_path.exists():
+            errors.append(f"{path}: missing var/lib/marzban/linkray/patches/{patch_name}")
     singbox_usage_job_path = path / "var/lib/marzban/linkray/jobs/linkray_singbox_usages.py"
     if (path / "opt/marzban/docker-compose.yml").exists() and not singbox_usage_job_path.exists():
         errors.append(f"{path}: missing var/lib/marzban/linkray/jobs/linkray_singbox_usages.py")

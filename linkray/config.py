@@ -35,6 +35,7 @@ SINGBOX_PORT_KEYS = tuple(SINGBOX_DEFAULT_PORTS.keys())
 SNELL_PORT_KEYS = tuple(SNELL_DEFAULT_PORTS.keys())
 RELAY_PORT_OFFSET = 100
 XRAY_RUNTIME_MODES = ("marzban", "linkray")
+LINKRAY_XRAY_API_PORT = 61998
 
 
 @dataclass(frozen=True)

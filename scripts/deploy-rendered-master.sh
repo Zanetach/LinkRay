@@ -30,12 +30,15 @@ test -f "$src/var/lib/marzban/linkray/hosts.sql"
 test -f "$src/var/lib/marzban/linkray/linkray-manifest.json"
 test -f "$src/var/lib/marzban/linkray/source-patches/marzban-dashboard/README.md"
 test -f "$src/var/lib/marzban/linkray/source-patches/marzban-dashboard/linkray-dashboard.patch"
+test -f "$src/var/lib/marzban/linkray/xray/runtime.json"
 test -f "$src/var/lib/marzban/linkray/singbox/config.json"
 test -f "$src/var/lib/marzban/linkray/singbox/users.json"
 test -f "$src/var/lib/marzban/linkray/snell/snell-server.conf"
 test -f "$src/var/lib/marzban/linkray/rules/cn-domains.txt"
 test -f "$src/var/lib/marzban/linkray/rules/cn-ip-cidrs.txt"
 test -f "$src/var/lib/marzban/linkray/patches/clash.py"
+test -f "$src/var/lib/marzban/linkray/patches/0_xray_core.py"
+test -f "$src/var/lib/marzban/linkray/patches/xray_init.py"
 test -f "$src/var/lib/marzban/linkray/jobs/linkray_singbox_usages.py"
 test -f "$src/var/lib/marzban/templates/subscription/index.html"
 test -f "$src/var/lib/marzban/dashboard-patches/index.linkray.js"
@@ -48,6 +51,7 @@ install -d \
   /var/lib/marzban/linkray/patches \
   /var/lib/marzban/linkray/jobs \
   /var/lib/marzban/linkray/source-patches/marzban-dashboard \
+  /var/lib/marzban/linkray/xray \
   /var/lib/marzban/linkray/singbox \
   /var/lib/marzban/linkray/snell \
   /var/lib/marzban/linkray/rules \
@@ -61,12 +65,15 @@ install -m 0644 "$src/var/lib/marzban/linkray/hosts.sql" /var/lib/marzban/linkra
 install -m 0644 "$src/var/lib/marzban/linkray/linkray-manifest.json" /var/lib/marzban/linkray/linkray-manifest.json
 install -m 0644 "$src/var/lib/marzban/linkray/source-patches/marzban-dashboard/README.md" /var/lib/marzban/linkray/source-patches/marzban-dashboard/README.md
 install -m 0644 "$src/var/lib/marzban/linkray/source-patches/marzban-dashboard/linkray-dashboard.patch" /var/lib/marzban/linkray/source-patches/marzban-dashboard/linkray-dashboard.patch
+install -m 0644 "$src/var/lib/marzban/linkray/xray/runtime.json" /var/lib/marzban/linkray/xray/runtime.json
 install -m 0644 "$src/var/lib/marzban/linkray/singbox/config.json" /var/lib/marzban/linkray/singbox/config.json
 test -f /var/lib/marzban/linkray/singbox/users.json || install -m 0644 "$src/var/lib/marzban/linkray/singbox/users.json" /var/lib/marzban/linkray/singbox/users.json
 install -m 0600 "$src/var/lib/marzban/linkray/snell/snell-server.conf" /var/lib/marzban/linkray/snell/snell-server.conf
 install -m 0644 "$src/var/lib/marzban/linkray/rules/cn-domains.txt" /var/lib/marzban/linkray/rules/cn-domains.txt
 install -m 0644 "$src/var/lib/marzban/linkray/rules/cn-ip-cidrs.txt" /var/lib/marzban/linkray/rules/cn-ip-cidrs.txt
 install -m 0644 "$src/var/lib/marzban/linkray/patches/clash.py" /var/lib/marzban/linkray/patches/clash.py
+install -m 0644 "$src/var/lib/marzban/linkray/patches/0_xray_core.py" /var/lib/marzban/linkray/patches/0_xray_core.py
+install -m 0644 "$src/var/lib/marzban/linkray/patches/xray_init.py" /var/lib/marzban/linkray/patches/xray_init.py
 install -m 0644 "$src/var/lib/marzban/linkray/jobs/linkray_singbox_usages.py" /var/lib/marzban/linkray/jobs/linkray_singbox_usages.py
 install -m 0644 "$src/var/lib/marzban/dashboard-patches/index.html" /var/lib/marzban/dashboard-patches/index.html
 install -m 0644 "$src/var/lib/marzban/dashboard-patches/index.linkray.js" /var/lib/marzban/dashboard-patches/index.linkray.js
