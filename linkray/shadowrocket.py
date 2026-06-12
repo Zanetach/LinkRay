@@ -297,35 +297,33 @@ class ShadowrocketHandler(AdapterHandler):
             self.send_bytes(404, {"Content-Type": "text/plain"}, b"not found\n")
             return
         token = match.group(1)
-        mode = match.group(2)
+        # /shadowrocket-conf remains as a backward-compatible alias; both paths
+        # must return the same full Shadowrocket configuration.
         try:
             _, upstream_headers, raw = fetch_upstream(self.marzban_url, token, {"Accept": "text/plain"})
-            if mode == "shadowrocket-conf":
-                config = None
-                snell_user = None
-                protocol_preferences = None
-                if self.server_domain:
-                    config = LinkRayConfig(domain=self.server_domain)
-                    username = fetch_subscription_username(self.marzban_url, token)
-                    if not username:
-                        raise ValueError("missing Marzban username for Snell runtime user")
-                    protocol_preferences = load_protocol_preferences(Path(self.protocol_preferences_path))
-                    if "snell" in enabled_protocols_for_user(protocol_preferences, username):
-                        snell_user, _ = ensure_runtime_user(
-                            token,
-                            config,
-                            runtime_dir=Path(self.snell_runtime_dir),
-                            reload_command=self.snell_reload_command or None,
-                            name=username,
-                        )
-                body = build_shadowrocket_conf(
-                    raw,
-                    config=config,
-                    snell_user=snell_user,
-                    protocol_preferences=protocol_preferences,
-                ).encode("utf-8")
-            else:
-                body = build_shadowrocket_subscription(raw)
+            config = None
+            snell_user = None
+            protocol_preferences = None
+            if self.server_domain:
+                config = LinkRayConfig(domain=self.server_domain)
+                username = fetch_subscription_username(self.marzban_url, token)
+                if not username:
+                    raise ValueError("missing Marzban username for Snell runtime user")
+                protocol_preferences = load_protocol_preferences(Path(self.protocol_preferences_path))
+                if "snell" in enabled_protocols_for_user(protocol_preferences, username):
+                    snell_user, _ = ensure_runtime_user(
+                        token,
+                        config,
+                        runtime_dir=Path(self.snell_runtime_dir),
+                        reload_command=self.snell_reload_command or None,
+                        name=username,
+                    )
+            body = build_shadowrocket_conf(
+                raw,
+                config=config,
+                snell_user=snell_user,
+                protocol_preferences=protocol_preferences,
+            ).encode("utf-8")
         except HTTPError as exc:
             self.send_bytes(exc.code, dict(exc.headers.items()), exc.read() or b"upstream error\n")
             return

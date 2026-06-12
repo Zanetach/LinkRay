@@ -302,8 +302,8 @@ Check subscription from a client machine:
 ```bash
 curl -ksS '<marzban-subscription-url>/clash-meta' -o /tmp/linkray.yaml
 mihomo -t -f /tmp/linkray.yaml
-curl -ksS '<marzban-subscription-url>/shadowrocket-conf' -o /tmp/linkray-shadowrocket.conf
-curl -ksS '<marzban-subscription-url>/shadowrocket' -o /tmp/linkray-shadowrocket.txt
+curl -ksS '<marzban-subscription-url>/shadowrocket' -o /tmp/linkray-shadowrocket.conf
+curl -ksS '<marzban-subscription-url>/shadowrocket-conf' -o /tmp/linkray-shadowrocket-alias.conf
 curl -ksS '<marzban-subscription-url>/sing-box' -o /tmp/linkray-sing-box.json
 sing-box check -c /tmp/linkray-sing-box.json
 ```

@@ -137,7 +137,7 @@
   <main class="panel">
     <h1>客户端订阅链接</h1>
     <div class="sections" id="links"></div>
-    <p class="hint">优先使用自动识别订阅；高级协议按运行时分组，Hysteria2 / TUIC / AnyTLS 使用 sing-box 链接，Snell 使用 Snell 专用链路，Egern 可使用 Clash/Mihomo Snell。</p>
+    <p class="hint">优先使用自动识别订阅；高级协议按运行时分组，Hysteria2 / TUIC / AnyTLS 使用 sing-box 链接，Snell 可使用 Shadowrocket 或 Clash/Mihomo 链接。</p>
     <div class="qr" id="qr"></div>
   </main>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -154,7 +154,6 @@
       ['sing-box', base + '/sing-box', '/sing-box'],
     ];
     const snellRows = [
-      ['Shadowrocket Snell 配置', base + '/shadowrocket-conf', '/shadowrocket-conf'],
       ['Clash/Mihomo Snell', base + '/clash-meta', '/clash-meta'],
     ];
     const groups = [
@@ -179,7 +178,7 @@
       },
       {
         title: 'Snell 专用链路',
-        note: 'Snell 不是 Xray-core/sing-box 协议；Shadowrocket / Surge 优先，Egern 可使用 Clash/Mihomo Snell，Clash/Mihomo 视客户端核心支持。',
+        note: 'Snell 不是 Xray-core/sing-box 协议；Shadowrocket 使用上方 Shadowrocket 链接，Egern 可使用 Clash/Mihomo Snell，Clash/Mihomo 视客户端核心支持。',
         rows: snellRows,
         downloads: [
           ['Shadowrocket', 'https://apps.apple.com/app/shadowrocket/id932747118'],

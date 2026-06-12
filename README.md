@@ -264,8 +264,8 @@ linkray render master \
 |---|---|
 | `/sub/<token>` | Automatic format routing for identifiable clients |
 | `/sub/<token>/egern` | Egern-specific proxy resource |
-| `/sub/<token>/shadowrocket-conf` | Shadowrocket config with LinkRay route rules |
-| `/sub/<token>/shadowrocket` | Shadowrocket node subscription fallback |
+| `/sub/<token>/shadowrocket` | Shadowrocket config with LinkRay route rules and Snell support |
+| `/sub/<token>/shadowrocket-conf` | Backward-compatible alias for `/shadowrocket` |
 | `/sub/<token>/sing-box` | LinkRay-generated sing-box JSON |
 | `/linkray/ports.html` | Compatibility redirect to `/dashboard/` |
 | `/linkray/ports.json` | Proxy to `/api/linkray/nodes` |

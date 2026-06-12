@@ -1,7 +1,10 @@
 import base64
 import importlib
 import json
+import threading
 import unittest
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.request import urlopen
 
 from linkray.config import LinkRayConfig
 from linkray.protocol_prefs import ProtocolPreferences
@@ -109,6 +112,59 @@ class ShadowrocketTests(unittest.TestCase):
         self.assertIn("GEOIP,CN,国内站点", output)
         self.assertNotIn("example-119999.cn", output)
         self.assertNotIn("10.31.63.0/24", output)
+
+    def test_shadowrocket_and_legacy_conf_paths_return_same_full_config(self):
+        module = self.shadowrocket_module()
+        links = "\n".join(
+            [
+                "vless://11111111-1111-1111-1111-111111111111@edge-a.example.com:18080?security=tls&type=tcp&sni=edge-a.example.com&flow=xtls-rprx-vision#edge-a-VLESS_TLS_Vision",
+                "trojan://password@edge-a.example.com:18083?security=tls&type=tcp&sni=edge-a.example.com#edge-a-Trojan_TLS",
+            ]
+        )
+        payload = base64.b64encode(links.encode())
+
+        class UpstreamHandler(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:
+                if self.path == "/sub/token":
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/plain")
+                    self.end_headers()
+                    self.wfile.write(payload)
+                    return
+                self.send_response(404)
+                self.end_headers()
+
+            def log_message(self, format: str, *args: object) -> None:
+                return
+
+        upstream = ThreadingHTTPServer(("127.0.0.1", 0), UpstreamHandler)
+        upstream_thread = threading.Thread(target=upstream.serve_forever, daemon=True)
+        upstream_thread.start()
+        adapter = module.make_shadowrocket_server(
+            "127.0.0.1",
+            0,
+            f"http://127.0.0.1:{upstream.server_address[1]}",
+        )
+        adapter_thread = threading.Thread(target=adapter.serve_forever, daemon=True)
+        adapter_thread.start()
+        try:
+            base_url = f"http://127.0.0.1:{adapter.server_address[1]}/sub/token"
+            with urlopen(f"{base_url}/shadowrocket", timeout=3) as response:
+                shadowrocket = response.read().decode()
+            with urlopen(f"{base_url}/shadowrocket-conf", timeout=3) as response:
+                legacy_conf = response.read().decode()
+
+            self.assertEqual(shadowrocket, legacy_conf)
+            self.assertIn("[General]", shadowrocket)
+            self.assertIn("[Proxy]", shadowrocket)
+            self.assertIn("[Proxy Group]", shadowrocket)
+            self.assertIn("edge-a-VLESS_TLS_Vision = vless,edge-a.example.com,18080", shadowrocket)
+            self.assertIn("edge-a-Trojan_TLS = trojan,edge-a.example.com,18083", shadowrocket)
+        finally:
+            adapter.shutdown()
+            adapter.server_close()
+            upstream.shutdown()
+            upstream.server_close()
 
     def test_build_shadowrocket_subscription_returns_node_links_not_conf(self):
         module = self.shadowrocket_module()
