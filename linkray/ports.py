@@ -8,14 +8,26 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Sequence
 
-from .config import DEFAULT_PORTS, PORT_KEYS, NodeHost
+from .config import (
+    DEFAULT_PORTS,
+    PORT_KEYS,
+    SINGBOX_DEFAULT_PORTS,
+    SINGBOX_PORT_KEYS,
+    SNELL_DEFAULT_PORTS,
+    SNELL_PORT_KEYS,
+    NodeHost,
+)
 from .render import ACTIVE_INBOUND_TAGS
+
+SINGBOX_INBOUND_TAGS = ("Hysteria2", "TUIC", "AnyTLS")
+SNELL_INBOUND_TAGS = ("Snell",)
 
 
 @dataclass(frozen=True)
 class PortProbeResult:
     node: str
     domain: str
+    runtime: str
     inbound_tag: str
     port: int
     status: str
@@ -26,6 +38,7 @@ class PortProbeResult:
         return {
             "node": self.node,
             "domain": self.domain,
+            "runtime": self.runtime,
             "inbound_tag": self.inbound_tag,
             "port": self.port,
             "status": self.status,
@@ -37,16 +50,41 @@ class PortProbeResult:
 @dataclass(frozen=True)
 class PortSpec:
     key: str
+    runtime: str
     inbound_tag: str
     port: int
 
 
-def port_specs(inbound_ports: Sequence[tuple[str, int]] | None = None) -> list[PortSpec]:
-    tags = dict(zip(PORT_KEYS, ACTIVE_INBOUND_TAGS))
-    ports = dict(DEFAULT_PORTS)
-    if inbound_ports:
-        ports.update(dict(inbound_ports))
-    return [PortSpec(key=key, inbound_tag=tags[key], port=ports[key]) for key in PORT_KEYS]
+def _runtime_specs(
+    runtime: str,
+    keys: Sequence[str],
+    tags: Sequence[str],
+    defaults: dict[str, int],
+    overrides: Sequence[tuple[str, int]] | None = None,
+) -> list[PortSpec]:
+    tag_map = dict(zip(keys, tags))
+    ports = dict(defaults)
+    if overrides:
+        ports.update(dict(overrides))
+    return [PortSpec(key=key, runtime=runtime, inbound_tag=tag_map[key], port=ports[key]) for key in keys]
+
+
+def port_specs(
+    inbound_ports: Sequence[tuple[str, int]] | None = None,
+    singbox_inbound_ports: Sequence[tuple[str, int]] | None = None,
+    snell_inbound_ports: Sequence[tuple[str, int]] | None = None,
+) -> list[PortSpec]:
+    return [
+        *_runtime_specs("xray", PORT_KEYS, ACTIVE_INBOUND_TAGS, DEFAULT_PORTS, inbound_ports),
+        *_runtime_specs(
+            "sing-box",
+            SINGBOX_PORT_KEYS,
+            SINGBOX_INBOUND_TAGS,
+            SINGBOX_DEFAULT_PORTS,
+            singbox_inbound_ports,
+        ),
+        *_runtime_specs("snell", SNELL_PORT_KEYS, SNELL_INBOUND_TAGS, SNELL_DEFAULT_PORTS, snell_inbound_ports),
+    ]
 
 
 def tcp_probe(host: str, port: int, timeout: float) -> tuple[str, int | None, str | None]:
@@ -66,9 +104,15 @@ def probe_ports(
     nodes: Sequence[NodeHost],
     timeout: float = 2.0,
     inbound_ports: Sequence[tuple[str, int]] | None = None,
+    singbox_inbound_ports: Sequence[tuple[str, int]] | None = None,
+    snell_inbound_ports: Sequence[tuple[str, int]] | None = None,
 ) -> dict[str, object]:
     results: list[PortProbeResult] = []
-    specs = port_specs(inbound_ports)
+    specs = port_specs(
+        inbound_ports,
+        singbox_inbound_ports=singbox_inbound_ports,
+        snell_inbound_ports=snell_inbound_ports,
+    )
     for node in nodes:
         node.validate()
         for spec in specs:
@@ -77,6 +121,7 @@ def probe_ports(
                 PortProbeResult(
                     node=node.name,
                     domain=node.domain,
+                    runtime=spec.runtime,
                     inbound_tag=spec.inbound_tag,
                     port=spec.port,
                     status=status,
@@ -100,8 +145,16 @@ def write_ports_json(
     output: Path,
     timeout: float = 2.0,
     inbound_ports: Sequence[tuple[str, int]] | None = None,
+    singbox_inbound_ports: Sequence[tuple[str, int]] | None = None,
+    snell_inbound_ports: Sequence[tuple[str, int]] | None = None,
 ) -> Path:
     output.parent.mkdir(parents=True, exist_ok=True)
-    data = probe_ports(nodes, timeout=timeout, inbound_ports=inbound_ports)
+    data = probe_ports(
+        nodes,
+        timeout=timeout,
+        inbound_ports=inbound_ports,
+        singbox_inbound_ports=singbox_inbound_ports,
+        snell_inbound_ports=snell_inbound_ports,
+    )
     output.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return output

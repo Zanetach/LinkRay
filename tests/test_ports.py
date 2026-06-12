@@ -23,9 +23,11 @@ class PortStatusTests(unittest.TestCase):
                 timeout=0.1,
             )
 
-        self.assertEqual(data["total"], 24)
-        self.assertEqual(data["open"], 23)
+        self.assertEqual(data["total"], 32)
+        self.assertEqual(data["open"], 31)
         self.assertEqual(data["closed"], 1)
+        self.assertIn("Snell", {item["inbound_tag"] for item in data["results"]})
+        self.assertIn("snell", {item["runtime"] for item in data["results"]})
         failed = [item for item in data["results"] if item["status"] == "closed"]
         self.assertEqual(failed[0]["node"], "edge-a")
         self.assertEqual(failed[0]["port"], 18081)
@@ -42,12 +44,18 @@ class PortStatusTests(unittest.TestCase):
                 [NodeHost("edge-a", "edge-a.example.com")],
                 timeout=0.1,
                 inbound_ports=(("vless_tls", 28080), ("trojan_grpc_tls", 28091)),
+                singbox_inbound_ports=(("hysteria2", 29080),),
+                snell_inbound_ports=(("snell", 29180),),
             )
 
-        self.assertEqual(data["total"], 12)
+        self.assertEqual(data["total"], 16)
         self.assertIn(28080, seen_ports)
         self.assertIn(28091, seen_ports)
+        self.assertIn(29080, seen_ports)
+        self.assertIn(29180, seen_ports)
         self.assertNotIn(18080, seen_ports)
+        self.assertNotIn(19080, seen_ports)
+        self.assertNotIn(19180, seen_ports)
 
     def test_write_ports_json_creates_parent_directory(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -56,8 +64,9 @@ class PortStatusTests(unittest.TestCase):
                 write_ports_json([NodeHost("edge-a", "edge-a.example.com")], output)
 
             text = output.read_text()
-            self.assertIn('"total": 12', text)
-            self.assertIn('"open": 12', text)
+            self.assertIn('"total": 16', text)
+            self.assertIn('"open": 16', text)
+            self.assertIn('"inbound_tag": "Snell"', text)
 
 
 if __name__ == "__main__":

@@ -57,6 +57,7 @@ class RenderTests(unittest.TestCase):
             domain="edge-a.example.com",
             inbound_ports=parse_inbound_ports(["vless_tls=28080", "trojan_grpc_tls=28091"]),
             singbox_inbound_ports=(("hysteria2", 29080), ("anytls", 29082)),
+            snell_inbound_ports=(("snell", 29180),),
         )
         data = xray_config(config)
         by_tag = {item["tag"]: item for item in data["inbounds"]}
@@ -73,10 +74,15 @@ class RenderTests(unittest.TestCase):
             service = (output / "etc/systemd/system/linkray-api.service").read_text()
             self.assertIn("--inbound vless_tls=28080", service)
             self.assertIn("--inbound trojan_grpc_tls=28091", service)
+            self.assertIn("--singbox-inbound hysteria2=29080", service)
+            self.assertIn("--singbox-inbound anytls=29082", service)
+            self.assertIn("--snell-inbound snell=29180", service)
             singbox_runtime = json.loads((output / "var/lib/marzban/linkray/singbox/config.json").read_text())
             by_tag = {item["tag"]: item for item in singbox_runtime["inbounds"]}
             self.assertEqual(by_tag["Hysteria2"]["listen_port"], 29080)
             self.assertEqual(by_tag["AnyTLS"]["listen_port"], 29082)
+            snell_config = (output / "var/lib/marzban/linkray/snell/snell-server.conf").read_text()
+            self.assertIn("listen = ::0:29180", snell_config)
             singbox_service = (output / "etc/systemd/system/linkray-singbox.service").read_text()
             self.assertIn("--singbox-inbound hysteria2=29080", singbox_service)
             self.assertIn("--singbox-inbound anytls=29082", singbox_service)

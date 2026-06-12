@@ -48,10 +48,11 @@ class ApiTests(unittest.TestCase):
             _, first = self.get_json(f"{base}/nodes")
             _, second = self.get_json(f"{base}/nodes")
 
-        self.assertEqual(first["total"], 24)
-        self.assertEqual(first["open"], 24)
-        self.assertEqual(second["total"], 24)
-        self.assertEqual(len(calls), 24)
+        self.assertEqual(first["total"], 32)
+        self.assertEqual(first["open"], 32)
+        self.assertEqual(second["total"], 32)
+        self.assertEqual(len(calls), 32)
+        self.assertIn("Snell", {item["inbound_tag"] for item in first["results"]})
 
     def test_refresh_endpoint_forces_new_probe(self):
         calls = []
@@ -69,8 +70,8 @@ class ApiTests(unittest.TestCase):
                 status = response.status
 
         self.assertEqual(status, 200)
-        self.assertEqual(data["total"], 24)
-        self.assertEqual(len(calls), 48)
+        self.assertEqual(data["total"], 32)
+        self.assertEqual(len(calls), 64)
 
     def test_unknown_endpoint_returns_404(self):
         base = self.start_server()

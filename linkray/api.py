@@ -18,11 +18,15 @@ class PortStatusCache:
         timeout: float = 2.0,
         ttl: float = 60.0,
         inbound_ports: Sequence[tuple[str, int]] | None = None,
+        singbox_inbound_ports: Sequence[tuple[str, int]] | None = None,
+        snell_inbound_ports: Sequence[tuple[str, int]] | None = None,
     ) -> None:
         self.nodes = list(nodes)
         self.timeout = timeout
         self.ttl = ttl
         self.inbound_ports = tuple(inbound_ports or ())
+        self.singbox_inbound_ports = tuple(singbox_inbound_ports or ())
+        self.snell_inbound_ports = tuple(snell_inbound_ports or ())
         self._lock = threading.Lock()
         self._data: dict[str, object] | None = None
         self._updated_at = 0.0
@@ -30,13 +34,25 @@ class PortStatusCache:
     def get(self) -> dict[str, object]:
         with self._lock:
             if self._data is None or time.monotonic() - self._updated_at > self.ttl:
-                self._data = probe_ports(self.nodes, timeout=self.timeout, inbound_ports=self.inbound_ports)
+                self._data = probe_ports(
+                    self.nodes,
+                    timeout=self.timeout,
+                    inbound_ports=self.inbound_ports,
+                    singbox_inbound_ports=self.singbox_inbound_ports,
+                    snell_inbound_ports=self.snell_inbound_ports,
+                )
                 self._updated_at = time.monotonic()
             return self._data
 
     def refresh(self) -> dict[str, object]:
         with self._lock:
-            self._data = probe_ports(self.nodes, timeout=self.timeout, inbound_ports=self.inbound_ports)
+            self._data = probe_ports(
+                self.nodes,
+                timeout=self.timeout,
+                inbound_ports=self.inbound_ports,
+                singbox_inbound_ports=self.singbox_inbound_ports,
+                snell_inbound_ports=self.snell_inbound_ports,
+            )
             self._updated_at = time.monotonic()
             return self._data
 
@@ -79,8 +95,17 @@ def make_server(
     timeout: float = 2.0,
     ttl: float = 60.0,
     inbound_ports: Sequence[tuple[str, int]] | None = None,
+    singbox_inbound_ports: Sequence[tuple[str, int]] | None = None,
+    snell_inbound_ports: Sequence[tuple[str, int]] | None = None,
 ) -> ThreadingHTTPServer:
-    cache = PortStatusCache(nodes=nodes, timeout=timeout, ttl=ttl, inbound_ports=inbound_ports)
+    cache = PortStatusCache(
+        nodes=nodes,
+        timeout=timeout,
+        ttl=ttl,
+        inbound_ports=inbound_ports,
+        singbox_inbound_ports=singbox_inbound_ports,
+        snell_inbound_ports=snell_inbound_ports,
+    )
 
     class Handler(LinkRayAPIHandler):
         pass
@@ -97,6 +122,8 @@ def serve_api(args: argparse.Namespace) -> int:
         timeout=args.timeout,
         ttl=args.ttl,
         inbound_ports=args.inbound_ports,
+        singbox_inbound_ports=args.singbox_inbound_ports,
+        snell_inbound_ports=args.snell_inbound_ports,
     )
     try:
         server.serve_forever()

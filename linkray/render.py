@@ -494,7 +494,11 @@ def default_nodes(config: LinkRayConfig) -> list[NodeHost]:
 def linkray_api_service(nodes: Sequence[NodeHost], config: LinkRayConfig) -> str:
     node_flags = [f"--node {shlex.quote(f'{node.name}={node.domain}')}" for node in nodes]
     inbound_flags = [f"--inbound {shlex.quote(f'{key}={port}')}" for key, port in config.inbound_ports]
-    flags = " ".join([*node_flags, *inbound_flags])
+    singbox_flags = [
+        f"--singbox-inbound {shlex.quote(f'{key}={port}')}" for key, port in config.singbox_inbound_ports
+    ]
+    snell_flags = [f"--snell-inbound {shlex.quote(f'{key}={port}')}" for key, port in config.snell_inbound_ports]
+    flags = " ".join([*node_flags, *inbound_flags, *singbox_flags, *snell_flags])
     return f"""[Unit]
 Description=LinkRay node status API
 After=network-online.target

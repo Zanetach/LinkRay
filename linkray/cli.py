@@ -154,6 +154,16 @@ def add_ports_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPar
         action="append",
         help="Override an inbound port in key=port form, for example vless_tls=28080. Repeat as needed.",
     )
+    ports.add_argument(
+        "--singbox-inbound",
+        action="append",
+        help="Override a sing-box inbound port in key=port form, for example hysteria2=29080.",
+    )
+    ports.add_argument(
+        "--snell-inbound",
+        action="append",
+        help="Override a Snell inbound port in key=port form, for example snell=29180.",
+    )
 
 
 def add_api_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -169,6 +179,16 @@ def add_api_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParse
         "--inbound",
         action="append",
         help="Override an inbound port in key=port form, for example vless_tls=28080. Repeat as needed.",
+    )
+    api.add_argument(
+        "--singbox-inbound",
+        action="append",
+        help="Override a sing-box inbound port in key=port form, for example hysteria2=29080.",
+    )
+    api.add_argument(
+        "--snell-inbound",
+        action="append",
+        help="Override a Snell inbound port in key=port form, for example snell=29180.",
     )
     api.add_argument("--timeout", default=2.0, type=float)
     api.add_argument("--ttl", default=60.0, type=float)
@@ -360,6 +380,8 @@ def main(argv: list[str] | None = None) -> int:
             args.output,
             timeout=args.timeout,
             inbound_ports=parse_inbound_ports(args.inbound),
+            singbox_inbound_ports=parse_singbox_inbound_ports(args.singbox_inbound),
+            snell_inbound_ports=parse_snell_inbound_ports(args.snell_inbound),
         )
         print(output)
         return 0
@@ -370,6 +392,8 @@ def main(argv: list[str] | None = None) -> int:
             NodeHost("edge-b", "edge-b.example.com"),
         ]
         args.inbound_ports = parse_inbound_ports(args.inbound)
+        args.singbox_inbound_ports = parse_singbox_inbound_ports(args.singbox_inbound)
+        args.snell_inbound_ports = parse_snell_inbound_ports(args.snell_inbound)
         return serve_api(args)
 
     if args.command == "clash":
