@@ -318,7 +318,17 @@ def metacubex_rule_providers(rules_base_url: str) -> dict[str, dict[str, Any]]:
     }
 
 
-def build_proxy_groups(names: list[str]) -> list[dict[str, Any]]:
+DEFAULT_URL_TEST_URL = "https://cp.cloudflare.com/generate_204"
+
+
+def health_check_url_from_rules_base(rules_base_url: str) -> str:
+    base = rules_base_url.rstrip("/")
+    if base.endswith("/linkray/rules"):
+        return f"{base[: -len('/linkray/rules')]}/api/linkray/health"
+    return DEFAULT_URL_TEST_URL
+
+
+def build_proxy_groups(names: list[str], url_test_url: str = DEFAULT_URL_TEST_URL) -> list[dict[str, Any]]:
     default = names[0] if names else "DIRECT"
     selector = names if names else ["DIRECT"]
     return [
@@ -327,7 +337,7 @@ def build_proxy_groups(names: list[str]) -> list[dict[str, Any]]:
             "name": "自动选择",
             "type": "url-test",
             "proxies": selector,
-            "url": "https://www.gstatic.com/generate_204",
+            "url": url_test_url,
             "interval": 300,
             "tolerance": 50,
         },
@@ -408,6 +418,7 @@ def build_clash_meta_yaml(
     names = [str(proxy["name"]) for proxy in proxies]
     effective_rules = route_rules or load_route_rules()
     clean_base = clean_rules_base_url(rules_base_url)
+    url_test_url = health_check_url_from_rules_base(clean_base) if clean_base else DEFAULT_URL_TEST_URL
     data = {
         "mixed-port": 7890,
         "allow-lan": False,
@@ -425,7 +436,6 @@ def build_clash_meta_yaml(
             "fake-ip-filter": ["*.lan", "*.local"],
             "default-nameserver": ["223.5.5.5", "119.29.29.29"],
             "nameserver": ["https://doh.pub/dns-query", "https://dns.alidns.com/dns-query"],
-            "fallback": ["https://dns.google/dns-query"],
             "direct-nameserver": [
                 "https://doh.pub/dns-query",
                 "https://dns.alidns.com/dns-query",
@@ -436,7 +446,7 @@ def build_clash_meta_yaml(
             "respect-rules": True,
         },
         "proxies": proxies,
-        "proxy-groups": build_proxy_groups(names),
+        "proxy-groups": build_proxy_groups(names, url_test_url=url_test_url),
         "rules": build_rules(effective_rules, use_rule_sets=bool(clean_base)),
     }
     if clean_base:

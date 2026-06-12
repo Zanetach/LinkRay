@@ -58,8 +58,11 @@ class ClashTests(unittest.TestCase):
         self.assertIn("rule-providers:", text)
         self.assertIn("url: https://edge-a.example.com:9443/linkray/rules/mihomo/geosite-cn.mrs", text)
         self.assertIn("url: https://edge-a.example.com:9443/linkray/rules/mihomo/geoip-cn.mrs", text)
+        self.assertIn("url: https://edge-a.example.com:9443/api/linkray/health", text)
         self.assertIn("RULE-SET,linkray-cn-domain,国内站点", text)
         self.assertIn("RULE-SET,linkray-cn-ip,国内站点", text)
+        self.assertNotIn("https://www.gstatic.com/generate_204", text)
+        self.assertNotIn("https://dns.google/dns-query", text)
         self.assertNotIn("raw.githubusercontent.com", text)
         self.assertNotIn("github.com/MetaCubeX", text)
 
