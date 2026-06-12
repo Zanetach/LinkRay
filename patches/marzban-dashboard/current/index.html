@@ -275,19 +275,29 @@
           }
 
           function hideMarzbanFooter() {
-            const footerText = /(Marzban|Gozargah|Made with)/i;
-            const footerLinks = Array.from(document.querySelectorAll("a"))
-              .filter((node) => footerText.test(textOf(node)) || footerText.test(node.getAttribute("href") || ""));
-            footerLinks.forEach((node) => {
+            const footerText = /(Marzban|Gozargah|Made\s+with|\(v\d+\.\d+\.\d+\))/i;
+            const candidates = new Set(Array.from(document.querySelectorAll("a"))
+              .filter((node) => footerText.test(textOf(node)) || footerText.test(node.getAttribute("href") || "")));
+            const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+              acceptNode(node) {
+                return footerText.test((node.textContent || "").replace(/\s+/g, " ").trim())
+                  ? NodeFilter.FILTER_ACCEPT
+                  : NodeFilter.FILTER_REJECT;
+              },
+            });
+            for (let textNode = walker.nextNode(); textNode; textNode = walker.nextNode()) {
+              if (textNode.parentElement) candidates.add(textNode.parentElement);
+            }
+            candidates.forEach((node) => {
               let target = null;
               for (let current = node; current && current !== document.body; current = current.parentElement) {
                 const text = textOf(current);
                 const box = current.getBoundingClientRect();
                 if (
                   footerText.test(text) &&
-                  box.width <= 700 &&
-                  box.height <= 120 &&
-                  text.length <= 180
+                  box.width <= 900 &&
+                  box.height <= 160 &&
+                  text.length <= 240
                 ) {
                   target = current;
                 }
