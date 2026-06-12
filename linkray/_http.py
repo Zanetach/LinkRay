@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -36,6 +37,15 @@ def fetch_upstream(marzban_url: str, token: str, headers: Mapping[str, str]) -> 
     req = Request(url, headers={k: v for k, v in headers.items() if v})
     with urlopen(req, timeout=15) as response:
         return response.status, dict(response.headers.items()), response.read()
+
+
+def fetch_subscription_username(marzban_url: str, token: str) -> str:
+    url = f"{marzban_url.rstrip('/')}/sub/{token}/info"
+    request = Request(url, headers={"Accept": "application/json"})
+    with urlopen(request, timeout=15) as response:
+        data = json.loads(response.read().decode("utf-8"))
+    username = data.get("username") if isinstance(data, dict) else ""
+    return username if isinstance(username, str) else ""
 
 
 class AdapterHandler(BaseHTTPRequestHandler):

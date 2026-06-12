@@ -131,6 +131,9 @@ class RenderTests(unittest.TestCase):
             self.assertIn("etc/systemd/system/linkray-shadowrocket.service", relative)
             self.assertIn("etc/systemd/system/linkray-singbox.service", relative)
             self.assertIn("etc/systemd/system/linkray-singbox-runtime.service", relative)
+            self.assertIn("etc/systemd/system/linkray-snell-runtime.service", relative)
+            self.assertIn("etc/systemd/system/linkray-snell@.service", relative)
+            self.assertIn("etc/systemd/system/linkray-snell-usage.service", relative)
             self.assertIn("etc/systemd/system/linkray-sub-auto.service", relative)
             self.assertIn("etc/systemd/system/linkray-relay.service", relative)
             self.assertIn("etc/systemd/system/linkray-rules-update.service", relative)
@@ -141,6 +144,7 @@ class RenderTests(unittest.TestCase):
             self.assertIn("var/lib/marzban/linkray/source-patches/marzban-dashboard/README.md", relative)
             self.assertIn("var/lib/marzban/linkray/singbox/config.json", relative)
             self.assertIn("var/lib/marzban/linkray/singbox/users.json", relative)
+            self.assertIn("var/lib/marzban/linkray/snell/snell-server.conf", relative)
             self.assertIn("var/lib/marzban/linkray/rules/cn-domains.txt", relative)
             self.assertIn("var/lib/marzban/linkray/rules/cn-ip-cidrs.txt", relative)
             self.assertIn("var/lib/marzban/linkray/patches/clash.py", relative)
@@ -180,6 +184,7 @@ class RenderTests(unittest.TestCase):
             env = (output / "opt/marzban/.env").read_text()
             self.assertIn("LINKRAY_SINGBOX_STATS_API = 127.0.0.1:61996", env)
             self.assertIn("LINKRAY_SINGBOX_SIDECAR_URL = http://127.0.0.1:61995", env)
+            self.assertIn("LINKRAY_SNELL_USAGE_URL = http://127.0.0.1:61997", env)
             nginx = (output / "etc/nginx/conf.d/marzban-panel.conf").read_text()
             self.assertIn("location ~ ^/sub/[^/]+/?$", nginx)
             self.assertIn("proxy_pass http://127.0.0.1:61993", nginx)
@@ -202,16 +207,32 @@ class RenderTests(unittest.TestCase):
             self.assertIn("--node edge-a=edge-a.example.com --node edge-b=edge-b.example.com", service)
             clash_service = (output / "etc/systemd/system/linkray-clash.service").read_text()
             self.assertIn("ExecStart=/usr/local/bin/linkray clash --listen 127.0.0.1 --port 61991", clash_service)
+            self.assertIn("--server-domain edge-a.example.com", clash_service)
+            self.assertIn("--snell-runtime-dir /var/lib/marzban/linkray/snell", clash_service)
+            self.assertIn("--snell-reload-command 'systemctl enable --now linkray-snell@{instance}'", clash_service)
             egern_service = (output / "etc/systemd/system/linkray-egern.service").read_text()
             self.assertIn("ExecStart=/usr/local/bin/linkray egern --listen 127.0.0.1 --port 61992", egern_service)
             shadowrocket_service = (output / "etc/systemd/system/linkray-shadowrocket.service").read_text()
             self.assertIn("ExecStart=/usr/local/bin/linkray shadowrocket --listen 127.0.0.1 --port 61994", shadowrocket_service)
+            self.assertIn("--server-domain edge-a.example.com", shadowrocket_service)
+            self.assertIn("--snell-runtime-dir /var/lib/marzban/linkray/snell", shadowrocket_service)
+            self.assertIn("--snell-reload-command 'systemctl enable --now linkray-snell@{instance}'", shadowrocket_service)
             singbox_service = (output / "etc/systemd/system/linkray-singbox.service").read_text()
             self.assertIn("ExecStart=/usr/local/bin/linkray sing-box --listen 127.0.0.1 --port 61995", singbox_service)
             self.assertIn("--runtime-dir /var/lib/marzban/linkray/singbox", singbox_service)
             self.assertIn("--server-domain edge-a.example.com", singbox_service)
             runtime_service = (output / "etc/systemd/system/linkray-singbox-runtime.service").read_text()
             self.assertIn("ExecStart=/usr/local/bin/sing-box run -c /var/lib/marzban/linkray/singbox/config.json", runtime_service)
+            snell_runtime_service = (output / "etc/systemd/system/linkray-snell-runtime.service").read_text()
+            self.assertIn("ExecStart=/usr/local/bin/snell-server -c /var/lib/marzban/linkray/snell/snell-server.conf", snell_runtime_service)
+            snell_user_service = (output / "etc/systemd/system/linkray-snell@.service").read_text()
+            self.assertIn("ExecStart=/usr/local/bin/snell-server -c /var/lib/marzban/linkray/snell/users/%i.conf", snell_user_service)
+            snell_usage_service = (output / "etc/systemd/system/linkray-snell-usage.service").read_text()
+            self.assertIn("ExecStart=/usr/local/bin/linkray snell-usage --listen 127.0.0.1 --port 61997", snell_usage_service)
+            self.assertIn("--runtime-dir /var/lib/marzban/linkray/snell", snell_usage_service)
+            snell_config = (output / "var/lib/marzban/linkray/snell/snell-server.conf").read_text()
+            self.assertIn("[snell-server]", snell_config)
+            self.assertIn("listen = ::0:19180", snell_config)
             auto_service = (output / "etc/systemd/system/linkray-sub-auto.service").read_text()
             self.assertIn("ExecStart=/usr/local/bin/linkray sub-auto --listen 127.0.0.1 --port 61993", auto_service)
             self.assertIn("--clash-url http://127.0.0.1:61991", auto_service)
@@ -224,6 +245,29 @@ class RenderTests(unittest.TestCase):
             self.assertIn("OnCalendar=daily", rules_timer)
             relay_service = (output / "etc/systemd/system/linkray-relay.service").read_text()
             self.assertIn("ExecStart=/usr/local/bin/linkray relay --listen 0.0.0.0 --node edge-b=edge-b.example.com:100", relay_service)
+
+    def test_render_master_can_emit_linkray_managed_xray_runtime(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp)
+            result = render_master(
+                LinkRayConfig(domain="edge-a.example.com", xray_runtime_mode="linkray"),
+                output,
+                nodes=[NodeHost("edge-a", "edge-a.example.com")],
+            )
+            relative = {path.relative_to(output).as_posix() for path in result.files}
+
+            self.assertIn("etc/systemd/system/linkray-xray.service", relative)
+            service = (output / "etc/systemd/system/linkray-xray.service").read_text()
+            self.assertIn("Description=LinkRay Xray-core runtime", service)
+            self.assertIn(
+                "ExecStart=/var/lib/marzban/linkray/bin/xray run -config /var/lib/marzban/xray_config.json",
+                service,
+            )
+            compose = (output / "opt/marzban/docker-compose.yml").read_text()
+            self.assertNotIn("/var/lib/marzban/linkray/bin/xray:/usr/local/bin/xray:ro", compose)
+            manifest = json.loads((output / "var/lib/marzban/linkray/linkray-manifest.json").read_text())
+            self.assertEqual(manifest["config"]["xray_runtime_mode"], "linkray")
+            self.assertEqual(validate_rendered(output), [])
 
     def test_dashboard_patch_injects_node_info_panel(self):
         for patch_path in [
@@ -397,8 +441,11 @@ class RenderTests(unittest.TestCase):
         self.assertIn("XRayAPI", patch)
         self.assertIn("LINKRAY_SINGBOX_STATS_API", patch)
         self.assertIn("LINKRAY_SINGBOX_SIDECAR_URL", patch)
+        self.assertIn("LINKRAY_SNELL_USAGE_URL", patch)
         self.assertIn('User.used_traffic + bindparam("value")', patch)
         self.assertIn("record_linkray_singbox_user_usages", patch)
+        self.assertIn("record_linkray_snell_user_usages", patch)
+        self.assertIn("_snell_usage_stats", patch)
         self.assertIn("reconcile_linkray_singbox_runtime_users", patch)
         self.assertIn("active_usernames", patch)
         self.assertIn("UserStatus.active", patch)

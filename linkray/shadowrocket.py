@@ -5,12 +5,16 @@ import json
 import re
 from collections.abc import Mapping
 from http.server import ThreadingHTTPServer
+from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, unquote, urlparse
 
-from ._http import PASS_HEADERS, AdapterHandler, fetch_upstream, first_query_value, parse_link_netloc
+from ._http import PASS_HEADERS, AdapterHandler, fetch_subscription_username, fetch_upstream, first_query_value, parse_link_netloc
+from .config import LinkRayConfig
 from .native import b64decode_text, build_stable_native_subscription, decode_subscription_links
 from .rules import COMPACT_CN_DOMAIN_SUFFIXES, FOREIGN_DOMAIN_SUFFIXES, RouteRules, load_route_rules
+from .snell_runtime import DEFAULT_RUNTIME_DIR as SNELL_RUNTIME_DIR
+from .snell_runtime import SnellUser, ensure_runtime_user, snell_shadowrocket_line
 
 
 TOKEN_RE = re.compile(r"^/sub/([^/]+)/(shadowrocket|shadowrocket-conf)/?$")
@@ -224,7 +228,12 @@ def build_rules(route_rules: RouteRules) -> list[str]:
     return lines
 
 
-def build_shadowrocket_conf(subscription_payload: bytes, route_rules: RouteRules | None = None) -> str:
+def build_shadowrocket_conf(
+    subscription_payload: bytes,
+    route_rules: RouteRules | None = None,
+    config: LinkRayConfig | None = None,
+    snell_user: SnellUser | None = None,
+) -> str:
     names: list[str] = []
     proxy_lines: list[str] = []
     seen: set[str] = set()
@@ -238,6 +247,12 @@ def build_shadowrocket_conf(subscription_payload: bytes, route_rules: RouteRules
         seen.add(name)
         names.append(name)
         proxy_lines.append(line)
+    if config and snell_user:
+        name = f"{snell_user.name}-Snell"
+        if name not in seen:
+            seen.add(name)
+            names.append(name)
+            proxy_lines.append(snell_shadowrocket_line(config, snell_user))
 
     effective_rules = route_rules or load_route_rules()
     sections = [
@@ -265,6 +280,10 @@ def build_shadowrocket_subscription(subscription_payload: bytes) -> bytes:
 
 
 class ShadowrocketHandler(AdapterHandler):
+    server_domain = ""
+    snell_runtime_dir = SNELL_RUNTIME_DIR
+    snell_reload_command = ""
+
     def do_GET(self) -> None:
         path = urlparse(self.path).path
         if path == "/health":
@@ -279,7 +298,21 @@ class ShadowrocketHandler(AdapterHandler):
         try:
             _, upstream_headers, raw = fetch_upstream(self.marzban_url, token, {"Accept": "text/plain"})
             if mode == "shadowrocket-conf":
-                body = build_shadowrocket_conf(raw).encode("utf-8")
+                config = None
+                snell_user = None
+                if self.server_domain:
+                    config = LinkRayConfig(domain=self.server_domain)
+                    username = fetch_subscription_username(self.marzban_url, token)
+                    if not username:
+                        raise ValueError("missing Marzban username for Snell runtime user")
+                    snell_user, _ = ensure_runtime_user(
+                        token,
+                        config,
+                        runtime_dir=Path(self.snell_runtime_dir),
+                        reload_command=self.snell_reload_command or None,
+                        name=username,
+                    )
+                body = build_shadowrocket_conf(raw, config=config, snell_user=snell_user).encode("utf-8")
             else:
                 body = build_shadowrocket_subscription(raw)
         except HTTPError as exc:
@@ -296,16 +329,33 @@ class ShadowrocketHandler(AdapterHandler):
         headers["Content-Type"] = "text/plain; charset=utf-8"
         self.send_bytes(200, headers, body)
 
-def make_shadowrocket_server(listen: str, port: int, marzban_url: str) -> ThreadingHTTPServer:
+def make_shadowrocket_server(
+    listen: str,
+    port: int,
+    marzban_url: str,
+    server_domain: str = "",
+    snell_runtime_dir=SNELL_RUNTIME_DIR,
+    snell_reload_command: str = "",
+) -> ThreadingHTTPServer:
     class Handler(ShadowrocketHandler):
         pass
 
     Handler.marzban_url = marzban_url
+    Handler.server_domain = server_domain
+    Handler.snell_runtime_dir = snell_runtime_dir
+    Handler.snell_reload_command = snell_reload_command
     return ThreadingHTTPServer((listen, port), Handler)
 
 
 def serve_shadowrocket(args: argparse.Namespace) -> int:
-    server = make_shadowrocket_server(args.listen, args.port, args.marzban_url)
+    server = make_shadowrocket_server(
+        args.listen,
+        args.port,
+        args.marzban_url,
+        server_domain=getattr(args, "server_domain", ""),
+        snell_runtime_dir=getattr(args, "snell_runtime_dir", SNELL_RUNTIME_DIR),
+        snell_reload_command=getattr(args, "snell_reload_command", ""),
+    )
     try:
         server.serve_forever()
     except KeyboardInterrupt:

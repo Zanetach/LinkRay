@@ -10,6 +10,8 @@ from pathlib import Path
 
 from .config import DEFAULT_PORTS, RELAY_PORT_OFFSET, LinkRayConfig, NodeHost, RenderResult, relay_port
 from .rules import BUILTIN_CN_DOMAIN_SUFFIXES, BUILTIN_CN_IP_CIDRS, RouteRules, write_route_rules
+from .snell_runtime import DEFAULT_RUNTIME_DIR as SNELL_RUNTIME_DIR
+from .snell_runtime import server_config_text as snell_server_config_text
 from .singbox_runtime import DEFAULT_RUNTIME_DIR, server_config
 
 
@@ -148,7 +150,20 @@ def xray_config(config: LinkRayConfig) -> dict:
     }
 
 
-def master_compose() -> str:
+def master_compose(config: LinkRayConfig) -> str:
+    volumes = ["      - /var/lib/marzban:/var/lib/marzban"]
+    if config.xray_runtime_mode == "marzban":
+        volumes.append("      - /var/lib/marzban/linkray/bin/xray:/usr/local/bin/xray:ro")
+    volumes.extend(
+        [
+            "      - /var/lib/marzban/linkray/patches/clash.py:/code/app/subscription/clash.py:ro",
+            "      - /var/lib/marzban/linkray/jobs/linkray_singbox_usages.py:/code/app/jobs/linkray_singbox_usages.py:ro",
+            "      - /var/lib/marzban/dashboard-patches/index.html:/code/app/dashboard/build/index.html:ro",
+            f"      - /var/lib/marzban/dashboard-patches/{DASHBOARD_PATCH_JS}:/code/app/dashboard/build/statics/{DASHBOARD_PATCH_JS}:ro",
+            "      - /var/lib/marzban/dashboard-patches/index.original.js:/code/app/dashboard/build/statics/index.a1cce931.js:ro",
+        ]
+    )
+    volume_block = "\n".join(volumes)
     return f"""services:
   marzban:
     image: gozargah/marzban:latest
@@ -156,13 +171,7 @@ def master_compose() -> str:
     env_file: .env
     network_mode: host
     volumes:
-      - /var/lib/marzban:/var/lib/marzban
-      - /var/lib/marzban/linkray/bin/xray:/usr/local/bin/xray:ro
-      - /var/lib/marzban/linkray/patches/clash.py:/code/app/subscription/clash.py:ro
-      - /var/lib/marzban/linkray/jobs/linkray_singbox_usages.py:/code/app/jobs/linkray_singbox_usages.py:ro
-      - /var/lib/marzban/dashboard-patches/index.html:/code/app/dashboard/build/index.html:ro
-      - /var/lib/marzban/dashboard-patches/{DASHBOARD_PATCH_JS}:/code/app/dashboard/build/statics/{DASHBOARD_PATCH_JS}:ro
-      - /var/lib/marzban/dashboard-patches/index.original.js:/code/app/dashboard/build/statics/index.a1cce931.js:ro
+{volume_block}
 """
 
 
@@ -322,6 +331,7 @@ def marzban_env(config: LinkRayConfig) -> str:
             f"XRAY_SUBSCRIPTION_URL_PREFIX = {dotenv_value(f'https://{config.domain}:{config.panel_port}')}",
             "LINKRAY_SINGBOX_STATS_API = 127.0.0.1:61996",
             "LINKRAY_SINGBOX_SIDECAR_URL = http://127.0.0.1:61995",
+            "LINKRAY_SNELL_USAGE_URL = http://127.0.0.1:61997",
             'CUSTOM_TEMPLATES_DIRECTORY = "/var/lib/marzban/templates"',
             'CLASH_SUBSCRIPTION_TEMPLATE = "clash/default.yml"',
             "DOCS = False",
@@ -357,16 +367,33 @@ def render_manifest(config: LinkRayConfig, nodes: Sequence[NodeHost], role: str 
             "domain": config.domain,
             "panel_port": config.panel_port,
             "marzban_http_port": config.marzban_http_port,
+            "xray_runtime_mode": config.xray_runtime_mode,
             "cert_file": config.cert_file,
             "key_file": config.key_file,
             "grpc_service_name": config.grpc_service_name,
             "reality_server_name": config.reality_server_name,
             "reality_dest": config.reality_dest,
             "inbound_ports": ports,
+            "snell_inbound_ports": config.snell_port_map(),
         },
         "nodes": [{"name": node.name, "domain": node.domain} for node in nodes],
     }
     return json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+
+
+def rendered_xray_runtime_mode(path: Path) -> str:
+    manifest_path = path / "var/lib/marzban/linkray/linkray-manifest.json"
+    if not manifest_path.exists():
+        return "marzban"
+    try:
+        data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return "marzban"
+    config = data.get("config")
+    if not isinstance(config, dict):
+        return "marzban"
+    mode = config.get("xray_runtime_mode")
+    return mode if mode in {"marzban", "linkray"} else "marzban"
 
 
 # Per-inbound host row specification.
@@ -437,11 +464,37 @@ def linkray_egern_service(config: LinkRayConfig) -> str:
 
 
 def linkray_clash_service(config: LinkRayConfig) -> str:
-    return _marzban_adapter_service("LinkRay Clash/Mihomo subscription adapter", "clash", 61991, config.marzban_http_port)
+    return f"""[Unit]
+Description=LinkRay Clash/Mihomo subscription adapter
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/linkray clash --listen 127.0.0.1 --port 61991 --marzban-url http://127.0.0.1:{config.marzban_http_port} --server-domain {shlex.quote(config.domain)} --snell-runtime-dir {SNELL_RUNTIME_DIR} --snell-reload-command 'systemctl enable --now linkray-snell@{{instance}}'
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+"""
 
 
 def linkray_shadowrocket_service(config: LinkRayConfig) -> str:
-    return _marzban_adapter_service("LinkRay Shadowrocket subscription adapter", "shadowrocket", 61994, config.marzban_http_port)
+    return f"""[Unit]
+Description=LinkRay Shadowrocket subscription adapter
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/linkray shadowrocket --listen 127.0.0.1 --port 61994 --marzban-url http://127.0.0.1:{config.marzban_http_port} --server-domain {shlex.quote(config.domain)} --snell-runtime-dir {SNELL_RUNTIME_DIR} --snell-reload-command 'systemctl enable --now linkray-snell@{{instance}}'
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+"""
 
 
 def linkray_singbox_service(config: LinkRayConfig) -> str:
@@ -477,6 +530,77 @@ Type=simple
 ExecStart=/usr/local/bin/sing-box run -c /var/lib/marzban/linkray/singbox/config.json
 Restart=always
 RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+"""
+
+
+def linkray_snell_runtime_service() -> str:
+    return f"""[Unit]
+Description=LinkRay Snell runtime
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/snell-server -c {SNELL_RUNTIME_DIR}/snell-server.conf
+Restart=always
+RestartSec=3
+LimitNOFILE=1048576
+
+[Install]
+WantedBy=multi-user.target
+"""
+
+
+def linkray_snell_user_service() -> str:
+    return f"""[Unit]
+Description=LinkRay Snell user runtime %i
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/snell-server -c {SNELL_RUNTIME_DIR}/users/%i.conf
+Restart=always
+RestartSec=3
+LimitNOFILE=1048576
+
+[Install]
+WantedBy=multi-user.target
+"""
+
+
+def linkray_snell_usage_service() -> str:
+    return f"""[Unit]
+Description=LinkRay Snell usage accounting sidecar
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/linkray snell-usage --listen 127.0.0.1 --port 61997 --runtime-dir {SNELL_RUNTIME_DIR}
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+"""
+
+
+def linkray_xray_service() -> str:
+    return """[Unit]
+Description=LinkRay Xray-core runtime
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/var/lib/marzban/linkray/bin/xray run -config /var/lib/marzban/xray_config.json
+Restart=always
+RestartSec=3
+LimitNOFILE=1048576
 
 [Install]
 WantedBy=multi-user.target
@@ -658,7 +782,7 @@ def render_master(
     files = [
         write_text(output / "var/lib/marzban/xray_config.json", json.dumps(xray_config(config), indent=2) + "\n"),
         write_text(output / "opt/marzban/.env", marzban_env(config)),
-        write_text(output / "opt/marzban/docker-compose.yml", master_compose()),
+        write_text(output / "opt/marzban/docker-compose.yml", master_compose(config)),
         write_text(output / "etc/nginx/conf.d/marzban-panel.conf", nginx_panel(config)),
         write_text(output / "etc/systemd/system/linkray-api.service", linkray_api_service(effective_nodes, config)),
         write_text(output / "etc/systemd/system/linkray-clash.service", linkray_clash_service(config)),
@@ -666,6 +790,9 @@ def render_master(
         write_text(output / "etc/systemd/system/linkray-shadowrocket.service", linkray_shadowrocket_service(config)),
         write_text(output / "etc/systemd/system/linkray-singbox.service", linkray_singbox_service(config)),
         write_text(output / "etc/systemd/system/linkray-singbox-runtime.service", linkray_singbox_runtime_service()),
+        write_text(output / "etc/systemd/system/linkray-snell-runtime.service", linkray_snell_runtime_service()),
+        write_text(output / "etc/systemd/system/linkray-snell@.service", linkray_snell_user_service()),
+        write_text(output / "etc/systemd/system/linkray-snell-usage.service", linkray_snell_usage_service()),
         write_text(output / "etc/systemd/system/linkray-sub-auto.service", linkray_sub_auto_service(config)),
         write_text(output / "etc/systemd/system/linkray-rules-update.service", linkray_rules_update_service()),
         write_text(output / "etc/systemd/system/linkray-rules-update.timer", linkray_rules_update_timer()),
@@ -674,6 +801,7 @@ def render_master(
         write_text(output / "var/lib/marzban/linkray/linkray-manifest.json", render_manifest(config, effective_nodes)),
         write_text(output / "var/lib/marzban/linkray/singbox/config.json", json.dumps(server_config(config, []), indent=2) + "\n"),
         write_text(output / "var/lib/marzban/linkray/singbox/users.json", json.dumps({"version": 1, "users": []}, indent=2) + "\n"),
+        write_text(output / "var/lib/marzban/linkray/snell/snell-server.conf", snell_server_config_text(config)),
         copy_file(
             DASHBOARD_SOURCE_PATCH_ROOT / "README.md",
             output / "var/lib/marzban/linkray/source-patches/marzban-dashboard/README.md",
@@ -698,6 +826,8 @@ def render_master(
         copy_file(PATCH_ROOT / "marzban-dashboard/current/index.linkray.js", output / f"var/lib/marzban/dashboard-patches/{DASHBOARD_PATCH_JS}"),
         copy_file(PATCH_ROOT / "marzban-dashboard/current/index.original.js", output / "var/lib/marzban/dashboard-patches/index.original.js"),
     ]
+    if config.xray_runtime_mode == "linkray":
+        files.append(write_text(output / "etc/systemd/system/linkray-xray.service", linkray_xray_service()))
     return RenderResult(output=output, files=tuple(files))
 
 
@@ -735,10 +865,15 @@ def validate_rendered(path: Path) -> list[str]:
         path / "etc/systemd/system/linkray-shadowrocket.service",
         path / "etc/systemd/system/linkray-singbox.service",
         path / "etc/systemd/system/linkray-singbox-runtime.service",
+        path / "etc/systemd/system/linkray-snell-runtime.service",
+        path / "etc/systemd/system/linkray-snell@.service",
+        path / "etc/systemd/system/linkray-snell-usage.service",
         path / "etc/systemd/system/linkray-sub-auto.service",
         path / "etc/systemd/system/linkray-rules-update.service",
         path / "etc/systemd/system/linkray-rules-update.timer",
     ]
+    if rendered_xray_runtime_mode(path) == "linkray":
+        service_paths.append(path / "etc/systemd/system/linkray-xray.service")
     if (path / "opt/marzban/docker-compose.yml").exists():
         for service_path in service_paths:
             if not service_path.exists():
@@ -749,6 +884,9 @@ def validate_rendered(path: Path) -> list[str]:
     singbox_usage_job_path = path / "var/lib/marzban/linkray/jobs/linkray_singbox_usages.py"
     if (path / "opt/marzban/docker-compose.yml").exists() and not singbox_usage_job_path.exists():
         errors.append(f"{path}: missing var/lib/marzban/linkray/jobs/linkray_singbox_usages.py")
+    snell_config_path = path / "var/lib/marzban/linkray/snell/snell-server.conf"
+    if (path / "opt/marzban/docker-compose.yml").exists() and not snell_config_path.exists():
+        errors.append(f"{path}: missing var/lib/marzban/linkray/snell/snell-server.conf")
     required_any = [
         path / "opt/marzban/docker-compose.yml",
         path / "opt/marzban-node/docker-compose.yml",

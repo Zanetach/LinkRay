@@ -2,6 +2,8 @@ import base64
 import unittest
 
 from linkray.clash import build_clash_meta_yaml
+from linkray.config import LinkRayConfig
+from linkray.snell_runtime import credential_for_token
 
 
 def encoded_subscription(*links: str) -> bytes:
@@ -45,6 +47,26 @@ class ClashTests(unittest.TestCase):
 
         self.assertNotIn("ca-VLESS_XHTTP_Reality", text)
         self.assertIn("name: ca-Shadowsocks", text)
+
+    def test_build_clash_meta_yaml_can_append_snell_user_node(self):
+        user = credential_for_token("subscription-token", "server-secret", name="cyclelink", port=40123)
+        payload = encoded_subscription(
+            "trojan://secret@ca.example.com:8443?security=tls&type=tcp&sni=ca.example.com#ca-Trojan_TLS"
+        )
+
+        text = build_clash_meta_yaml(
+            payload,
+            config=LinkRayConfig(domain="edge-a.example.com"),
+            snell_user=user,
+        )
+
+        self.assertIn("name: cyclelink-Snell", text)
+        self.assertIn("type: snell", text)
+        self.assertIn("server: edge-a.example.com", text)
+        self.assertIn("port: 40123", text)
+        self.assertIn(f"psk: {user.psk}", text)
+        self.assertIn("version: 5", text)
+        self.assertIn("- cyclelink-Snell", text)
 
 
 if __name__ == "__main__":

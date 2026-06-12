@@ -64,6 +64,8 @@ class BootstrapTests(unittest.TestCase):
             self.assertTrue((root / "etc/systemd/system/linkray-shadowrocket.service").exists())
             self.assertTrue((root / "etc/systemd/system/linkray-singbox.service").exists())
             self.assertTrue((root / "etc/systemd/system/linkray-singbox-runtime.service").exists())
+            self.assertTrue((root / "etc/systemd/system/linkray-snell-runtime.service").exists())
+            self.assertTrue((root / "etc/systemd/system/linkray-snell-usage.service").exists())
             self.assertTrue((root / "etc/systemd/system/linkray-sub-auto.service").exists())
             self.assertTrue((root / "etc/systemd/system/linkray-relay.service").exists())
             self.assertTrue((root / "etc/systemd/system/linkray-rules-update.service").exists())
@@ -72,12 +74,16 @@ class BootstrapTests(unittest.TestCase):
             self.assertTrue(any("go1.23.12.linux-amd64.tar.gz" in command for command in runner.commands))
             self.assertTrue(any("with_v2ray_api with_quic with_utls with_clash_api" in command for command in runner.commands))
             self.assertTrue(any("github.com/sagernet/sing-box/cmd/sing-box@v1.12.0" in command for command in runner.commands))
+            self.assertTrue(any("snell-server-v5.0.1-linux" in command for command in runner.commands))
+            self.assertTrue(any("nftables" in command for command in runner.commands))
             self.assertTrue(any("systemctl enable --now linkray-api" in command for command in runner.commands))
             self.assertTrue(any("systemctl enable --now linkray-clash" in command for command in runner.commands))
             self.assertTrue(any("systemctl enable --now linkray-egern" in command for command in runner.commands))
             self.assertTrue(any("systemctl enable --now linkray-shadowrocket" in command for command in runner.commands))
             self.assertTrue(any("systemctl enable --now linkray-singbox" in command for command in runner.commands))
             self.assertTrue(any("systemctl enable --now linkray-singbox-runtime" in command for command in runner.commands))
+            self.assertTrue(any("systemctl enable --now linkray-snell-runtime" in command for command in runner.commands))
+            self.assertTrue(any("systemctl enable --now linkray-snell-usage" in command for command in runner.commands))
             self.assertTrue(any("systemctl enable --now linkray-sub-auto" in command for command in runner.commands))
             self.assertTrue(any("systemctl enable --now linkray-rules-update.timer" in command for command in runner.commands))
             self.assertTrue(any("systemctl enable --now linkray-relay" in command for command in runner.commands))
@@ -86,6 +92,27 @@ class BootstrapTests(unittest.TestCase):
             self.assertTrue(any("docker compose up -d" in command for command in runner.commands))
             self.assertTrue(any("sqlite3 /var/lib/marzban/db.sqlite3" in command for command in runner.commands))
             self.assertTrue(any("nginx -t" in command for command in runner.commands))
+            self.assertTrue(all(action.ok for action in actions))
+
+    def test_bootstrap_master_linkray_xray_runtime_enables_xray_service(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runner = RecordingRunner()
+            actions = bootstrap_master(
+                LinkRayConfig(
+                    domain="edge-a.example.com",
+                    admin_password="strong-password",
+                    xray_runtime_mode="linkray",
+                ),
+                root=root,
+                apply=True,
+                runtime=True,
+                runner=runner,
+            )
+
+            self.assertTrue((root / "etc/systemd/system/linkray-xray.service").exists())
+            self.assertTrue(any("systemctl enable --now linkray-xray" in command for command in runner.commands))
+            self.assertTrue(any("systemctl restart linkray-xray" in command for command in runner.commands))
             self.assertTrue(all(action.ok for action in actions))
 
     def test_bootstrap_master_apply_generates_reality_secrets(self):

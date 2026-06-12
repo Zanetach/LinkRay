@@ -26,9 +26,15 @@ SINGBOX_DEFAULT_PORTS = {
     "anytls": 19082,
 }
 
+SNELL_DEFAULT_PORTS = {
+    "snell": 19180,
+}
+
 PORT_KEYS = tuple(DEFAULT_PORTS.keys())
 SINGBOX_PORT_KEYS = tuple(SINGBOX_DEFAULT_PORTS.keys())
+SNELL_PORT_KEYS = tuple(SNELL_DEFAULT_PORTS.keys())
 RELAY_PORT_OFFSET = 100
+XRAY_RUNTIME_MODES = ("marzban", "linkray")
 
 
 @dataclass(frozen=True)
@@ -45,14 +51,20 @@ class LinkRayConfig:
     grpc_service_name: str = "grpc"
     panel_port: int = 9443
     marzban_http_port: int = 8000
+    xray_runtime_mode: str = "marzban"
+    snell_psk: str = "REPLACE_WITH_SNELL_PSK"
     inbound_ports: tuple[tuple[str, int], ...] = ()
     singbox_inbound_ports: tuple[tuple[str, int], ...] = ()
+    snell_inbound_ports: tuple[tuple[str, int], ...] = ()
 
     def validate(self) -> None:
         if not self.domain or "." not in self.domain:
             raise ValueError("domain must be a fully qualified domain name")
         if not self.admin_username:
             raise ValueError("admin_username is required")
+        if self.xray_runtime_mode not in XRAY_RUNTIME_MODES:
+            allowed = ", ".join(XRAY_RUNTIME_MODES)
+            raise ValueError(f"xray_runtime_mode must be one of: {allowed}")
         if self.reality_private_key.startswith("REPLACE_"):
             return
         if len(self.reality_private_key) < 16:
@@ -61,6 +73,7 @@ class LinkRayConfig:
             raise ValueError("reality_short_id is unexpectedly short")
         self.port_map()
         self.singbox_port_map()
+        self.snell_port_map()
 
     def port_map(self) -> dict[str, int]:
         ports = dict(DEFAULT_PORTS)
@@ -77,6 +90,16 @@ class LinkRayConfig:
         for key, port in self.singbox_inbound_ports:
             if key not in SINGBOX_DEFAULT_PORTS:
                 raise ValueError(f"unknown sing-box inbound port key: {key}")
+            validate_port(port)
+            ports[key] = port
+        validate_unique_ports(ports)
+        return ports
+
+    def snell_port_map(self) -> dict[str, int]:
+        ports = dict(SNELL_DEFAULT_PORTS)
+        for key, port in self.snell_inbound_ports:
+            if key not in SNELL_DEFAULT_PORTS:
+                raise ValueError(f"unknown Snell inbound port key: {key}")
             validate_port(port)
             ports[key] = port
         validate_unique_ports(ports)
@@ -156,6 +179,37 @@ def parse_singbox_inbound_ports(values: list[str] | None) -> tuple[tuple[str, in
         seen.add(key)
     if duplicates:
         raise ValueError(f"duplicate sing-box inbound port key(s): {', '.join(duplicates)}")
+    return tuple(parsed)
+
+
+def parse_snell_inbound_port(value: str) -> tuple[str, int]:
+    if "=" not in value:
+        raise ValueError("Snell inbound must be formatted as key=port, for example snell=19180")
+    key, raw_port = value.split("=", 1)
+    key = key.strip()
+    if key not in SNELL_DEFAULT_PORTS:
+        allowed = ", ".join(SNELL_PORT_KEYS)
+        raise ValueError(f"unknown Snell inbound key {key!r}; allowed keys: {allowed}")
+    try:
+        port = int(raw_port.strip())
+    except ValueError as exc:
+        raise ValueError(f"invalid port for {key}: {raw_port}") from exc
+    validate_port(port)
+    return key, port
+
+
+def parse_snell_inbound_ports(values: list[str] | None) -> tuple[tuple[str, int], ...]:
+    if not values:
+        return ()
+    parsed = [parse_snell_inbound_port(value) for value in values]
+    seen: set[str] = set()
+    duplicates: set[str] = set()
+    for key, _ in parsed:
+        if key in seen:
+            duplicates.add(key)
+        seen.add(key)
+    if duplicates:
+        raise ValueError(f"duplicate Snell inbound port key(s): {', '.join(duplicates)}")
     return tuple(parsed)
 
 

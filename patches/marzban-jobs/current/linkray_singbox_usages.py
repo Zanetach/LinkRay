@@ -25,6 +25,7 @@ from xray_api import exc as xray_exc
 
 LINKRAY_SINGBOX_STATS_API = os.getenv("LINKRAY_SINGBOX_STATS_API", "127.0.0.1:61996")
 LINKRAY_SINGBOX_SIDECAR_URL = os.getenv("LINKRAY_SINGBOX_SIDECAR_URL", "http://127.0.0.1:61995")
+LINKRAY_SNELL_USAGE_URL = os.getenv("LINKRAY_SNELL_USAGE_URL", "http://127.0.0.1:61997")
 
 
 def _stats_endpoint() -> Optional[tuple[str, int]]:
@@ -78,6 +79,37 @@ def _username_stats(api: XRayAPI) -> dict[str, int]:
         if stat.value:
             usage[stat.name] += stat.value
     return dict(usage)
+
+
+def _snell_usage_stats() -> dict[str, int]:
+    if not LINKRAY_SNELL_USAGE_URL:
+        return {}
+    request = Request(
+        f"{LINKRAY_SNELL_USAGE_URL.rstrip('/')}/usage/collect",
+        data=b"",
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=10) as response:
+            data = json.loads(response.read().decode("utf-8"))
+    except (OSError, URLError, ValueError, json.JSONDecodeError) as err:
+        logger.warning("LinkRay Snell usage collection failed: %s", err)
+        return {}
+
+    usage = data.get("usage")
+    if not isinstance(usage, dict):
+        return {}
+
+    parsed: dict[str, int] = {}
+    for username, value in usage.items():
+        try:
+            amount = int(value)
+        except (TypeError, ValueError):
+            continue
+        if isinstance(username, str) and amount > 0:
+            parsed[username] = parsed.get(username, 0) + amount
+    return parsed
 
 
 def _user_params(username_usage: dict[str, int]) -> list[dict[str, int]]:
@@ -166,6 +198,10 @@ def record_linkray_singbox_user_usages():
     if not params:
         return
 
+    _record_user_usage_params(params)
+
+
+def _record_user_usage_params(params: list[dict[str, int]]) -> None:
     with GetDB() as db:
         user_admin_map = dict(db.query(User.id, User.admin_id).all())
 
@@ -196,6 +232,13 @@ def record_linkray_singbox_user_usages():
             _safe_execute(db, admin_stmt, admin_params)
 
     _record_user_hourly_stats(params)
+
+
+def record_linkray_snell_user_usages():
+    params = _user_params(_snell_usage_stats())
+    if not params:
+        return
+    _record_user_usage_params(params)
 
 
 def record_linkray_singbox_node_usages():
@@ -236,6 +279,14 @@ scheduler.add_job(
     coalesce=True,
     max_instances=1,
     id="linkray_singbox_user_usages",
+)
+scheduler.add_job(
+    record_linkray_snell_user_usages,
+    "interval",
+    seconds=JOB_RECORD_USER_USAGES_INTERVAL,
+    coalesce=True,
+    max_instances=1,
+    id="linkray_snell_user_usages",
 )
 scheduler.add_job(
     record_linkray_singbox_node_usages,

@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Protocol
 
 from .config import DEFAULT_PORTS
+from .snell_runtime import SNELL_DEFAULT_PORTS
 from .singbox_runtime import SINGBOX_DEFAULT_PORTS, SINGBOX_STATS_PORT
 
 
@@ -113,32 +114,76 @@ def rendered_xray_ports(root: Path) -> list[int]:
     return ports or list(DEFAULT_PORTS.values())
 
 
+def rendered_xray_runtime_mode(root: Path) -> str:
+    path = root / "var/lib/marzban/linkray/linkray-manifest.json"
+    if not path.exists():
+        return "marzban"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return "marzban"
+    config = data.get("config")
+    if not isinstance(config, dict):
+        return "marzban"
+    mode = config.get("xray_runtime_mode")
+    return mode if mode in {"marzban", "linkray"} else "marzban"
+
+
+def rendered_snell_ports(root: Path) -> list[int]:
+    path = root / "var/lib/marzban/linkray/snell/snell-server.conf"
+    if not path.exists():
+        return list(SNELL_DEFAULT_PORTS.values())
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return list(SNELL_DEFAULT_PORTS.values())
+    match = re.search(r"^\s*listen\s*=\s*(?:\S+:)?(?P<port>\d+)\s*$", text, flags=re.MULTILINE)
+    if not match:
+        return list(SNELL_DEFAULT_PORTS.values())
+    return [int(match.group("port"))]
+
+
 def runtime_checks(role: str, runner: Runner, root: Path = Path("/")) -> list[Check]:
     checks: list[Check] = []
     ss_result = runner.run(["ss", "-lntup"])
     ss_output = ss_result.stdout
     ps_result = runner.run(["ps", "-eo", "pid,ppid,cmd"])
     ps_output = ps_result.stdout
+    xray_runtime_mode = rendered_xray_runtime_mode(root)
 
     checks.append(service_check("nginx", "active", runner))
     checks.append(service_check("xray", "inactive", runner))
     if role == "master":
+        if xray_runtime_mode == "linkray":
+            checks.append(service_check("linkray-xray", "active", runner))
         checks.append(service_check("linkray-api", "active", runner))
         checks.append(service_check("linkray-clash", "active", runner))
         checks.append(service_check("linkray-egern", "active", runner))
         checks.append(service_check("linkray-shadowrocket", "active", runner))
         checks.append(service_check("linkray-singbox", "active", runner))
         checks.append(service_check("linkray-singbox-runtime", "active", runner))
+        checks.append(service_check("linkray-snell-runtime", "active", runner))
+        checks.append(service_check("linkray-snell-usage", "active", runner))
         checks.append(service_check("linkray-sub-auto", "active", runner))
         checks.append(service_check("linkray-rules-update.timer", "active", runner))
         checks.append(service_check("linkray-relay", "active", runner))
-    checks.append(
-        Check(
-            "PASS" if has_process(ps_output, "/usr/local/bin/xray run -config stdin:") else "FAIL",
-            "Marzban-managed Xray",
-            "running" if has_process(ps_output, "/usr/local/bin/xray run -config stdin:") else "not found",
+    if role == "master" and xray_runtime_mode == "linkray":
+        pattern = "/var/lib/marzban/linkray/bin/xray run -config /var/lib/marzban/xray_config.json"
+        checks.append(
+            Check(
+                "PASS" if has_process(ps_output, pattern) else "FAIL",
+                "LinkRay-managed Xray",
+                "running" if has_process(ps_output, pattern) else "not found",
+            )
         )
-    )
+    else:
+        checks.append(
+            Check(
+                "PASS" if has_process(ps_output, "/usr/local/bin/xray run -config stdin:") else "FAIL",
+                "Marzban-managed Xray",
+                "running" if has_process(ps_output, "/usr/local/bin/xray run -config stdin:") else "not found",
+            )
+        )
     expected_ports = rendered_xray_ports(root)
     if role == "master":
         expected_ports = [
@@ -150,8 +195,10 @@ def runtime_checks(role: str, runner: Runner, root: Path = Path("/")) -> list[Ch
             61993,
             61994,
             61995,
+            61997,
             SINGBOX_STATS_PORT,
             *SINGBOX_DEFAULT_PORTS.values(),
+            *rendered_snell_ports(root),
             *expected_ports,
         ]
         checks.append(docker_check("marzban-marzban-1", runner))
@@ -179,6 +226,9 @@ def file_checks(role: str, root: Path) -> list[Check]:
             "etc/systemd/system/linkray-shadowrocket.service",
             "etc/systemd/system/linkray-singbox.service",
             "etc/systemd/system/linkray-singbox-runtime.service",
+            "etc/systemd/system/linkray-snell-runtime.service",
+            "etc/systemd/system/linkray-snell@.service",
+            "etc/systemd/system/linkray-snell-usage.service",
             "etc/systemd/system/linkray-sub-auto.service",
             "etc/systemd/system/linkray-rules-update.service",
             "etc/systemd/system/linkray-rules-update.timer",
@@ -187,8 +237,11 @@ def file_checks(role: str, root: Path) -> list[Check]:
             "var/lib/marzban/linkray/rules/cn-ip-cidrs.txt",
             "var/lib/marzban/linkray/singbox/config.json",
             "var/lib/marzban/linkray/singbox/users.json",
+            "var/lib/marzban/linkray/snell/snell-server.conf",
             "var/lib/marzban/linkray/jobs/linkray_singbox_usages.py",
         ]
+        if rendered_xray_runtime_mode(root) == "linkray":
+            required.append("etc/systemd/system/linkray-xray.service")
         recommended = ["var/lib/marzban/linkray/hosts.sql"]
     else:
         required = ["opt/marzban-node/docker-compose.yml"]

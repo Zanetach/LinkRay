@@ -40,6 +40,14 @@ linkray bootstrap master \
 
 The master bootstrap writes LinkRay-managed files, installs required system packages, installs Docker when missing, builds sing-box with LinkRay-required tags, obtains the TLS certificate through acme.sh DNS Cloudflare, starts Marzban, applies `hosts.sql`, validates Nginx, reloads Nginx, and runs `doctor`.
 
+By default, Xray-core remains Marzban-managed for compatibility with Marzban user, subscription, and traffic workflows. To render the optional unified runtime shape where LinkRay owns the Xray systemd unit, pass:
+
+```bash
+--xray-runtime linkray
+```
+
+That mode adds `linkray-xray.service` and removes the Xray binary bind mount from the Marzban Docker Compose file.
+
 LinkRay builds `/usr/local/bin/sing-box` with:
 
 ```text
@@ -47,6 +55,17 @@ with_v2ray_api with_quic with_utls with_clash_api
 ```
 
 The ordinary upstream release binary does not include the V2Ray API stats service needed by the LinkRay sing-box usage sync job. That job also reconciles active Marzban usernames with the local sing-box sidecar, pruning disabled, deleted, expired, or limited users from the sing-box runtime config.
+
+LinkRay also installs the pinned Snell v5 server binary and renders:
+
+```text
+/var/lib/marzban/linkray/snell/snell-server.conf
+/etc/systemd/system/linkray-snell-runtime.service
+/etc/systemd/system/linkray-snell@.service
+/etc/systemd/system/linkray-snell-usage.service
+```
+
+The Clash/Mihomo and Shadowrocket adapters generate per-user Snell credentials on subscription request, write `/var/lib/marzban/linkray/snell/users/<instance>.conf`, and start `linkray-snell@<instance>`. Snell usage sync is handled by `linkray-snell-usage.service`: it maintains per-user port counters and lets the Marzban job write deltas into user, admin, and hourly usage tables.
 
 If Reality values are not provided through `--reality-private-key` and `--reality-short-id`, `bootstrap master --apply` generates them automatically before writing `/var/lib/marzban/xray_config.json`.
 
@@ -69,6 +88,18 @@ linkray render master \
 linkray validate --path /tmp/linkray-master
 ```
 
+Render the optional LinkRay-managed Xray runtime:
+
+```bash
+linkray render master \
+  --domain edge-a.example.com \
+  --node edge-a=edge-a.example.com \
+  --node edge-b=edge-b.example.com \
+  --xray-runtime linkray \
+  --output /tmp/linkray-master
+linkray validate --path /tmp/linkray-master
+```
+
 The rendered master tree contains:
 
 - `var/lib/marzban/xray_config.json`
@@ -77,17 +108,24 @@ The rendered master tree contains:
 - `var/lib/marzban/linkray/jobs/linkray_singbox_usages.py`
 - `var/lib/marzban/linkray/singbox/config.json`
 - `var/lib/marzban/linkray/singbox/users.json`
+- `var/lib/marzban/linkray/snell/snell-server.conf`
+- `var/lib/marzban/linkray/snell/users/` after users request Snell-capable subscriptions
 - `var/lib/marzban/templates/clash/default.yml`
 - `var/lib/marzban/dashboard-patches/*`
 - `opt/marzban/docker-compose.yml`
 - `etc/nginx/conf.d/marzban-panel.conf`
 - `etc/systemd/system/linkray-api.service`
+- `etc/systemd/system/linkray-clash.service`
 - `etc/systemd/system/linkray-egern.service`
 - `etc/systemd/system/linkray-shadowrocket.service`
 - `etc/systemd/system/linkray-singbox.service`
 - `etc/systemd/system/linkray-singbox-runtime.service`
+- `etc/systemd/system/linkray-snell-runtime.service`
+- `etc/systemd/system/linkray-snell@.service`
+- `etc/systemd/system/linkray-snell-usage.service`
 - `etc/systemd/system/linkray-sub-auto.service`
 - `etc/systemd/system/linkray-relay.service`
+- `etc/systemd/system/linkray-xray.service` when rendered with `--xray-runtime linkray`
 
 ## Node Render
 
@@ -120,15 +158,25 @@ sqlite3 /var/lib/marzban/db.sqlite3 < /var/lib/marzban/linkray/hosts.sql
 cd /opt/marzban && docker compose up -d
 systemctl daemon-reload
 systemctl enable --now linkray-api
+systemctl enable --now linkray-clash
 systemctl enable --now linkray-egern
 systemctl enable --now linkray-shadowrocket
 systemctl enable --now linkray-singbox
+systemctl enable --now linkray-singbox-runtime
+systemctl enable --now linkray-snell-runtime
+systemctl enable --now linkray-snell-usage
 systemctl enable --now linkray-sub-auto
+systemctl enable --now linkray-rules-update.timer
+systemctl start linkray-rules-update.service || true
 systemctl enable --now linkray-relay
 systemctl restart linkray-api
+systemctl restart linkray-clash
 systemctl restart linkray-egern
 systemctl restart linkray-shadowrocket
 systemctl restart linkray-singbox
+systemctl restart linkray-singbox-runtime
+systemctl restart linkray-snell-runtime
+systemctl restart linkray-snell-usage
 systemctl restart linkray-sub-auto
 systemctl restart linkray-relay
 nginx -t
@@ -185,9 +233,11 @@ linkray doctor --role node
 - Required LinkRay/Marzban files.
 - Nginx systemd state.
 - Standalone `xray.service` is inactive.
-- Marzban-managed Xray process exists.
+- Marzban-managed Xray process exists in the default mode.
+- `linkray-xray.service` and the LinkRay-managed Xray process exist when the manifest says `xray_runtime_mode=linkray`.
 - Expected LinkRay ports are listening.
 - The sing-box runtime API port and Hysteria2/TUIC/AnyTLS inbound ports are listening on the master.
+- The Snell runtime service and Snell inbound port are listening on the master.
 
 ## Secondary Node Relay
 

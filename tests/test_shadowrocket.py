@@ -3,7 +3,9 @@ import importlib
 import json
 import unittest
 
+from linkray.config import LinkRayConfig
 from linkray.rules import RouteRules
+from linkray.snell_runtime import credential_for_token
 
 
 def b64(value: str) -> str:
@@ -65,6 +67,22 @@ class ShadowrocketTests(unittest.TestCase):
         self.assertIn("GEOIP,CN,国内站点", output)
         self.assertNotIn("IP-CIDR,106.52.0.0/15,国内站点", output)
         self.assertIn("FINAL,漏网之鱼", output)
+
+    def test_build_shadowrocket_conf_can_append_snell_user_node(self):
+        module = self.shadowrocket_module()
+        links = "trojan://password@edge-a.example.com:18083?security=tls&type=tcp&sni=edge-a.example.com#edge-a-Trojan_TLS"
+        user = credential_for_token("subscription-token", "server-secret", name="cyclelink", port=40123)
+
+        output = module.build_shadowrocket_conf(
+            base64.b64encode(links.encode()),
+            config=LinkRayConfig(domain="edge-a.example.com"),
+            snell_user=user,
+        )
+
+        self.assertIn("cyclelink-Snell = snell,edge-a.example.com,40123", output)
+        self.assertIn(f"psk={user.psk}", output)
+        self.assertIn("version=5", output)
+        self.assertIn("手动切换 = select,edge-a-Trojan_TLS,cyclelink-Snell", output)
 
     def test_build_shadowrocket_conf_keeps_large_cn_rule_sets_compact(self):
         module = self.shadowrocket_module()

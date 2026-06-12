@@ -168,6 +168,16 @@ PROTOCOL_CAPABILITIES: tuple[ProtocolCapability, ...] = (
         ("sing-box",),
         "LinkRay-managed sing-box runtime with generated credentials and Marzban stats sync.",
     ),
+    ProtocolCapability(
+        "snell",
+        "Snell",
+        "snell",
+        "experimental",
+        "tcp",
+        "psk",
+        ("shadowrocket", "clash-meta"),
+        "LinkRay-managed Snell runtime with per-user subscription credentials and Marzban stats sync via port counters.",
+    ),
 )
 
 

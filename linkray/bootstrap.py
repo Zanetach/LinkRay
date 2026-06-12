@@ -63,7 +63,7 @@ def command_action(command: str, apply: bool, runner: ShellRunner) -> BootstrapA
 def dependency_commands() -> list[str]:
     return [
         "apt-get update",
-        "DEBIAN_FRONTEND=noninteractive apt-get install -y curl ca-certificates gnupg nginx sqlite3 socat cron unzip openssh-client git build-essential tar",
+        "DEBIAN_FRONTEND=noninteractive apt-get install -y curl ca-certificates gnupg nginx sqlite3 socat cron unzip openssh-client git build-essential tar nftables",
         "command -v docker >/dev/null 2>&1 || curl -fsSL https://get.docker.com | sh",
         "systemctl enable --now docker",
         "systemctl enable --now nginx",
@@ -121,12 +121,32 @@ def singbox_binary_commands(version: str = "v1.12.0") -> list[str]:
     ]
 
 
+def snell_binary_commands(version: str = "v5.0.1") -> list[str]:
+    binary = "/usr/local/bin/snell-server"
+    marker = f"/usr/local/share/linkray/snell-server-{version}"
+    return [
+        (
+            f"test -f {marker} -a -x {binary} || "
+            "arch=$(uname -m) && "
+            "case \"$arch\" in x86_64|amd64) snell_arch=amd64 ;; aarch64|arm64) snell_arch=aarch64 ;; *) echo unsupported arch \"$arch\"; exit 1 ;; esac && "
+            "tmp=$(mktemp -d) && "
+            "mkdir -p /usr/local/share/linkray && "
+            f"curl -fL https://dl.nssurge.com/snell/snell-server-{version}-linux-${{snell_arch}}.zip -o \"$tmp/snell-server.zip\" && "
+            f"unzip -p \"$tmp/snell-server.zip\" snell-server > {binary} && "
+            f"chmod 755 {binary} && "
+            f"touch {marker} && "
+            "rm -rf \"$tmp\""
+        ),
+        f"{binary} -version 2>&1 | head -1",
+    ]
+
+
 def node_flags(nodes: list[NodeHost]) -> str:
     return " ".join(f"--node {shell_quote(f'{node.name}={node.domain}')}" for node in nodes)
 
 
-def linkray_api_commands() -> list[str]:
-    return [
+def linkray_api_commands(xray_runtime_mode: str = "marzban") -> list[str]:
+    commands = [
         "rm -f /etc/cron.d/linkray-port-status",
         "rm -f /var/lib/marzban/linkray/public/ports.html /var/lib/marzban/linkray/public/ports.json",
         "systemctl daemon-reload",
@@ -136,6 +156,8 @@ def linkray_api_commands() -> list[str]:
         "systemctl enable --now linkray-shadowrocket",
         "systemctl enable --now linkray-singbox",
         "systemctl enable --now linkray-singbox-runtime",
+        "systemctl enable --now linkray-snell-runtime",
+        "systemctl enable --now linkray-snell-usage",
         "systemctl enable --now linkray-sub-auto",
         "systemctl enable --now linkray-rules-update.timer",
         "systemctl start linkray-rules-update.service || true",
@@ -146,9 +168,15 @@ def linkray_api_commands() -> list[str]:
         "systemctl restart linkray-shadowrocket",
         "systemctl restart linkray-singbox",
         "systemctl restart linkray-singbox-runtime",
+        "systemctl restart linkray-snell-runtime",
+        "systemctl restart linkray-snell-usage",
         "systemctl restart linkray-sub-auto",
         "systemctl restart linkray-relay",
     ]
+    if xray_runtime_mode == "linkray":
+        commands.insert(3, "systemctl enable --now linkray-xray")
+        commands.append("systemctl restart linkray-xray")
+    return commands
 
 
 def cert_commands(config: LinkRayConfig, cf_token_env: str) -> list[str]:
@@ -185,6 +213,7 @@ def master_runtime_commands(
         commands.extend(cert_commands(config, cf_token_env))
     commands.extend(xray_binary_commands())
     commands.extend(singbox_binary_commands())
+    commands.extend(snell_binary_commands())
     commands.extend(
         [
             "cd /opt/marzban && docker compose up -d --force-recreate marzban",
@@ -193,7 +222,7 @@ def master_runtime_commands(
             "systemctl reload nginx",
         ]
     )
-    commands.extend(linkray_api_commands())
+    commands.extend(linkray_api_commands(config.xray_runtime_mode))
     commands.append("linkray doctor --role master")
     return commands
 
@@ -240,12 +269,18 @@ def generated_short_id() -> str:
     return secrets.token_hex(8)
 
 
+def generated_snell_psk() -> str:
+    return secrets.token_urlsafe(32)
+
+
 def config_with_generated_secrets(config: LinkRayConfig) -> LinkRayConfig:
     updates: dict[str, str] = {}
     if config.reality_private_key.startswith("REPLACE_"):
         updates["reality_private_key"] = generated_reality_private_key()
     if config.reality_short_id.startswith("REPLACE_"):
         updates["reality_short_id"] = generated_short_id()
+    if config.snell_psk.startswith("REPLACE_"):
+        updates["snell_psk"] = generated_snell_psk()
     if not updates:
         return config
     return replace(config, **updates)
@@ -277,7 +312,7 @@ def bootstrap_master(
     actions.extend(install_actions_to_bootstrap(install_master(effective_config, root=root, apply=apply, nodes=nodes)))
     if effective_runtime:
         shell_runner = runner or SubprocessShellRunner()
-        for command in master_runtime_commands(issue_cert, config, cf_token_env, nodes=nodes):
+        for command in master_runtime_commands(issue_cert, effective_config, cf_token_env, nodes=nodes):
             action = command_action(command, apply, shell_runner)
             actions.append(action)
             if apply and not action.ok:

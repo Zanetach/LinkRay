@@ -11,7 +11,7 @@
 
 ## Why
 
-LinkRay packages a Marzban + Xray-core deployment into repeatable configuration, rendered assets, sidecar services, and health checks. Marzban remains the user, subscription, traffic, and node management control plane. Xray-core remains the primary proxy runtime. LinkRay can also run an experimental sing-box runtime for Hysteria2, TUIC, and AnyTLS, with generated user credentials and a Marzban job that syncs sing-box stats back into Marzban usage tables.
+LinkRay packages a Marzban + Xray-core deployment into repeatable configuration, rendered assets, sidecar services, and health checks. Marzban remains the user, subscription, traffic, and node management control plane. Xray-core remains the primary proxy runtime. LinkRay can also run experimental LinkRay-managed runtimes for Xray-core, sing-box, and Snell. The sing-box runtime powers Hysteria2, TUIC, and AnyTLS with generated user credentials and a Marzban job that syncs sing-box stats back into Marzban usage tables.
 
 The goal is simple: stop hand-editing live container files as the primary workflow. Make changes in this repository, render the deployment tree, validate it, then apply the rendered files to a prepared host.
 
@@ -21,7 +21,7 @@ The goal is simple: stop hand-editing live container files as the primary workfl
 |---|---|
 | Master render | Marzban Docker Compose, Nginx config, Xray config, SQL host initialization, dashboard patches, subscription templates, sidecar systemd units |
 | Node render | Marzban Node Docker Compose and install shape |
-| Inbound set | 12 Xray-core inbound protocol families plus 3 experimental sing-box inbound families, all with overridable ports |
+| Inbound set | 12 Xray-core inbound protocol families plus 3 experimental sing-box inbound families plus per-user Snell runtime support, all with overridable ports |
 | Subscription routing | Browser/client-aware `/sub/<token>` routing plus Clash/Mihomo, Egern, Shadowrocket, and sing-box adapters |
 | Dashboard patch | User link ordering, concrete protocol card labels, and Node Info backed by `linkray api` |
 | Multi-node relay | Master-side TCP relay ports for secondary nodes, avoiding client-side proxy chaining |
@@ -46,7 +46,7 @@ LinkRay renders these inbound families for every node:
 | VMess HTTPUpgrade TLS | HTTPUpgrade + TLS |
 | Trojan gRPC TLS | gRPC + TLS |
 
-Clash/Mihomo and sing-box are supported as client subscription formats through LinkRay sidecars. LinkRay uses Marzban-managed Xray-core for the stable runtime set and a LinkRay-managed sing-box runtime for advanced protocols.
+Clash/Mihomo and sing-box are supported as client subscription formats through LinkRay sidecars. LinkRay uses Marzban-managed Xray-core as the stable default runtime and can render an optional `linkray-xray.service` for deployments that want Xray-core under the same LinkRay-managed systemd model as sing-box and Snell.
 
 Hysteria2, TUIC, and AnyTLS are experimental production paths:
 
@@ -57,6 +57,16 @@ Hysteria2, TUIC, and AnyTLS are experimental production paths:
 - The same Marzban job reconciles active usernames with the local sing-box sidecar so disabled, deleted, expired, or limited users are pruned from the sing-box runtime config.
 
 The sing-box binary must be built with `with_v2ray_api`, `with_quic`, `with_utls`, and `with_clash_api`. `bootstrap master` does this automatically with Go 1.23.12. Check the explicit matrix with:
+
+Snell is experimental but usable for supported clients:
+
+- `linkray-snell-runtime.service` runs `snell-server`.
+- `linkray-snell@.service` runs per-user Snell server instances.
+- `linkray-snell-usage.service` exposes local Snell usage deltas for the Marzban job.
+- The generated config lives at `/var/lib/marzban/linkray/snell/snell-server.conf`.
+- Per-user configs are written under `/var/lib/marzban/linkray/snell/users/`.
+- Shadowrocket config and Clash/Mihomo subscriptions can append per-user Snell nodes.
+- Marzban traffic sync for Snell uses per-user port counters and writes usage into the same user, admin, and hourly tables as the sing-box sync job.
 
 ```bash
 linkray protocols
@@ -172,6 +182,18 @@ linkray render master \
 linkray validate --path /tmp/linkray-master
 ```
 
+Render the optional unified Xray runtime mode when you are ready to let LinkRay own the Xray systemd service instead of mounting the Xray binary into the Marzban container:
+
+```bash
+linkray render master \
+  --domain edge-a.example.com \
+  --node edge-a=edge-a.example.com \
+  --node edge-b=edge-b.example.com \
+  --xray-runtime linkray \
+  --output /tmp/linkray-master
+linkray validate --path /tmp/linkray-master
+```
+
 Render node files:
 
 ```bash
@@ -191,6 +213,16 @@ linkray render master \
 ```
 
 The same `--inbound key=port` flags are supported by `linkray api` and `linkray ports`, so the dashboard Node Info panel can follow production port changes without code edits.
+
+Override experimental runtime ports when needed:
+
+```bash
+linkray render master \
+  --domain edge-a.example.com \
+  --singbox-inbound hysteria2=29080 \
+  --snell-inbound snell=29180 \
+  --output /tmp/linkray-master
+```
 
 ## Command Map
 
@@ -232,6 +264,10 @@ Rendered master deployments include these LinkRay-managed systemd units:
 
 | Unit | Purpose |
 |---|---|
+| `linkray-xray.service` | Optional Xray-core runtime when rendered with `--xray-runtime linkray` |
+| `linkray-snell-runtime.service` | Runs the experimental Snell server runtime |
+| `linkray-snell@.service` | Runs per-user Snell server instances generated by subscription adapters |
+| `linkray-snell-usage.service` | Exposes per-user Snell traffic deltas to Marzban |
 | `linkray-api.service` | Reports node port status |
 | `linkray-clash.service` | Converts Marzban subscriptions into Clash/Mihomo YAML |
 | `linkray-egern.service` | Converts Marzban subscriptions into Egern YAML |

@@ -5,13 +5,17 @@ import json
 import re
 from collections.abc import Mapping
 from http.server import ThreadingHTTPServer
+from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, unquote, urlparse
 
-from ._http import PASS_HEADERS, AdapterHandler, fetch_upstream, first_query_value, parse_link_netloc
+from ._http import PASS_HEADERS, AdapterHandler, fetch_subscription_username, fetch_upstream, first_query_value, parse_link_netloc
+from .config import LinkRayConfig
 from .native import b64decode_text, decode_subscription_links
 from .rules import COMPACT_CN_DOMAIN_SUFFIXES, FOREIGN_DOMAIN_SUFFIXES, RouteRules, load_route_rules
+from .snell_runtime import DEFAULT_RUNTIME_DIR as SNELL_RUNTIME_DIR
+from .snell_runtime import SnellUser, ensure_runtime_user, snell_clash_proxy
 
 
 TOKEN_RE = re.compile(r"^/sub/([^/]+)/clash-meta/?$")
@@ -344,7 +348,12 @@ def build_rules(route_rules: RouteRules) -> list[str]:
     return rules
 
 
-def build_clash_meta_yaml(subscription_payload: bytes, route_rules: RouteRules | None = None) -> str:
+def build_clash_meta_yaml(
+    subscription_payload: bytes,
+    route_rules: RouteRules | None = None,
+    config: LinkRayConfig | None = None,
+    snell_user: SnellUser | None = None,
+) -> str:
     proxies: list[dict[str, Any]] = []
     seen: set[str] = set()
     for link in decode_subscription_links(subscription_payload):
@@ -356,6 +365,12 @@ def build_clash_meta_yaml(subscription_payload: bytes, route_rules: RouteRules |
             continue
         seen.add(name)
         proxies.append(proxy)
+    if config and snell_user:
+        proxy = snell_clash_proxy(config, snell_user)
+        name = str(proxy["name"])
+        if name not in seen:
+            seen.add(name)
+            proxies.append(proxy)
 
     names = [str(proxy["name"]) for proxy in proxies]
     effective_rules = route_rules or load_route_rules()
@@ -387,6 +402,10 @@ def build_clash_meta_yaml(subscription_payload: bytes, route_rules: RouteRules |
 
 
 class ClashHandler(AdapterHandler):
+    server_domain = ""
+    snell_runtime_dir = SNELL_RUNTIME_DIR
+    snell_reload_command = ""
+
     def do_GET(self) -> None:
         path = urlparse(self.path).path
         if path == "/health":
@@ -399,7 +418,21 @@ class ClashHandler(AdapterHandler):
         token = match.group(1)
         try:
             _, upstream_headers, raw = fetch_upstream(self.marzban_url, token, {"Accept": "text/plain"})
-            body = build_clash_meta_yaml(raw).encode("utf-8")
+            config = None
+            snell_user = None
+            if self.server_domain:
+                config = LinkRayConfig(domain=self.server_domain)
+                username = fetch_subscription_username(self.marzban_url, token)
+                if not username:
+                    raise ValueError("missing Marzban username for Snell runtime user")
+                snell_user, _ = ensure_runtime_user(
+                    token,
+                    config,
+                    runtime_dir=Path(self.snell_runtime_dir),
+                    reload_command=self.snell_reload_command or None,
+                    name=username,
+                )
+            body = build_clash_meta_yaml(raw, config=config, snell_user=snell_user).encode("utf-8")
         except HTTPError as exc:
             self.send_bytes(exc.code, dict(exc.headers.items()), exc.read() or b"upstream error\n")
             return
@@ -411,16 +444,33 @@ class ClashHandler(AdapterHandler):
         self.send_bytes(200, headers, body)
 
 
-def make_clash_server(listen: str, port: int, marzban_url: str) -> ThreadingHTTPServer:
+def make_clash_server(
+    listen: str,
+    port: int,
+    marzban_url: str,
+    server_domain: str = "",
+    snell_runtime_dir=SNELL_RUNTIME_DIR,
+    snell_reload_command: str = "",
+) -> ThreadingHTTPServer:
     class Handler(ClashHandler):
         pass
 
     Handler.marzban_url = marzban_url
+    Handler.server_domain = server_domain
+    Handler.snell_runtime_dir = snell_runtime_dir
+    Handler.snell_reload_command = snell_reload_command
     return ThreadingHTTPServer((listen, port), Handler)
 
 
 def serve_clash(args: argparse.Namespace) -> int:
-    server = make_clash_server(args.listen, args.port, args.marzban_url)
+    server = make_clash_server(
+        args.listen,
+        args.port,
+        args.marzban_url,
+        server_domain=getattr(args, "server_domain", ""),
+        snell_runtime_dir=getattr(args, "snell_runtime_dir", SNELL_RUNTIME_DIR),
+        snell_reload_command=getattr(args, "snell_reload_command", ""),
+    )
     try:
         server.serve_forever()
     except KeyboardInterrupt:

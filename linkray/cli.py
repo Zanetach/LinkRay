@@ -6,7 +6,15 @@ from pathlib import Path
 from .api import serve_api
 from .bootstrap import bootstrap_master, bootstrap_node
 from .clash import serve_clash
-from .config import LinkRayConfig, NodeHost, parse_inbound_ports, parse_node_host, parse_singbox_inbound_ports
+from .config import (
+    XRAY_RUNTIME_MODES,
+    LinkRayConfig,
+    NodeHost,
+    parse_inbound_ports,
+    parse_node_host,
+    parse_snell_inbound_ports,
+    parse_singbox_inbound_ports,
+)
 from .doctor import exit_code, run_doctor
 from .egern import serve_egern
 from .install import install_master, install_node
@@ -17,6 +25,7 @@ from .render import render_master, render_node, validate_rendered
 from .rules import DEFAULT_RULE_DIR, update_route_rules
 from .shadowrocket import serve_shadowrocket
 from .singbox import serve_singbox
+from .snell_runtime import serve_snell_usage
 from .sub_auto import serve_sub_auto
 
 
@@ -38,6 +47,13 @@ def add_common_master_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--reality-short-id", default="REPLACE_WITH_SHORT_ID")
     parser.add_argument("--grpc-service-name", default="grpc")
     parser.add_argument("--panel-port", default=9443, type=int)
+    parser.add_argument("--snell-psk", default="REPLACE_WITH_SNELL_PSK")
+    parser.add_argument(
+        "--xray-runtime",
+        choices=XRAY_RUNTIME_MODES,
+        default="marzban",
+        help="Xray runtime owner. marzban keeps the current Marzban-managed process; linkray emits linkray-xray.service.",
+    )
     parser.add_argument(
         "--node",
         action="append",
@@ -53,6 +69,11 @@ def add_common_master_args(parser: argparse.ArgumentParser) -> None:
         action="append",
         help="Override a sing-box inbound port in key=port form, for example hysteria2=19080. Repeat as needed.",
     )
+    parser.add_argument(
+        "--snell-inbound",
+        action="append",
+        help="Override a Snell inbound port in key=port form, for example snell=19180.",
+    )
 
 
 def config_from_args(args: argparse.Namespace) -> LinkRayConfig:
@@ -66,8 +87,11 @@ def config_from_args(args: argparse.Namespace) -> LinkRayConfig:
         reality_short_id=args.reality_short_id,
         grpc_service_name=args.grpc_service_name,
         panel_port=args.panel_port,
+        xray_runtime_mode=args.xray_runtime,
+        snell_psk=args.snell_psk,
         inbound_ports=parse_inbound_ports(args.inbound),
         singbox_inbound_ports=parse_singbox_inbound_ports(args.singbox_inbound),
+        snell_inbound_ports=parse_snell_inbound_ports(args.snell_inbound),
     )
 
 
@@ -162,6 +186,9 @@ def add_clash_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPar
     clash.add_argument("--listen", default="127.0.0.1")
     clash.add_argument("--port", default=61991, type=int)
     clash.add_argument("--marzban-url", default="http://127.0.0.1:8000")
+    clash.add_argument("--server-domain", default="")
+    clash.add_argument("--snell-runtime-dir", type=Path, default=Path("/var/lib/marzban/linkray/snell"))
+    clash.add_argument("--snell-reload-command", default="")
 
 
 def add_shadowrocket_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -169,6 +196,9 @@ def add_shadowrocket_parser(subparsers: argparse._SubParsersAction[argparse.Argu
     shadowrocket.add_argument("--listen", default="127.0.0.1")
     shadowrocket.add_argument("--port", default=61994, type=int)
     shadowrocket.add_argument("--marzban-url", default="http://127.0.0.1:8000")
+    shadowrocket.add_argument("--server-domain", default="")
+    shadowrocket.add_argument("--snell-runtime-dir", type=Path, default=Path("/var/lib/marzban/linkray/snell"))
+    shadowrocket.add_argument("--snell-reload-command", default="")
 
 
 def add_singbox_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -184,6 +214,13 @@ def add_singbox_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentP
         action="append",
         help="Override a sing-box inbound port in key=port form. Repeat as needed.",
     )
+
+
+def add_snell_usage_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    snell_usage = subparsers.add_parser("snell-usage", help="Run the Snell per-user usage sidecar")
+    snell_usage.add_argument("--listen", default="127.0.0.1")
+    snell_usage.add_argument("--port", default=61997, type=int)
+    snell_usage.add_argument("--runtime-dir", type=Path, default=Path("/var/lib/marzban/linkray/snell"))
 
 
 def add_sub_auto_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -239,6 +276,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_egern_parser(subparsers)
     add_shadowrocket_parser(subparsers)
     add_singbox_parser(subparsers)
+    add_snell_usage_parser(subparsers)
     add_sub_auto_parser(subparsers)
     add_rules_parser(subparsers)
     add_relay_parser(subparsers)
@@ -345,6 +383,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "sing-box":
         return serve_singbox(args)
+
+    if args.command == "snell-usage":
+        return serve_snell_usage(args)
 
     if args.command == "sub-auto":
         return serve_sub_auto(args)

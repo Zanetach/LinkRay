@@ -5,6 +5,7 @@ from pathlib import Path
 from linkray.config import DEFAULT_PORTS, LinkRayConfig, parse_inbound_ports
 from linkray.doctor import CommandResult, docker_has_container, exit_code, has_listening_port, run_doctor
 from linkray.install import install_master, install_node
+from linkray.snell_runtime import SNELL_DEFAULT_PORTS
 from linkray.singbox_runtime import SINGBOX_DEFAULT_PORTS, SINGBOX_STATS_PORT
 
 
@@ -50,9 +51,10 @@ class DoctorTests(unittest.TestCase):
         ss_ports = "\n".join(
             f'tcp LISTEN 0 4096 *:{port} *:* users:(("xray",pid=1,fd=3))'
             for port in [
-                8000, 9443, 61990, 61991, 61992, 61993, 61994, 61995,
+                8000, 9443, 61990, 61991, 61992, 61993, 61994, 61995, 61997,
                 SINGBOX_STATS_PORT,
                 *SINGBOX_DEFAULT_PORTS.values(),
+                *SNELL_DEFAULT_PORTS.values(),
                 *DEFAULT_PORTS.values(),
             ]
         )
@@ -68,6 +70,8 @@ class DoctorTests(unittest.TestCase):
                 ("systemctl", "is-active", "linkray-shadowrocket"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "linkray-singbox"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "linkray-singbox-runtime"): CommandResult(0, "active\n"),
+                ("systemctl", "is-active", "linkray-snell-runtime"): CommandResult(0, "active\n"),
+                ("systemctl", "is-active", "linkray-snell-usage"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "linkray-sub-auto"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "linkray-rules-update.timer"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "linkray-relay"): CommandResult(0, "active\n"),
@@ -78,6 +82,9 @@ class DoctorTests(unittest.TestCase):
             root = Path(tmp)
             install_master(LinkRayConfig(domain="edge-a.example.com"), root=root, apply=True)
             checks = run_doctor("master", root=root, runtime=True, runner=runner)
+        check_names = {check.name for check in checks}
+        self.assertIn("systemd linkray-snell-usage", check_names)
+        self.assertIn("port 61997", check_names)
         self.assertEqual(exit_code(checks), 0)
 
     def test_runtime_doctor_master_uses_rendered_custom_xray_ports(self):
@@ -86,9 +93,10 @@ class DoctorTests(unittest.TestCase):
         ss_ports = "\n".join(
             f'tcp LISTEN 0 4096 *:{port} *:* users:(("xray",pid=1,fd=3))'
             for port in [
-                8000, 9443, 61990, 61991, 61992, 61993, 61994, 61995,
+                8000, 9443, 61990, 61991, 61992, 61993, 61994, 61995, 61997,
                 SINGBOX_STATS_PORT,
                 *SINGBOX_DEFAULT_PORTS.values(),
+                *SNELL_DEFAULT_PORTS.values(),
                 *expected_ports.values(),
             ]
         )
@@ -104,6 +112,8 @@ class DoctorTests(unittest.TestCase):
                 ("systemctl", "is-active", "linkray-shadowrocket"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "linkray-singbox"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "linkray-singbox-runtime"): CommandResult(0, "active\n"),
+                ("systemctl", "is-active", "linkray-snell-runtime"): CommandResult(0, "active\n"),
+                ("systemctl", "is-active", "linkray-snell-usage"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "linkray-sub-auto"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "linkray-rules-update.timer"): CommandResult(0, "active\n"),
                 ("systemctl", "is-active", "linkray-relay"): CommandResult(0, "active\n"),
@@ -113,6 +123,51 @@ class DoctorTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             install_master(LinkRayConfig(domain="edge-a.example.com", inbound_ports=custom_ports), root=root, apply=True)
+            checks = run_doctor("master", root=root, runtime=True, runner=runner)
+        self.assertEqual(exit_code(checks), 0)
+
+    def test_runtime_doctor_master_accepts_linkray_managed_xray(self):
+        ss_ports = "\n".join(
+            f'tcp LISTEN 0 4096 *:{port} *:* users:(("xray",pid=1,fd=3))'
+            for port in [
+                8000, 9443, 61990, 61991, 61992, 61993, 61994, 61995, 61997,
+                SINGBOX_STATS_PORT,
+                *SINGBOX_DEFAULT_PORTS.values(),
+                *SNELL_DEFAULT_PORTS.values(),
+                *DEFAULT_PORTS.values(),
+            ]
+        )
+        runner = FakeRunner(
+            {
+                ("ss", "-lntup"): CommandResult(0, ss_ports),
+                ("ps", "-eo", "pid,ppid,cmd"): CommandResult(
+                    0,
+                    "1 0 /var/lib/marzban/linkray/bin/xray run -config /var/lib/marzban/xray_config.json\n",
+                ),
+                ("systemctl", "is-active", "nginx"): CommandResult(0, "active\n"),
+                ("systemctl", "is-active", "xray"): CommandResult(3, "inactive\n"),
+                ("systemctl", "is-active", "linkray-xray"): CommandResult(0, "active\n"),
+                ("systemctl", "is-active", "linkray-api"): CommandResult(0, "active\n"),
+                ("systemctl", "is-active", "linkray-clash"): CommandResult(0, "active\n"),
+                ("systemctl", "is-active", "linkray-egern"): CommandResult(0, "active\n"),
+                ("systemctl", "is-active", "linkray-shadowrocket"): CommandResult(0, "active\n"),
+                ("systemctl", "is-active", "linkray-singbox"): CommandResult(0, "active\n"),
+                ("systemctl", "is-active", "linkray-singbox-runtime"): CommandResult(0, "active\n"),
+                ("systemctl", "is-active", "linkray-snell-runtime"): CommandResult(0, "active\n"),
+                ("systemctl", "is-active", "linkray-snell-usage"): CommandResult(0, "active\n"),
+                ("systemctl", "is-active", "linkray-sub-auto"): CommandResult(0, "active\n"),
+                ("systemctl", "is-active", "linkray-rules-update.timer"): CommandResult(0, "active\n"),
+                ("systemctl", "is-active", "linkray-relay"): CommandResult(0, "active\n"),
+                ("docker", "ps", "--format", "{{.Names}}|{{.Status}}"): CommandResult(0, "marzban-marzban-1|Up 1 hour\n"),
+            }
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            install_master(
+                LinkRayConfig(domain="edge-a.example.com", xray_runtime_mode="linkray"),
+                root=root,
+                apply=True,
+            )
             checks = run_doctor("master", root=root, runtime=True, runner=runner)
         self.assertEqual(exit_code(checks), 0)
 

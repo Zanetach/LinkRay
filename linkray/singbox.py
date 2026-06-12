@@ -9,9 +9,8 @@ from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, unquote, urlparse
-from urllib.request import Request, urlopen
 
-from ._http import PASS_HEADERS, AdapterHandler, fetch_upstream, first_query_value, parse_link_netloc
+from ._http import PASS_HEADERS, AdapterHandler, fetch_subscription_username, fetch_upstream, first_query_value, parse_link_netloc
 from .config import LinkRayConfig, parse_singbox_inbound_ports
 from .native import b64decode_text, decode_subscription_links
 from .rules import COMPACT_CN_DOMAIN_SUFFIXES, FOREIGN_DOMAIN_SUFFIXES, RouteRules, load_route_rules
@@ -25,15 +24,6 @@ from .singbox_runtime import (
 
 
 TOKEN_RE = re.compile(r"^/sub/([^/]+)/sing-box/?$")
-
-
-def fetch_subscription_username(marzban_url: str, token: str) -> str:
-    url = f"{marzban_url.rstrip('/')}/sub/{token}/info"
-    request = Request(url, headers={"Accept": "application/json"})
-    with urlopen(request, timeout=15) as response:
-        data = json.loads(response.read().decode("utf-8"))
-    username = data.get("username") if isinstance(data, dict) else ""
-    return username if isinstance(username, str) else ""
 
 
 def proxy_tag(parsed, host: str) -> str:

@@ -21,6 +21,10 @@ class ProtocolCapabilityTests(unittest.TestCase):
             self.assertEqual(by_key[key].status, "experimental")
             self.assertEqual(by_key[key].subscription_formats, ("sing-box",))
             self.assertIn("stats", by_key[key].notes.lower())
+        self.assertEqual(by_key["snell"].runtime, "snell")
+        self.assertEqual(by_key["snell"].status, "experimental")
+        self.assertEqual(by_key["snell"].subscription_formats, ("shadowrocket", "clash-meta"))
+        self.assertIn("stats", by_key["snell"].notes.lower())
 
     def test_capabilities_by_status_groups_without_losing_protocols(self):
         grouped = capabilities_by_status()
@@ -29,16 +33,16 @@ class ProtocolCapabilityTests(unittest.TestCase):
         self.assertIn("experimental", grouped)
         self.assertEqual(
             {item.key for item in grouped["experimental"]},
-            {"hysteria2", "tuic", "anytls"},
+            {"hysteria2", "tuic", "anytls", "snell"},
         )
 
     def test_protocol_capabilities_json_is_stable(self):
         data = json.loads(protocol_capabilities_json())
 
         self.assertEqual(data["version"], 1)
-        self.assertGreaterEqual(len(data["protocols"]), 15)
+        self.assertGreaterEqual(len(data["protocols"]), 16)
         self.assertEqual(data["protocols"][0]["key"], "vless_tls")
-        self.assertEqual(data["protocols"][-1]["key"], "anytls")
+        self.assertEqual(data["protocols"][-1]["key"], "snell")
 
     def test_protocols_cli_prints_json(self):
         stream = StringIO()
@@ -47,7 +51,7 @@ class ProtocolCapabilityTests(unittest.TestCase):
 
         self.assertEqual(code, 0)
         data = json.loads(stream.getvalue())
-        self.assertEqual(data["protocols"][-1]["key"], "anytls")
+        self.assertEqual(data["protocols"][-1]["key"], "snell")
 
 
 if __name__ == "__main__":

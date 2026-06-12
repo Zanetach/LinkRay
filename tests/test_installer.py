@@ -28,6 +28,9 @@ class InstallerTests(unittest.TestCase):
         self.assertIn("etc/systemd/system/linkray-shadowrocket.service", script)
         self.assertIn("etc/systemd/system/linkray-singbox.service", script)
         self.assertIn("etc/systemd/system/linkray-singbox-runtime.service", script)
+        self.assertIn("etc/systemd/system/linkray-snell-runtime.service", script)
+        self.assertIn("etc/systemd/system/linkray-snell@.service", script)
+        self.assertIn("etc/systemd/system/linkray-snell-usage.service", script)
         self.assertIn("etc/systemd/system/linkray-sub-auto.service", script)
         self.assertIn("etc/systemd/system/linkray-relay.service", script)
         self.assertIn("etc/systemd/system/linkray-rules-update.service", script)
@@ -36,6 +39,7 @@ class InstallerTests(unittest.TestCase):
         self.assertIn("var/lib/marzban/linkray/rules/cn-ip-cidrs.txt", script)
         self.assertIn("var/lib/marzban/linkray/singbox/config.json", script)
         self.assertIn("var/lib/marzban/linkray/singbox/users.json", script)
+        self.assertIn("var/lib/marzban/linkray/snell/snell-server.conf", script)
         self.assertIn("var/lib/marzban/linkray/jobs/linkray_singbox_usages.py", script)
         self.assertIn("systemctl enable --now linkray-api", script)
         self.assertIn("systemctl enable --now linkray-clash", script)
@@ -43,9 +47,35 @@ class InstallerTests(unittest.TestCase):
         self.assertIn("systemctl enable --now linkray-shadowrocket", script)
         self.assertIn("systemctl enable --now linkray-singbox", script)
         self.assertIn("systemctl enable --now linkray-singbox-runtime", script)
+        self.assertIn("systemctl enable --now linkray-snell-runtime", script)
+        self.assertIn("systemctl enable --now linkray-snell-usage", script)
         self.assertIn("systemctl enable --now linkray-sub-auto", script)
         self.assertIn("systemctl enable --now linkray-relay", script)
         self.assertIn("systemctl enable --now linkray-rules-update.timer", script)
+        self.assertIn('if [[ -f "$src/etc/systemd/system/linkray-xray.service" ]]', script)
+        self.assertIn("systemctl enable --now linkray-xray", script)
+        self.assertIn("systemctl restart linkray-xray", script)
+
+    def test_deployment_doc_master_service_commands_are_complete(self):
+        doc = Path("docs/DEPLOYMENT.md").read_text()
+
+        for service in [
+            "linkray-api",
+            "linkray-clash",
+            "linkray-egern",
+            "linkray-shadowrocket",
+            "linkray-singbox",
+            "linkray-singbox-runtime",
+            "linkray-snell-runtime",
+            "linkray-snell-usage",
+            "linkray-sub-auto",
+            "linkray-relay",
+        ]:
+            self.assertIn(f"systemctl enable --now {service}", doc)
+            self.assertIn(f"systemctl restart {service}", doc)
+        self.assertIn("systemctl enable --now linkray-rules-update.timer", doc)
+        self.assertIn("etc/systemd/system/linkray-clash.service", doc)
+        self.assertIn("etc/systemd/system/linkray-snell-usage.service", doc)
 
 
 if __name__ == "__main__":
