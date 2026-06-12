@@ -1,4 +1,5 @@
 import base64
+import json
 import unittest
 
 from linkray.clash import build_clash_meta_yaml
@@ -9,6 +10,11 @@ from linkray.snell_runtime import credential_for_token
 
 def encoded_subscription(*links: str) -> bytes:
     return base64.b64encode(("\n".join(links) + "\n").encode("utf-8"))
+
+
+def vmess_link(payload: dict[str, object]) -> str:
+    text = json.dumps(payload, separators=(",", ":"))
+    return "vmess://" + base64.b64encode(text.encode("utf-8")).decode("ascii")
 
 
 class ClashTests(unittest.TestCase):
@@ -76,6 +82,66 @@ class ClashTests(unittest.TestCase):
 
         self.assertNotIn("ca-VLESS_XHTTP_Reality", text)
         self.assertIn("name: ca-Shadowsocks", text)
+
+    def test_build_clash_meta_yaml_routes_relayed_tls_nodes_directly_to_cert_domain(self):
+        payload = encoded_subscription(
+            "vless://11111111-1111-1111-1111-111111111111@ca.example.com:18180?encryption=none&security=tls&fp=chrome&type=tcp&sni=la.example.com&flow=xtls-rprx-vision#la-VLESS_TLS_Vision",
+            vmess_link(
+                {
+                    "ps": "la-VMess_TLS",
+                    "add": "ca.example.com",
+                    "port": "18184",
+                    "id": "22222222-2222-2222-2222-222222222222",
+                    "aid": "0",
+                    "scy": "auto",
+                    "net": "tcp",
+                    "tls": "tls",
+                    "sni": "la.example.com",
+                    "host": "la.example.com",
+                }
+            ),
+            "vless://11111111-1111-1111-1111-111111111111@ca.example.com:18181?encryption=none&security=reality&fp=chrome&type=tcp&sni=www.microsoft.com&pbk=abc&sid=1234#la-VLESS_Reality_Vision",
+        )
+
+        text = build_clash_meta_yaml(payload)
+
+        self.assertRegex(
+            text,
+            r"name: la-VLESS_TLS_Vision\n\s+type: vless\n\s+server: la\.example\.com\n\s+port: 18080",
+        )
+        self.assertRegex(
+            text,
+            r"name: la-VMess_TLS\n\s+type: vmess\n\s+server: la\.example\.com\n\s+port: 18084",
+        )
+        self.assertRegex(
+            text,
+            r"name: la-VLESS_Reality_Vision\n\s+type: vless\n\s+server: ca\.example\.com\n\s+port: 18181",
+        )
+
+    def test_build_clash_meta_yaml_filters_vmess_httpupgrade_for_mihomo_clients(self):
+        payload = encoded_subscription(
+            vmess_link(
+                {
+                    "ps": "ca-VMess_HTTPUpgrade_TLS",
+                    "add": "ca.example.com",
+                    "port": "18090",
+                    "id": "22222222-2222-2222-2222-222222222222",
+                    "aid": "0",
+                    "scy": "auto",
+                    "net": "httpupgrade",
+                    "host": "ca.example.com",
+                    "path": "/vmess-httpupgrade",
+                    "tls": "tls",
+                    "sni": "ca.example.com",
+                }
+            ),
+            "trojan://secret@ca.example.com:8443?security=tls&type=tcp&sni=ca.example.com#ca-Trojan_TLS",
+        )
+
+        text = build_clash_meta_yaml(payload)
+
+        self.assertNotIn("ca-VMess_HTTPUpgrade_TLS", text)
+        self.assertIn("name: ca-Trojan_TLS", text)
 
     def test_build_clash_meta_yaml_does_not_append_snell_v5_node(self):
         user = credential_for_token("subscription-token", "server-secret", name="cyclelink", port=40123)

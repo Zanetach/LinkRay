@@ -20,6 +20,7 @@ from .snell_runtime import SnellUser
 
 
 TOKEN_RE = re.compile(r"^/sub/([^/]+)/clash-meta/?$")
+RELAY_PORT_OFFSET = 100
 
 
 def yaml_scalar(value: Any) -> str:
@@ -123,6 +124,37 @@ def transport_options(query: Mapping[str, list[str]], network: str, fallback_hos
     return None
 
 
+def same_parent_domain(left: str, right: str) -> bool:
+    left_labels = left.lower().strip(".").split(".")
+    right_labels = right.lower().strip(".").split(".")
+    if len(left_labels) < 3 or len(right_labels) < 3:
+        return False
+    return left_labels[-2:] == right_labels[-2:] and left_labels[0] != right_labels[0]
+
+
+def normalize_relayed_tls_proxy(proxy: dict[str, Any]) -> dict[str, Any]:
+    if proxy.get("reality-opts") or proxy.get("tls") is not True:
+        return proxy
+    server = proxy.get("server")
+    servername = proxy.get("servername")
+    port = proxy.get("port")
+    name = proxy.get("name")
+    if not isinstance(server, str) or not isinstance(servername, str):
+        return proxy
+    if not isinstance(port, int) or port <= RELAY_PORT_OFFSET:
+        return proxy
+    if not isinstance(name, str):
+        return proxy
+    if not same_parent_domain(server, servername):
+        return proxy
+    target_prefix = servername.split(".", 1)[0].lower()
+    if not name.lower().startswith(f"{target_prefix}-"):
+        return proxy
+    proxy["server"] = servername
+    proxy["port"] = port - RELAY_PORT_OFFSET
+    return proxy
+
+
 def vless_to_clash(link: str) -> dict[str, Any] | None:
     parsed = urlparse(link)
     host_port = parse_link_netloc(parsed)
@@ -195,6 +227,8 @@ def vmess_to_clash(link: str) -> dict[str, Any] | None:
     if not host or not port or not uuid:
         return None
     network = str(data.get("net") or "tcp")
+    if network == "httpupgrade":
+        return None
     if network == "xhttp" or network not in {"tcp", "ws", "grpc", "httpupgrade"}:
         return None
     proxy: dict[str, Any] = {
@@ -410,6 +444,7 @@ def build_clash_meta_yaml(
         proxy = convert_link(link)
         if not proxy:
             continue
+        proxy = normalize_relayed_tls_proxy(proxy)
         name = proxy.get("name")
         if not isinstance(name, str) or not name or name in seen:
             continue
