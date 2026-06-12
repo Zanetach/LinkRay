@@ -299,7 +299,8 @@
               .filter((node) => {
                 const href = node.getAttribute("href") || "";
                 const label = node.getAttribute("aria-label") || "";
-                return legacyRepo.test(href) || starText.test(textOf(node)) || starText.test(label);
+                const candidateText = `${textOf(node)} ${label}`;
+                return starText.test(candidateText) || (legacyRepo.test(href) && starText.test(candidateText));
               })
               .forEach((node) => {
                 if (node.tagName === "A") {
