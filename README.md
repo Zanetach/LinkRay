@@ -131,9 +131,9 @@ Advanced LinkRay runtimes:
 | Hysteria2 | sing-box | experimental | sing-box |
 | TUIC | sing-box | experimental | sing-box |
 | AnyTLS | sing-box | experimental | sing-box |
-| Snell v5 | Snell | experimental | Shadowrocket |
+| Snell v5 | Snell | experimental | Shadowrocket config |
 
-Clash/Mihomo output deliberately excludes Snell v5 because common Mihomo cores reject `version: 5`. Use the Shadowrocket subscription for Snell-capable clients.
+Clash/Mihomo output deliberately excludes Snell v5 because common Mihomo cores reject `version: 5`. Use the `/shadowrocket-conf` full configuration path for Snell-capable Shadowrocket imports.
 
 Check the generated capability matrix:
 
@@ -149,8 +149,8 @@ linkray protocols --json
 | `/sub/<token>` | Automatic format routing for identifiable clients |
 | `/sub/<token>/clash-meta` | LinkRay-generated Clash/Mihomo YAML |
 | `/sub/<token>/egern` | Egern YAML |
-| `/sub/<token>/shadowrocket` | Shadowrocket config with route rules and Snell support |
-| `/sub/<token>/shadowrocket-conf` | Backward-compatible alias for `/shadowrocket` |
+| `/sub/<token>/shadowrocket` | Shadowrocket node subscription for normal subscription imports |
+| `/sub/<token>/shadowrocket-conf` | Full Shadowrocket configuration with route rules and Snell support |
 | `/sub/<token>/sing-box` | LinkRay-generated sing-box JSON with advanced outbounds |
 | `/sub/<token>/v2ray-json` | v2ray JSON path from the underlying subscription layer when available |
 | `/linkray/ports.html` | Compatibility redirect to `/dashboard/` |
@@ -161,7 +161,7 @@ The dashboard link dialog is intentionally client-oriented:
 - Clash/Mihomo: use for Clash Verge Rev, FlClash, Mihomo Party, and Mihomo-based clients.
 - Egern: use the Egern-specific route.
 - sing-box: use for sing-box clients and LinkRay advanced sing-box outbounds.
-- Shadowrocket: use for Shadowrocket and Snell-capable Shadowrocket configurations.
+- Shadowrocket: use `/shadowrocket` for normal node subscriptions; use `/shadowrocket-conf` only when importing a full configuration.
 - Native/Base subscription: use for v2rayN/v2rayNG and generic import paths.
 
 ## Sidecar Services

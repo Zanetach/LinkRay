@@ -175,8 +175,8 @@ PROTOCOL_CAPABILITIES: tuple[ProtocolCapability, ...] = (
         "experimental",
         "tcp",
         "psk",
-        ("shadowrocket",),
-        "LinkRay-managed Snell v5 runtime for clients that support Snell v5; Clash/Mihomo output excludes Snell to avoid core validation failures.",
+        ("shadowrocket-conf",),
+        "LinkRay-managed Snell v5 runtime for clients that support Snell v5; normal Shadowrocket subscriptions and Clash/Mihomo output exclude Snell to avoid client validation failures.",
     ),
 )
 

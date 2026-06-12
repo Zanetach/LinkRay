@@ -113,7 +113,7 @@ class ShadowrocketTests(unittest.TestCase):
         self.assertNotIn("example-119999.cn", output)
         self.assertNotIn("10.31.63.0/24", output)
 
-    def test_shadowrocket_and_legacy_conf_paths_return_same_full_config(self):
+    def test_shadowrocket_path_returns_node_subscription_and_conf_path_returns_full_config(self):
         module = self.shadowrocket_module()
         links = "\n".join(
             [
@@ -150,16 +150,20 @@ class ShadowrocketTests(unittest.TestCase):
         try:
             base_url = f"http://127.0.0.1:{adapter.server_address[1]}/sub/token"
             with urlopen(f"{base_url}/shadowrocket", timeout=3) as response:
-                shadowrocket = response.read().decode()
+                shadowrocket = base64.b64decode(response.read()).decode()
             with urlopen(f"{base_url}/shadowrocket-conf", timeout=3) as response:
                 legacy_conf = response.read().decode()
 
-            self.assertEqual(shadowrocket, legacy_conf)
-            self.assertIn("[General]", shadowrocket)
-            self.assertIn("[Proxy]", shadowrocket)
-            self.assertIn("[Proxy Group]", shadowrocket)
-            self.assertIn("edge-a-VLESS_TLS_Vision = vless,edge-a.example.com,18080", shadowrocket)
-            self.assertIn("edge-a-Trojan_TLS = trojan,edge-a.example.com,18083", shadowrocket)
+            self.assertNotEqual(shadowrocket, legacy_conf)
+            self.assertNotIn("[General]", shadowrocket)
+            self.assertNotIn("[Proxy]", shadowrocket)
+            self.assertIn("vless://", shadowrocket)
+            self.assertIn("trojan://", shadowrocket)
+            self.assertIn("[General]", legacy_conf)
+            self.assertIn("[Proxy]", legacy_conf)
+            self.assertIn("[Proxy Group]", legacy_conf)
+            self.assertIn("edge-a-VLESS_TLS_Vision = vless,edge-a.example.com,18080", legacy_conf)
+            self.assertIn("edge-a-Trojan_TLS = trojan,edge-a.example.com,18083", legacy_conf)
         finally:
             adapter.shutdown()
             adapter.server_close()

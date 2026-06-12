@@ -85,7 +85,7 @@ LinkRay also installs the pinned Snell v5 server binary and renders:
 /etc/systemd/system/linkray-snell-usage.service
 ```
 
-The Shadowrocket adapter generates per-user Snell credentials on subscription request, writes `/var/lib/marzban/linkray/snell/users/<instance>.conf`, and starts `linkray-snell@<instance>`. Clash/Mihomo subscriptions deliberately exclude Snell v5 because common Mihomo cores reject `version: 5`. Snell usage sync is handled by `linkray-snell-usage.service`: it maintains per-user port counters and lets the LinkRay job write deltas into user, admin, and hourly usage tables.
+The Shadowrocket adapter keeps `/shadowrocket` as the normal node subscription path. The full `/shadowrocket-conf` configuration path generates per-user Snell credentials, writes `/var/lib/marzban/linkray/snell/users/<instance>.conf`, and starts `linkray-snell@<instance>`. Clash/Mihomo subscriptions deliberately exclude Snell v5 because common Mihomo cores reject `version: 5`. Snell usage sync is handled by `linkray-snell-usage.service`: it maintains per-user port counters and lets the LinkRay job write deltas into user, admin, and hourly usage tables.
 
 If Reality values are not provided through `--reality-private-key` and `--reality-short-id`, `bootstrap master --apply` generates them automatically before writing `/var/lib/marzban/xray_config.json`.
 
@@ -311,8 +311,8 @@ Check subscription from a client machine:
 ```bash
 curl -ksS '<marzban-subscription-url>/clash-meta' -o /tmp/linkray.yaml
 mihomo -t -f /tmp/linkray.yaml
-curl -ksS '<marzban-subscription-url>/shadowrocket' -o /tmp/linkray-shadowrocket.conf
-curl -ksS '<marzban-subscription-url>/shadowrocket-conf' -o /tmp/linkray-shadowrocket-alias.conf
+curl -ksS '<marzban-subscription-url>/shadowrocket' -o /tmp/linkray-shadowrocket-sub.txt
+curl -ksS '<marzban-subscription-url>/shadowrocket-conf' -o /tmp/linkray-shadowrocket.conf
 curl -ksS '<marzban-subscription-url>/sing-box' -o /tmp/linkray-sing-box.json
 sing-box check -c /tmp/linkray-sing-box.json
 ```

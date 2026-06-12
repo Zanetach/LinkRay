@@ -137,7 +137,7 @@
   <main class="panel">
     <h1>客户端订阅链接</h1>
     <div class="sections" id="links"></div>
-    <p class="hint">优先使用自动识别订阅；高级协议按运行时分组，Hysteria2 / TUIC / AnyTLS 使用 sing-box 链接，Snell 通过 Shadowrocket 链接下发。</p>
+    <p class="hint">优先使用自动识别订阅；高级协议按运行时分组，Hysteria2 / TUIC / AnyTLS 使用 sing-box 链接，Shadowrocket 默认链接用于普通节点订阅。</p>
     <div class="qr" id="qr"></div>
   </main>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -156,7 +156,7 @@
     const groups = [
       {
         title: 'Xray-core 稳定链路',
-        note: 'VLESS / VMess / Trojan / Shadowsocks 等稳定节点；Shadowrocket 链接会额外包含 Snell。',
+        note: 'VLESS / VMess / Trojan / Shadowsocks 等稳定节点；Shadowrocket 链接使用普通节点订阅格式。',
         rows: xrayRows,
         downloads: [
           ['FlClash', 'https://github.com/chen08209/FlClash'],
