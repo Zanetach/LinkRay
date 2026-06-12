@@ -1,6 +1,6 @@
 <div align="center">
   <h1>LinkRay</h1>
-  <p><b>Repeatable LinkRay + Xray-core + sing-box + Snell deployment tooling for multi-node proxy operations.</b></p>
+  <p><b>Multi-node proxy operations with a LinkRay control plane, Xray-core, sing-box, Snell, unified subscriptions, traffic accounting, and repeatable deployment.</b></p>
   <a href="https://github.com/Zanetach/LinkRay/stargazers"><img src="https://img.shields.io/github/stars/Zanetach/LinkRay?style=flat-square" alt="Stars"></a>
   <a href="https://github.com/Zanetach/LinkRay/releases"><img src="https://img.shields.io/github/v/tag/Zanetach/LinkRay?label=version&style=flat-square" alt="Version"></a>
   <a href="pyproject.toml"><img src="https://img.shields.io/badge/python-3.9%2B-3776ab?style=flat-square&logo=python&logoColor=white" alt="Python 3.9+"></a>
@@ -9,101 +9,259 @@
 
 ![LinkRay README hero](assets/linkray-readme-hero.png)
 
-## Why
+## What LinkRay Is
 
-LinkRay packages the LinkRay control plane plus Xray-core into repeatable configuration, rendered assets, sidecar services, and health checks. LinkRay owns the user-facing panel, subscription, traffic, and node-management experience while reusing the Marzban API and data model internally. Xray-core remains the primary proxy runtime. LinkRay can also run experimental LinkRay-managed runtimes for Xray-core, sing-box, and Snell. The sing-box runtime powers Hysteria2, TUIC, and AnyTLS with generated user credentials and a LinkRay job that syncs sing-box stats back into the internal usage tables.
+LinkRay is a deployment and operations layer for running a multi-node proxy service from a single panel and subscription surface. It reuses the Marzban API and data model internally, but the user-facing product, dashboard patches, subscription adapters, node status API, runtime services, traffic sync jobs, and deployment flow are managed by LinkRay.
 
-The goal is simple: stop hand-editing live container files as the primary workflow. Make changes in this repository, render the deployment tree, validate it, then apply the rendered files to a prepared host.
+The production goal is explicit:
 
-## What It Builds
+- Keep user, subscription, traffic, and node management in one panel.
+- Run Xray-core as the primary runtime.
+- Add sing-box and Snell as LinkRay-managed advanced runtimes.
+- Provide one user subscription surface across master and node servers.
+- Make deployment reproducible through rendered files, bootstrap commands, release artifacts, and `linkray doctor`.
+- Avoid hand-editing live container files as the normal workflow.
 
-| Surface | LinkRay owns |
+## Latest Release
+
+Current release: [LinkRay v0.1.1](https://github.com/Zanetach/LinkRay/releases/tag/v0.1.1)
+
+Release artifacts:
+
+```text
+linkray-0.1.1.tar.gz
+linkray-0.1.1-py3-none-any.whl
+```
+
+v0.1.1 adds production network acceleration to the deployment contract. Fresh master and node bootstraps, plus rendered deployment scripts, now install and apply BBR/fq tuning automatically.
+
+## Architecture
+
+```text
+                         clients
+       Clash/Mihomo | sing-box | Egern | Shadowrocket | native links
+                            |
+                            v
+                  https://<master>:9443/sub/<token>
+                            |
+                            v
+              +-----------------------------+
+              | LinkRay master              |
+              |                             |
+              | Docker: LinkRay panel       |
+              | Host: Nginx                 |
+              | Host: linkray-* sidecars    |
+              | Host: Xray-core runtime     |
+              | Host: sing-box runtime      |
+              | Host: Snell runtime         |
+              | Host: TCP relay service     |
+              +--------------+--------------+
+                             |
+                 node API / relay / shared users
+                             |
+              +--------------v--------------+
+              | LinkRay node                |
+              |                             |
+              | No Docker                   |
+              | Host: linkray-node          |
+              | Host: Xray-core runtime     |
+              | Host: sing-box runtime      |
+              | Host: Snell runtime         |
+              | Host: usage sidecars        |
+              +-----------------------------+
+```
+
+### Role Boundary
+
+| Role | Runs Docker | Runs panel | Runtime shape |
+|---|---:|---:|---|
+| `master` | Yes | Yes | LinkRay panel container plus host sidecars and runtimes |
+| `node` | No | No | Host-native systemd services only |
+
+This boundary is part of the packaging contract:
+
+- `linkray bootstrap master` may install Docker and start `container_name: linkray`.
+- `linkray bootstrap node` must not install Docker and must not start a node container.
+- `scripts/deploy-rendered-master.sh` may run Docker Compose.
+- `scripts/deploy-rendered-node.sh` may clean up old legacy node containers, but it must not install Docker or run Docker Compose.
+
+## What LinkRay Owns
+
+| Surface | Current capability |
 |---|---|
-| Master render | LinkRay panel Docker Compose, Nginx config, Xray config, SQL host initialization, dashboard patches, subscription templates, sidecar systemd units |
-| Node render | Host systemd LinkRay Node service, LinkRay-managed Xray-core service, and optional host sing-box/Snell runtimes |
-| Inbound set | 12 Xray-core inbound protocol families plus 3 experimental sing-box inbound families plus per-user Snell runtime support, all with overridable ports |
-| Subscription routing | Browser/client-aware `/sub/<token>` routing plus Clash/Mihomo, Egern, Shadowrocket, and sing-box adapters |
-| Dashboard patch | User link ordering, concrete protocol card labels, and Node Info backed by `linkray api` |
-| Multi-node relay | Master-side TCP relay ports for secondary nodes, avoiding client-side proxy chaining |
-| Runtime checks | `linkray doctor` file, manifest, port, and runtime health checks for master and node roles |
-
-## Deployment Architecture Boundary
-
-LinkRay has one fixed production split:
-
-- `master` is the only role that installs Docker and runs the LinkRay panel container.
-- `node` never installs Docker, never runs the panel, and never depends on Docker Compose.
-- `node` runs host systemd services only: `linkray-node`, `linkray-xray`, optional `linkray-singbox-runtime`, optional `linkray-snell-runtime`, and usage services.
-- Packaging and one-click deployment must keep this split explicit. A packaged node install may clean up old Docker containers, but it must not install Docker or start a node container.
+| Control plane | LinkRay-branded panel on top of the Marzban API and database model |
+| User lifecycle | Users, subscription links, usage limits, expiry, online state, and traffic accounting |
+| Master deployment | Docker Compose for the panel, Nginx, dashboard patches, templates, SQL host initialization, systemd sidecars |
+| Node deployment | Host-native LinkRay Node app, Xray-core, sing-box, Snell, and usage services |
+| Xray-core | 12 inbound families per node, rendered with overridable ports |
+| sing-box | Hysteria2, TUIC, AnyTLS runtime, generated user credentials, V2Ray API stats sync |
+| Snell | Snell v5 runtime, per-user credentials, Shadowrocket output, usage sync |
+| Subscriptions | Native, automatic routing, Clash/Mihomo, Egern, Shadowrocket, sing-box |
+| Routing rules | Built-in CN direct rules, foreign service rules, rule refresh timer |
+| Dashboard | Subscription dialog, protocol cards, Node Info panel, LinkRay branding |
+| Node status | `/api/linkray/nodes`, 30-second dashboard refresh, manual refresh endpoint |
+| Multi-node access | Master-side relay ports for secondary nodes |
+| Health checks | `linkray doctor` file, manifest, systemd, container, process, port, and tuning checks |
+| Network tuning | BBR/fq, MTU probing, TCP Fast Open, slow-start-after-idle disabled |
 
 ## Protocol Coverage
 
-LinkRay renders these inbound families for every node:
+Every rendered node has these 12 Xray-core inbound families:
 
-| Family | Transport / security |
-|---|---|
-| VLESS TLS Vision | TCP + TLS |
-| VLESS Reality Vision | TCP + Reality |
-| VLESS Reality gRPC | gRPC + Reality |
-| Trojan TLS | TCP + TLS |
-| VMess TLS | TCP + TLS |
-| Shadowsocks | TCP / UDP |
-| VLESS WS TLS | WebSocket + TLS |
-| VLESS gRPC TLS | gRPC + TLS |
-| VLESS XHTTP Reality | XHTTP + Reality |
-| VMess WS TLS | WebSocket + TLS |
-| VMess HTTPUpgrade TLS | HTTPUpgrade + TLS |
-| Trojan gRPC TLS | gRPC + TLS |
+| Protocol | Runtime | Transport | Security | Notes |
+|---|---|---|---|---|
+| VLESS TLS Vision | Xray-core | TCP | TLS | Stable primary path |
+| VLESS Reality Vision | Xray-core | TCP | Reality | Stable where clients support Reality |
+| VLESS Reality gRPC | Xray-core | gRPC | Reality | Supported by compatible clients |
+| Trojan TLS | Xray-core | TCP | TLS | Stable primary path |
+| VMess TLS | Xray-core | TCP | TLS | Compatibility path |
+| Shadowsocks | Xray-core | TCP / UDP | none | Compatibility path |
+| VLESS WS TLS | Xray-core | WebSocket | TLS | CDN/client compatibility path |
+| VLESS gRPC TLS | Xray-core | gRPC | TLS | gRPC compatibility path |
+| VLESS XHTTP Reality | Xray-core | XHTTP | Reality | Rendered; some clients still have unstable delay tests |
+| VMess WS TLS | Xray-core | WebSocket | TLS | Compatibility path |
+| VMess HTTPUpgrade TLS | Xray-core | HTTPUpgrade | TLS | Compatibility path |
+| Trojan gRPC TLS | Xray-core | gRPC | TLS | gRPC compatibility path |
 
-Clash/Mihomo and sing-box are supported as client subscription formats through LinkRay sidecars. The master keeps the LinkRay dashboard/control plane in Docker. Secondary nodes run LinkRay Node, Xray-core, sing-box, and Snell as host systemd services, so CA and LA use the same runtime shape outside the panel container.
+Advanced LinkRay runtimes:
 
-Hysteria2, TUIC, and AnyTLS are experimental production paths:
+| Protocol | Runtime | Status | Subscription format |
+|---|---|---|---|
+| Hysteria2 | sing-box | experimental | sing-box |
+| TUIC | sing-box | experimental | sing-box |
+| AnyTLS | sing-box | experimental | sing-box |
+| Snell v5 | Snell | experimental | Shadowrocket |
 
-- `linkray-singbox-runtime.service` runs sing-box on the master.
-- `linkray-singbox.service` creates per-subscription credentials when the sing-box subscription is requested.
-- The generated sing-box subscription includes the normal LinkRay/Xray nodes plus Hysteria2, TUIC, and AnyTLS outbounds.
-- `linkray_singbox_usages.py` is mounted into the LinkRay panel container and periodically syncs sing-box V2Ray API stats into the internal `users`, `admins`, `system`, and hourly usage tables.
-- The same LinkRay job reconciles active usernames with the local sing-box sidecar so disabled, deleted, expired, or limited users are pruned from the sing-box runtime config.
+Clash/Mihomo output deliberately excludes Snell v5 because common Mihomo cores reject `version: 5`. Use the Shadowrocket subscription for Snell-capable clients.
 
-The sing-box binary must be built with `with_v2ray_api`, `with_quic`, `with_utls`, and `with_clash_api`. `bootstrap master` does this automatically with Go 1.23.12. Check the explicit matrix with:
-
-Snell is experimental but usable for supported clients:
-
-- `linkray-snell-runtime.service` runs `snell-server`.
-- `linkray-snell@.service` runs per-user Snell server instances.
-- `linkray-snell-usage.service` exposes local Snell usage deltas for the LinkRay job.
-- The generated config lives at `/var/lib/marzban/linkray/snell/snell-server.conf`.
-- Per-user configs are written under `/var/lib/marzban/linkray/snell/users/`.
-- Shadowrocket config can append per-user Snell v5 nodes; Clash/Mihomo subscriptions deliberately exclude Snell to avoid core validation failures on clients that do not support Snell v5.
-- LinkRay traffic sync for Snell uses per-user port counters and writes usage into the same user, admin, and hourly tables as the sing-box sync job.
+Check the generated capability matrix:
 
 ```bash
 linkray protocols
 linkray protocols --json
 ```
 
-## Install
+## Subscription Routes
 
-Install the `linkray` command once from inside the repository:
+| Route | Output |
+|---|---|
+| `/sub/<token>` | Automatic format routing for identifiable clients |
+| `/sub/<token>/clash-meta` | LinkRay-generated Clash/Mihomo YAML |
+| `/sub/<token>/egern` | Egern YAML |
+| `/sub/<token>/shadowrocket` | Shadowrocket config with route rules and Snell support |
+| `/sub/<token>/shadowrocket-conf` | Backward-compatible alias for `/shadowrocket` |
+| `/sub/<token>/sing-box` | LinkRay-generated sing-box JSON with advanced outbounds |
+| `/sub/<token>/v2ray-json` | v2ray JSON path from the underlying subscription layer when available |
+| `/linkray/ports.html` | Compatibility redirect to `/dashboard/` |
+| `/linkray/ports.json` | Proxy to `/api/linkray/nodes` |
 
-```bash
-./install.sh
+The dashboard link dialog is intentionally client-oriented:
+
+- Clash/Mihomo: use for Clash Verge Rev, FlClash, Mihomo Party, and Mihomo-based clients.
+- Egern: use the Egern-specific route.
+- sing-box: use for sing-box clients and LinkRay advanced sing-box outbounds.
+- Shadowrocket: use for Shadowrocket and Snell-capable Shadowrocket configurations.
+- Native/Base subscription: use for v2rayN/v2rayNG and generic import paths.
+
+## Sidecar Services
+
+Rendered master deployments include these LinkRay-managed units:
+
+| Unit | Purpose |
+|---|---|
+| `linkray-xray.service` | Xray-core runtime when rendered with `--xray-runtime linkray` |
+| `linkray-api.service` | Node/port status API for the dashboard |
+| `linkray-clash.service` | Clash/Mihomo subscription adapter |
+| `linkray-egern.service` | Egern subscription adapter |
+| `linkray-shadowrocket.service` | Shadowrocket subscription adapter |
+| `linkray-singbox.service` | sing-box subscription adapter |
+| `linkray-singbox-runtime.service` | Hysteria2, TUIC, AnyTLS runtime |
+| `linkray-snell-runtime.service` | Shared Snell runtime |
+| `linkray-snell@.service` | Per-user Snell instances |
+| `linkray-snell-usage.service` | Snell usage deltas for LinkRay accounting |
+| `linkray-sub-auto.service` | Client-aware subscription format router |
+| `linkray-rules-update.service` | Route rule refresh job |
+| `linkray-rules-update.timer` | Scheduled rule refresh |
+| `linkray-relay.service` | Master-side relay ports for secondary nodes |
+
+Rendered node deployments include:
+
+| Unit | Purpose |
+|---|---|
+| `linkray-node.service` | Host-native LinkRay Node control service |
+| `linkray-xray.service` | Host-native Xray-core runtime |
+| `linkray-singbox-runtime.service` | Node sing-box advanced runtime |
+| `linkray-snell-runtime.service` | Node Snell runtime |
+| `linkray-snell@.service` | Node per-user Snell instances |
+| `linkray-snell-usage.service` | Node Snell usage deltas |
+
+## Network Acceleration
+
+Fresh master and node deployments apply:
+
+```text
+net.core.default_qdisc=fq
+net.ipv4.tcp_congestion_control=bbr
+net.ipv4.tcp_mtu_probing=1
+net.ipv4.tcp_slow_start_after_idle=0
+net.ipv4.tcp_fastopen=3
 ```
 
-The installer must run as root because it writes the default install location and command shim:
+Files:
+
+```text
+/etc/sysctl.d/99-linkray-network.conf
+/etc/modules-load.d/linkray-bbr.conf
+```
+
+Bootstrap and rendered deployment scripts also run:
+
+```bash
+modprobe tcp_bbr || true
+sysctl --system
+tc qdisc replace dev <default-iface> root fq
+```
+
+`linkray doctor` checks that the tuning files exist. Use system tools to verify runtime state:
+
+```bash
+sysctl net.ipv4.tcp_congestion_control net.core.default_qdisc
+tc qdisc show dev "$(ip route show default | sed -n 's/.* dev \([^ ]*\).*/\1/p' | head -1)"
+```
+
+## Install LinkRay
+
+From a release tarball:
+
+```bash
+curl -L https://github.com/Zanetach/LinkRay/archive/refs/tags/v0.1.1.tar.gz -o linkray-v0.1.1.tar.gz
+tar -xzf linkray-v0.1.1.tar.gz
+cd LinkRay-0.1.1
+sudo ./install.sh
+```
+
+From a checkout:
+
+```bash
+git clone https://github.com/Zanetach/LinkRay.git
+cd LinkRay
+sudo ./install.sh
+```
+
+The installer writes:
 
 ```text
 /opt/linkray/venv
 /usr/local/bin/linkray
 ```
 
-After installation:
+Check the CLI:
 
 ```bash
 linkray --help
 ```
 
-Build release artifacts locally:
+Build local release artifacts:
 
 ```bash
 scripts/build-release.sh
@@ -113,7 +271,7 @@ The release script creates `dist/*.tar.gz` and `dist/*.whl`, installs the wheel 
 
 ## Fresh Master Bootstrap
 
-Preview every file operation and shell command before applying:
+Run a dry-run first:
 
 ```bash
 export CF_Token='YOUR_CLOUDFLARE_DNS_API_TOKEN'
@@ -126,7 +284,7 @@ linkray bootstrap master \
   --issue-cert
 ```
 
-Apply only after reviewing the dry run:
+Apply after reviewing the output:
 
 ```bash
 linkray bootstrap master \
@@ -139,33 +297,25 @@ linkray bootstrap master \
   --apply
 ```
 
-When it succeeds, open:
+Open the dashboard:
 
 ```text
 https://<master-domain>:<panel-port>/dashboard/
 ```
 
-If `--reality-private-key` and `--reality-short-id` are omitted during `--apply`, LinkRay generates them automatically and writes them into `/var/lib/marzban/xray_config.json`.
+If Reality values are omitted during `--apply`, LinkRay generates them before writing `/var/lib/marzban/xray_config.json`.
 
-`bootstrap master` builds `/usr/local/bin/sing-box` from source with:
+By default, the master keeps the panel-compatible Xray behavior. To let LinkRay own Xray as a host systemd service on the master:
 
-```text
-with_v2ray_api with_quic with_utls with_clash_api
+```bash
+linkray bootstrap master \
+  --domain edge-a.example.com \
+  --node edge-a=edge-a.example.com \
+  --xray-runtime linkray \
+  --admin-username admin \
+  --admin-password 'CHANGE_THIS_PASSWORD' \
+  --apply
 ```
-
-These tags are required for the advanced runtime and for validating generated sing-box client configs. The ordinary upstream sing-box release binary does not include the V2Ray API stats service required for LinkRay usage sync.
-
-`bootstrap master` and `bootstrap node` also install and apply LinkRay network acceleration defaults:
-
-```text
-net.core.default_qdisc=fq
-net.ipv4.tcp_congestion_control=bbr
-net.ipv4.tcp_mtu_probing=1
-net.ipv4.tcp_slow_start_after_idle=0
-net.ipv4.tcp_fastopen=3
-```
-
-The settings are written to `/etc/sysctl.d/99-linkray-network.conf`, `tcp_bbr` is loaded through `/etc/modules-load.d/linkray-bbr.conf`, and the active default interface is switched to `fq` without requiring a reboot.
 
 ## Fresh Node Bootstrap
 
@@ -183,7 +333,7 @@ linkray bootstrap node \
   --apply
 ```
 
-Or pull the certificate from a master over SSH during bootstrap:
+Or pull the certificate from a master over SSH:
 
 ```bash
 linkray bootstrap node \
@@ -193,27 +343,17 @@ linkray bootstrap node \
   --apply
 ```
 
-## Render First
+The node bootstrap installs required packages, the host LinkRay Node app, Xray-core, optional sing-box/Snell runtime files, BBR/fq tuning, and systemd services. It does not install Docker.
 
-Render master files into a staging directory:
+## Render And Deploy
 
-```bash
-linkray render master \
-  --domain edge-a.example.com \
-  --node edge-a=edge-a.example.com \
-  --node edge-b=edge-b.example.com \
-  --output /tmp/linkray-master
-linkray validate --path /tmp/linkray-master
-```
-
-Render the optional unified Xray runtime mode when you are ready to let LinkRay own the Xray systemd service instead of mounting the Xray binary into the LinkRay panel container:
+Render master files:
 
 ```bash
 linkray render master \
   --domain edge-a.example.com \
   --node edge-a=edge-a.example.com \
   --node edge-b=edge-b.example.com \
-  --xray-runtime linkray \
   --output /tmp/linkray-master
 linkray validate --path /tmp/linkray-master
 ```
@@ -221,114 +361,20 @@ linkray validate --path /tmp/linkray-master
 Render node files:
 
 ```bash
-linkray render node --domain edge-b.example.com --output /tmp/linkray-node
+linkray render node \
+  --domain edge-b.example.com \
+  --output /tmp/linkray-node
 linkray validate --path /tmp/linkray-node
 ```
 
-Override inbound ports when production already reserves the defaults:
-
-```bash
-linkray render master \
-  --domain edge-a.example.com \
-  --node edge-a=edge-a.example.com \
-  --inbound vless_tls=28080 \
-  --inbound vless_reality=28081 \
-  --output /tmp/linkray-master
-```
-
-The same `--inbound key=port` flags are supported by `linkray api` and `linkray ports`, so the dashboard Node Info panel can follow production port changes without code edits.
-
-Override experimental runtime ports when needed:
-
-```bash
-linkray render master \
-  --domain edge-a.example.com \
-  --singbox-inbound hysteria2=29080 \
-  --snell-inbound snell=29180 \
-  --output /tmp/linkray-master
-```
-
-## Command Map
-
-| Command | Purpose |
-|---|---|
-| `linkray render master` | Render master deployment files |
-| `linkray render node` | Render host LinkRay Node, Xray-core, sing-box, and Snell node files |
-| `linkray validate --path <dir>` | Validate a rendered tree |
-| `linkray install master` | Copy rendered master files into a root, dry-run by default |
-| `linkray install node` | Copy rendered node files into a root, dry-run by default |
-| `linkray bootstrap master` | Configure a fresh master end to end |
-| `linkray bootstrap node` | Configure a fresh node end to end |
-| `linkray doctor --role master` | Check master files and runtime health |
-| `linkray doctor --role node` | Check node files and runtime health |
-| `linkray api` | Serve node status JSON for the dashboard patch |
-| `linkray egern` | Convert LinkRay subscriptions into Egern YAML |
-| `linkray shadowrocket` | Convert LinkRay subscriptions into Shadowrocket config |
-| `linkray sing-box` | Convert LinkRay subscriptions into compact sing-box JSON |
-| `linkray sub-auto` | Route the base subscription URL to the best identifiable format |
-| `linkray relay` | Expose master-side relay ports for secondary nodes |
-| `linkray rules update` | Refresh CN domain and IP CIDR routing rule files |
-| `linkray protocols` | Show supported and planned protocol capability status |
-
-## Subscription Routes
-
-| Route | Output |
-|---|---|
-| `/sub/<token>` | Automatic format routing for identifiable clients |
-| `/sub/<token>/egern` | Egern-specific proxy resource |
-| `/sub/<token>/shadowrocket` | Shadowrocket config with LinkRay route rules and Snell support |
-| `/sub/<token>/shadowrocket-conf` | Backward-compatible alias for `/shadowrocket` |
-| `/sub/<token>/sing-box` | LinkRay-generated sing-box JSON |
-| `/linkray/ports.html` | Compatibility redirect to `/dashboard/` |
-| `/linkray/ports.json` | Proxy to `/api/linkray/nodes` |
-
-## Sidecar Services
-
-Rendered master deployments include these LinkRay-managed systemd units:
-
-| Unit | Purpose |
-|---|---|
-| `linkray-xray.service` | Optional Xray-core runtime when rendered with `--xray-runtime linkray` |
-| `linkray-snell-runtime.service` | Runs the experimental Snell server runtime |
-| `linkray-snell@.service` | Runs per-user Snell server instances generated by subscription adapters |
-| `linkray-snell-usage.service` | Exposes per-user Snell traffic deltas to LinkRay |
-| `linkray-api.service` | Reports node port status |
-| `linkray-clash.service` | Converts LinkRay subscriptions into Clash/Mihomo YAML |
-| `linkray-egern.service` | Converts LinkRay subscriptions into Egern YAML |
-| `linkray-shadowrocket.service` | Converts LinkRay subscriptions into Shadowrocket config |
-| `linkray-singbox.service` | Converts LinkRay subscriptions into compact sing-box JSON |
-| `linkray-sub-auto.service` | Routes base subscription URLs by client headers |
-| `linkray-rules-update.service` | Refreshes route rule files |
-| `linkray-rules-update.timer` | Schedules route rule refreshes |
-| `linkray-relay.service` | Relays secondary-node ports from the master |
-
-For a two-node topology, LinkRay publishes secondary nodes through master relay ports by default. The first secondary node uses each inbound port plus `100` for its public subscription port, while TLS SNI and WebSocket Host still point at the real secondary-node domain.
-
-## Dashboard Patch Maintenance
-
-Runtime installs use the compiled compatibility snapshot in:
-
-```text
-patches/marzban-dashboard/current/
-```
-
-For upstream dashboard upgrades, LinkRay also ships a source-level patch in:
-
-```text
-patches/marzban-dashboard/source/linkray-dashboard.patch
-```
-
-Apply that patch to a compatible upstream source checkout, rebuild `app/dashboard`, then refresh the compatibility snapshot only after validating the LinkRay subscription dialog and Node Info panel.
-
-## Deploy Rendered Files
-
-Deploy a rendered master tree on a prepared host:
+Deploy rendered files on prepared hosts:
 
 ```bash
 sudo scripts/deploy-rendered-master.sh /tmp/linkray-master
+sudo scripts/deploy-rendered-node.sh /tmp/linkray-node
 ```
 
-Or use install mode to preview and apply file copies:
+Preview and apply file copies through the CLI:
 
 ```bash
 linkray install master \
@@ -343,71 +389,134 @@ linkray install master \
   --apply
 ```
 
-The install command copies files only. It does not automatically run `sqlite3`, `docker compose`, or `nginx -t`.
+`linkray install` copies rendered files only. It does not run `sqlite3`, Docker Compose, Nginx validation, or systemd restarts. Use bootstrap or deploy scripts for end-to-end host changes.
+
+## Ports And Multi-node Relay
+
+Default per-node public runtime ports:
+
+| Range | Runtime |
+|---|---|
+| `18080-18091` | Xray-core protocol inbounds |
+| `19080-19082` | sing-box Hysteria2, TUIC, AnyTLS |
+| `19180` | Snell |
+
+Override Xray inbound ports:
+
+```bash
+linkray render master \
+  --domain edge-a.example.com \
+  --node edge-a=edge-a.example.com \
+  --inbound vless_tls=28080 \
+  --inbound vless_reality=28081 \
+  --output /tmp/linkray-master
+```
+
+Override advanced runtime ports:
+
+```bash
+linkray render master \
+  --domain edge-a.example.com \
+  --singbox-inbound hysteria2=29080 \
+  --snell-inbound snell=29180 \
+  --output /tmp/linkray-master
+```
+
+For secondary nodes, LinkRay can advertise master-side relay ports. The first secondary node uses `inbound_port + 100` by default, while TLS SNI and WebSocket Host remain the real secondary-node domain. This avoids client-side proxy chaining while still letting clients import ordinary node entries.
+
+## Command Map
+
+| Command | Purpose |
+|---|---|
+| `linkray render master` | Render master deployment files |
+| `linkray render node` | Render host node files |
+| `linkray validate --path <dir>` | Validate a rendered tree |
+| `linkray install master` | Copy rendered master files, dry-run by default |
+| `linkray install node` | Copy rendered node files, dry-run by default |
+| `linkray bootstrap master` | Configure a fresh master end to end |
+| `linkray bootstrap node` | Configure a fresh node end to end |
+| `linkray doctor --role master` | Check master files and runtime health |
+| `linkray doctor --role node` | Check node files and runtime health |
+| `linkray api` | Serve node status JSON for the dashboard |
+| `linkray clash` | Run the Clash/Mihomo subscription adapter |
+| `linkray egern` | Run the Egern subscription adapter |
+| `linkray shadowrocket` | Run the Shadowrocket subscription adapter |
+| `linkray sing-box` | Run the sing-box subscription adapter |
+| `linkray snell-usage` | Run the Snell usage sidecar |
+| `linkray sub-auto` | Route base subscription URLs by client headers |
+| `linkray relay` | Expose master-side relay ports for secondary nodes |
+| `linkray rules update` | Refresh CN domain and IP CIDR routing rule files |
+| `linkray protocols` | Show protocol capability status |
 
 ## Verify
 
-Run the test suite:
+Run local tests:
 
 ```bash
 python3 -m unittest discover -s tests -v
 ```
 
-Check a rendered or installed root:
+Check a rendered tree:
 
 ```bash
 linkray doctor --role master --root /tmp/linkray-master --no-runtime
 linkray doctor --role node --root /tmp/linkray-node --no-runtime
 ```
 
-Check a live server from inside that server:
+Check live servers from inside each server:
 
 ```bash
 linkray doctor --role master
 linkray doctor --role node
 ```
 
-## Production Rule
-
-Do not hand-edit live LinkRay panel container files as the primary workflow. Export known-good changes into this repo, render files from LinkRay, validate them, then deploy those rendered files.
-
-The current dashboard patch under `patches/marzban-dashboard/current/` is a compatibility snapshot from an upstream dashboard build. It should eventually be replaced by a source-level dashboard patch against a pinned upstream version.
-
-## LinkRay Host SQL
-
-`render master` and `install master` generate:
-
-```text
-var/lib/marzban/linkray/hosts.sql
-var/lib/marzban/linkray/linkray-manifest.json
-```
-
-The SQL initializes internal `inbounds` and `hosts` rows for the selected nodes. The manifest records render time, git commit, selected nodes, and non-secret config parameters for later `linkray doctor` checks. Review the SQL before applying:
+Check the dashboard node API:
 
 ```bash
-sqlite3 /var/lib/marzban/db.sqlite3 < /var/lib/marzban/linkray/hosts.sql
+curl -k https://<master-domain>:9443/api/linkray/nodes
 ```
 
-For a two-node topology, the SQL creates 24 host rows: 2 nodes times 12 protocol entries.
+For a two-node deployment with Xray, sing-box, and Snell enabled, the dashboard API should report 32 open entries: 16 per node.
+
+## Dashboard Patch Maintenance
+
+Runtime installs use the compiled compatibility snapshot in:
+
+```text
+patches/marzban-dashboard/current/
+```
+
+LinkRay also ships a source-level dashboard patch in:
+
+```text
+patches/marzban-dashboard/source/linkray-dashboard.patch
+```
+
+For upstream dashboard upgrades, apply the source-level patch to a compatible upstream checkout, rebuild `app/dashboard`, refresh the compatibility snapshot, and validate the subscription dialog plus Node Info panel before release.
 
 ## Repository Layout
 
 ```text
-linkray/                                  # Python CLI and deployment renderer
-linkray/assets/                           # packaged templates and dashboard patches
-templates/                                # source deployment templates
-patches/                                  # source dashboard patch snapshots
-scripts/deploy-rendered-master.sh         # deploy rendered master tree to a prepared host
-scripts/deploy-rendered-node.sh           # deploy rendered node tree to a prepared host
-tests/                                    # unittest coverage for renderer, adapters, doctor, relay, installer
-docs/DEPLOYMENT.md                        # detailed deployment guide
-install.sh                                # root installer for /usr/local/bin/linkray
+linkray/                                  # Python CLI, renderers, adapters, runtime helpers
+linkray/assets/                           # Packaged templates, dashboard patches, node app
+templates/                                # Source deployment templates
+patches/                                  # Source and compatibility patch snapshots
+scripts/build-release.sh                  # Build wheel and source distribution
+scripts/deploy-rendered-master.sh         # Deploy rendered master tree to a prepared host
+scripts/deploy-rendered-node.sh           # Deploy rendered node tree to a prepared host
+docs/DEPLOYMENT.md                        # Detailed deployment guide
+tests/                                    # unittest coverage for CLI, renderer, adapters, doctor, runtimes
+install.sh                                # Root installer for /usr/local/bin/linkray
 pyproject.toml                            # Python package metadata
 ```
 
+## Production Rule
+
+Do not hand-edit live LinkRay panel container files as the primary workflow. Export known-good changes into this repository, render files from LinkRay, validate them, then deploy the rendered files or publish a release.
+
 ## More
 
-See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the full deployment guide.
+See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for detailed deployment notes and operational commands.
 
 ## License
 
