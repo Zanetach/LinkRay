@@ -279,7 +279,7 @@ class RenderTests(unittest.TestCase):
             self.assertFalse((output / "opt/marzban-node/docker-compose.yml").exists())
             node_service = (output / "etc/systemd/system/linkray-node.service").read_text()
             xray_service = (output / "etc/systemd/system/linkray-xray.service").read_text()
-            self.assertIn("Description=LinkRay Marzban Node control service", node_service)
+            self.assertIn("Description=LinkRay Node control service", node_service)
             self.assertIn("ExecStart=/opt/linkray-node-app/venv/bin/python /opt/linkray-node-app/current/main.py", node_service)
             self.assertIn("LINKRAY_EXTERNAL_XRAY=true", node_service)
             self.assertIn("Description=LinkRay Xray-core runtime", xray_service)
@@ -406,6 +406,10 @@ class RenderTests(unittest.TestCase):
                 self.assertIn("/^(捐赠|Donate)$/i", html)
                 self.assertIn("function hideMarzbanFooter()", html)
                 self.assertIn("hideMarzbanFooter();", html)
+                self.assertIn("function normalizeLinkRayBranding()", html)
+                self.assertIn("normalizeLinkRayBranding();", html)
+                self.assertIn(".replace(/\\bMarzban\\b/g, \"LinkRay\")", html)
+                self.assertIn(".replace(/\\bGozargah\\b/g, \"LinkRay\")", html)
                 self.assertIn("linkray-hidden-dashboard-footer", html)
                 self.assertIn("Made\\s+with", html)
                 self.assertIn("\\(v\\d+\\.\\d+\\.\\d+\\)", html)
@@ -435,6 +439,7 @@ class RenderTests(unittest.TestCase):
                 self.assertIn('name="application-name" content="LinkRay"', html)
                 self.assertNotIn("<title>Marzban</title>", html)
                 self.assertNotIn('content="Marzban"', html)
+                self.assertIn("normalizeLinkRayBranding", html)
 
         for patch_path in [
             Path("patches/marzban-dashboard/source/linkray-dashboard.patch"),

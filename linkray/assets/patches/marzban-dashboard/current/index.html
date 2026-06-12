@@ -308,6 +308,43 @@
             });
           }
 
+          function normalizeLinkRayBranding() {
+            document.title = "LinkRay";
+            const appMeta = document.querySelector('meta[name="apple-mobile-web-app-title"]');
+            const nameMeta = document.querySelector('meta[name="application-name"]');
+            if (appMeta) appMeta.setAttribute("content", "LinkRay");
+            if (nameMeta) nameMeta.setAttribute("content", "LinkRay");
+
+            const replaceBrand = (value) => value
+              .replace(/\bMarzban\b/g, "LinkRay")
+              .replace(/\bmarzban\b/g, "linkray")
+              .replace(/\bGozargah\b/g, "LinkRay");
+            const shouldSkip = (node) => {
+              const parent = node.parentElement;
+              if (!parent) return true;
+              if (parent.closest("script,style,noscript,code,pre")) return true;
+              return false;
+            };
+            const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+              acceptNode(node) {
+                return !shouldSkip(node) && /Marzban|marzban|Gozargah/.test(node.nodeValue || "")
+                  ? NodeFilter.FILTER_ACCEPT
+                  : NodeFilter.FILTER_REJECT;
+              },
+            });
+            for (let textNode = walker.nextNode(); textNode; textNode = walker.nextNode()) {
+              textNode.nodeValue = replaceBrand(textNode.nodeValue || "");
+            }
+            Array.from(document.querySelectorAll("[aria-label],[title],[placeholder],[alt]")).forEach((node) => {
+              ["aria-label", "title", "placeholder", "alt"].forEach((name) => {
+                const value = node.getAttribute(name);
+                if (value && /Marzban|marzban|Gozargah/.test(value)) {
+                  node.setAttribute(name, replaceBrand(value));
+                }
+              });
+            });
+          }
+
           function retargetStarEntry() {
             const legacyRepo = /github\.com\/Gozargah\/Marzban|github\.com\/Gozargah/i;
             const starText = /(^|\s)Star(\s|$)|Star Marzban/i;
@@ -440,6 +477,7 @@
               injectAdvancedProtocolSelector();
               hideDonateEntry();
               hideMarzbanFooter();
+              normalizeLinkRayBranding();
               retargetStarEntry();
               protocols.forEach((protocol) => {
                 titleElements(protocol.name).forEach((titleNode) => {

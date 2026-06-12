@@ -11,7 +11,7 @@
 
 ## Why
 
-LinkRay packages a Marzban + Xray-core deployment into repeatable configuration, rendered assets, sidecar services, and health checks. Marzban remains the user, subscription, traffic, and node management control plane. Xray-core remains the primary proxy runtime. LinkRay can also run experimental LinkRay-managed runtimes for Xray-core, sing-box, and Snell. The sing-box runtime powers Hysteria2, TUIC, and AnyTLS with generated user credentials and a Marzban job that syncs sing-box stats back into Marzban usage tables.
+LinkRay packages the LinkRay control plane plus Xray-core into repeatable configuration, rendered assets, sidecar services, and health checks. LinkRay owns the user-facing panel, subscription, traffic, and node-management experience while reusing the Marzban API and data model internally. Xray-core remains the primary proxy runtime. LinkRay can also run experimental LinkRay-managed runtimes for Xray-core, sing-box, and Snell. The sing-box runtime powers Hysteria2, TUIC, and AnyTLS with generated user credentials and a LinkRay job that syncs sing-box stats back into the internal usage tables.
 
 The goal is simple: stop hand-editing live container files as the primary workflow. Make changes in this repository, render the deployment tree, validate it, then apply the rendered files to a prepared host.
 
@@ -19,8 +19,8 @@ The goal is simple: stop hand-editing live container files as the primary workfl
 
 | Surface | LinkRay owns |
 |---|---|
-| Master render | Marzban Docker Compose, Nginx config, Xray config, SQL host initialization, dashboard patches, subscription templates, sidecar systemd units |
-| Node render | Host systemd Marzban Node service, LinkRay-managed Xray-core service, and optional host sing-box/Snell runtimes |
+| Master render | LinkRay panel Docker Compose, Nginx config, Xray config, SQL host initialization, dashboard patches, subscription templates, sidecar systemd units |
+| Node render | Host systemd LinkRay Node service, LinkRay-managed Xray-core service, and optional host sing-box/Snell runtimes |
 | Inbound set | 12 Xray-core inbound protocol families plus 3 experimental sing-box inbound families plus per-user Snell runtime support, all with overridable ports |
 | Subscription routing | Browser/client-aware `/sub/<token>` routing plus Clash/Mihomo, Egern, Shadowrocket, and sing-box adapters |
 | Dashboard patch | User link ordering, concrete protocol card labels, and Node Info backed by `linkray api` |
@@ -46,15 +46,15 @@ LinkRay renders these inbound families for every node:
 | VMess HTTPUpgrade TLS | HTTPUpgrade + TLS |
 | Trojan gRPC TLS | gRPC + TLS |
 
-Clash/Mihomo and sing-box are supported as client subscription formats through LinkRay sidecars. The master keeps the Marzban dashboard/control plane in Docker. Secondary nodes run Marzban Node, Xray-core, sing-box, and Snell as host systemd services, so CA and LA use the same runtime shape outside the panel container.
+Clash/Mihomo and sing-box are supported as client subscription formats through LinkRay sidecars. The master keeps the LinkRay dashboard/control plane in Docker. Secondary nodes run LinkRay Node, Xray-core, sing-box, and Snell as host systemd services, so CA and LA use the same runtime shape outside the panel container.
 
 Hysteria2, TUIC, and AnyTLS are experimental production paths:
 
 - `linkray-singbox-runtime.service` runs sing-box on the master.
 - `linkray-singbox.service` creates per-subscription credentials when the sing-box subscription is requested.
-- The generated sing-box subscription includes the normal Marzban/Xray nodes plus Hysteria2, TUIC, and AnyTLS outbounds.
-- `linkray_singbox_usages.py` is mounted into Marzban and periodically syncs sing-box V2Ray API stats into Marzban `users`, `admins`, `system`, and hourly usage tables.
-- The same Marzban job reconciles active usernames with the local sing-box sidecar so disabled, deleted, expired, or limited users are pruned from the sing-box runtime config.
+- The generated sing-box subscription includes the normal LinkRay/Xray nodes plus Hysteria2, TUIC, and AnyTLS outbounds.
+- `linkray_singbox_usages.py` is mounted into the LinkRay panel container and periodically syncs sing-box V2Ray API stats into the internal `users`, `admins`, `system`, and hourly usage tables.
+- The same LinkRay job reconciles active usernames with the local sing-box sidecar so disabled, deleted, expired, or limited users are pruned from the sing-box runtime config.
 
 The sing-box binary must be built with `with_v2ray_api`, `with_quic`, `with_utls`, and `with_clash_api`. `bootstrap master` does this automatically with Go 1.23.12. Check the explicit matrix with:
 
@@ -62,11 +62,11 @@ Snell is experimental but usable for supported clients:
 
 - `linkray-snell-runtime.service` runs `snell-server`.
 - `linkray-snell@.service` runs per-user Snell server instances.
-- `linkray-snell-usage.service` exposes local Snell usage deltas for the Marzban job.
+- `linkray-snell-usage.service` exposes local Snell usage deltas for the LinkRay job.
 - The generated config lives at `/var/lib/marzban/linkray/snell/snell-server.conf`.
 - Per-user configs are written under `/var/lib/marzban/linkray/snell/users/`.
 - Shadowrocket config and Clash/Mihomo subscriptions can append per-user Snell nodes.
-- Marzban traffic sync for Snell uses per-user port counters and writes usage into the same user, admin, and hourly tables as the sing-box sync job.
+- LinkRay traffic sync for Snell uses per-user port counters and writes usage into the same user, admin, and hourly tables as the sing-box sync job.
 
 ```bash
 linkray protocols
@@ -144,11 +144,11 @@ If `--reality-private-key` and `--reality-short-id` are omitted during `--apply`
 with_v2ray_api with_quic with_utls with_clash_api
 ```
 
-These tags are required for the advanced runtime and for validating generated sing-box client configs. The ordinary upstream sing-box release binary does not include the V2Ray API stats service required for Marzban usage sync.
+These tags are required for the advanced runtime and for validating generated sing-box client configs. The ordinary upstream sing-box release binary does not include the V2Ray API stats service required for LinkRay usage sync.
 
 ## Fresh Node Bootstrap
 
-Place the Marzban node client certificate first:
+Place the LinkRay node client certificate first:
 
 ```text
 /var/lib/marzban-node/ssl_client_cert.pem
@@ -185,7 +185,7 @@ linkray render master \
 linkray validate --path /tmp/linkray-master
 ```
 
-Render the optional unified Xray runtime mode when you are ready to let LinkRay own the Xray systemd service instead of mounting the Xray binary into the Marzban container:
+Render the optional unified Xray runtime mode when you are ready to let LinkRay own the Xray systemd service instead of mounting the Xray binary into the LinkRay panel container:
 
 ```bash
 linkray render master \
@@ -232,7 +232,7 @@ linkray render master \
 | Command | Purpose |
 |---|---|
 | `linkray render master` | Render master deployment files |
-| `linkray render node` | Render host Marzban Node, Xray-core, sing-box, and Snell node files |
+| `linkray render node` | Render host LinkRay Node, Xray-core, sing-box, and Snell node files |
 | `linkray validate --path <dir>` | Validate a rendered tree |
 | `linkray install master` | Copy rendered master files into a root, dry-run by default |
 | `linkray install node` | Copy rendered node files into a root, dry-run by default |
@@ -241,9 +241,9 @@ linkray render master \
 | `linkray doctor --role master` | Check master files and runtime health |
 | `linkray doctor --role node` | Check node files and runtime health |
 | `linkray api` | Serve node status JSON for the dashboard patch |
-| `linkray egern` | Convert Marzban subscriptions into Egern YAML |
-| `linkray shadowrocket` | Convert Marzban subscriptions into Shadowrocket config |
-| `linkray sing-box` | Convert Marzban subscriptions into compact sing-box JSON |
+| `linkray egern` | Convert LinkRay subscriptions into Egern YAML |
+| `linkray shadowrocket` | Convert LinkRay subscriptions into Shadowrocket config |
+| `linkray sing-box` | Convert LinkRay subscriptions into compact sing-box JSON |
 | `linkray sub-auto` | Route the base subscription URL to the best identifiable format |
 | `linkray relay` | Expose master-side relay ports for secondary nodes |
 | `linkray rules update` | Refresh CN domain and IP CIDR routing rule files |
@@ -270,12 +270,12 @@ Rendered master deployments include these LinkRay-managed systemd units:
 | `linkray-xray.service` | Optional Xray-core runtime when rendered with `--xray-runtime linkray` |
 | `linkray-snell-runtime.service` | Runs the experimental Snell server runtime |
 | `linkray-snell@.service` | Runs per-user Snell server instances generated by subscription adapters |
-| `linkray-snell-usage.service` | Exposes per-user Snell traffic deltas to Marzban |
+| `linkray-snell-usage.service` | Exposes per-user Snell traffic deltas to LinkRay |
 | `linkray-api.service` | Reports node port status |
-| `linkray-clash.service` | Converts Marzban subscriptions into Clash/Mihomo YAML |
-| `linkray-egern.service` | Converts Marzban subscriptions into Egern YAML |
-| `linkray-shadowrocket.service` | Converts Marzban subscriptions into Shadowrocket config |
-| `linkray-singbox.service` | Converts Marzban subscriptions into compact sing-box JSON |
+| `linkray-clash.service` | Converts LinkRay subscriptions into Clash/Mihomo YAML |
+| `linkray-egern.service` | Converts LinkRay subscriptions into Egern YAML |
+| `linkray-shadowrocket.service` | Converts LinkRay subscriptions into Shadowrocket config |
+| `linkray-singbox.service` | Converts LinkRay subscriptions into compact sing-box JSON |
 | `linkray-sub-auto.service` | Routes base subscription URLs by client headers |
 | `linkray-rules-update.service` | Refreshes route rule files |
 | `linkray-rules-update.timer` | Schedules route rule refreshes |
@@ -291,13 +291,13 @@ Runtime installs use the compiled compatibility snapshot in:
 patches/marzban-dashboard/current/
 ```
 
-For Marzban upgrades, LinkRay also ships a source-level patch in:
+For upstream dashboard upgrades, LinkRay also ships a source-level patch in:
 
 ```text
 patches/marzban-dashboard/source/linkray-dashboard.patch
 ```
 
-Apply that patch to a Marzban source checkout, rebuild `app/dashboard`, then refresh the compatibility snapshot only after validating the LinkRay subscription dialog and Node Info panel.
+Apply that patch to a compatible upstream source checkout, rebuild `app/dashboard`, then refresh the compatibility snapshot only after validating the LinkRay subscription dialog and Node Info panel.
 
 ## Deploy Rendered Files
 
@@ -348,11 +348,11 @@ linkray doctor --role node
 
 ## Production Rule
 
-Do not hand-edit live Marzban container files as the primary workflow. Export known-good changes into this repo, render files from LinkRay, validate them, then deploy those rendered files.
+Do not hand-edit live LinkRay panel container files as the primary workflow. Export known-good changes into this repo, render files from LinkRay, validate them, then deploy those rendered files.
 
-The current dashboard patch under `patches/marzban-dashboard/current/` is a compatibility snapshot from a Marzban dashboard build. It should eventually be replaced by a source-level dashboard patch against a pinned Marzban version.
+The current dashboard patch under `patches/marzban-dashboard/current/` is a compatibility snapshot from an upstream dashboard build. It should eventually be replaced by a source-level dashboard patch against a pinned upstream version.
 
-## Marzban Host SQL
+## LinkRay Host SQL
 
 `render master` and `install master` generate:
 
@@ -361,7 +361,7 @@ var/lib/marzban/linkray/hosts.sql
 var/lib/marzban/linkray/linkray-manifest.json
 ```
 
-The SQL initializes Marzban `inbounds` and `hosts` rows for the selected nodes. The manifest records render time, git commit, selected nodes, and non-secret config parameters for later `linkray doctor` checks. Review the SQL before applying:
+The SQL initializes internal `inbounds` and `hosts` rows for the selected nodes. The manifest records render time, git commit, selected nodes, and non-secret config parameters for later `linkray doctor` checks. Review the SQL before applying:
 
 ```bash
 sqlite3 /var/lib/marzban/db.sqlite3 < /var/lib/marzban/linkray/hosts.sql
@@ -375,7 +375,7 @@ For a two-node topology, the SQL creates 24 host rows: 2 nodes times 12 protocol
 linkray/                                  # Python CLI and deployment renderer
 linkray/assets/                           # packaged templates and dashboard patches
 templates/                                # source deployment templates
-patches/                                  # source Marzban patch snapshots
+patches/                                  # source dashboard patch snapshots
 scripts/deploy-rendered-master.sh         # deploy rendered master tree to a prepared host
 scripts/deploy-rendered-node.sh           # deploy rendered node tree to a prepared host
 tests/                                    # unittest coverage for renderer, adapters, doctor, relay, installer

@@ -52,7 +52,7 @@ def add_common_master_args(parser: argparse.ArgumentParser) -> None:
         "--xray-runtime",
         choices=XRAY_RUNTIME_MODES,
         default="marzban",
-        help="Xray runtime owner. marzban keeps the current Marzban-managed process; linkray emits linkray-xray.service.",
+        help="Xray runtime owner. marzban keeps the current LinkRay panel-managed process; linkray emits linkray-xray.service.",
     )
     parser.add_argument(
         "--node",
@@ -129,11 +129,11 @@ def add_render_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPa
     render = subparsers.add_parser("render", help="Render deployment files")
     render_sub = render.add_subparsers(dest="role", required=True)
 
-    master = render_sub.add_parser("master", help="Render Marzban master files")
+    master = render_sub.add_parser("master", help="Render LinkRay master files")
     add_common_master_args(master)
     master.add_argument("--output", required=True, type=Path, help="Output directory")
 
-    node = render_sub.add_parser("node", help="Render Marzban node files")
+    node = render_sub.add_parser("node", help="Render LinkRay node files")
     add_common_node_args(node)
     node.add_argument("--output", required=True, type=Path, help="Output directory")
 
@@ -142,12 +142,12 @@ def add_install_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentP
     install = subparsers.add_parser("install", help="Install rendered files onto this machine")
     install_sub = install.add_subparsers(dest="role", required=True)
 
-    master = install_sub.add_parser("master", help="Install Marzban master files")
+    master = install_sub.add_parser("master", help="Install LinkRay master files")
     add_common_master_args(master)
     master.add_argument("--root", type=Path, default=Path("/"), help="Install root. Use a temp directory for dry testing.")
     master.add_argument("--apply", action="store_true", help="Actually write files. Omit for dry-run.")
 
-    node = install_sub.add_parser("node", help="Install Marzban node files")
+    node = install_sub.add_parser("node", help="Install LinkRay node files")
     add_common_node_args(node)
     node.add_argument("--root", type=Path, default=Path("/"), help="Install root. Use a temp directory for dry testing.")
     node.add_argument("--apply", action="store_true", help="Actually write files. Omit for dry-run.")
@@ -157,14 +157,14 @@ def add_bootstrap_parser(subparsers: argparse._SubParsersAction[argparse.Argumen
     bootstrap = subparsers.add_parser("bootstrap", help="Configure a fresh server end-to-end")
     bootstrap_sub = bootstrap.add_subparsers(dest="role", required=True)
 
-    master = bootstrap_sub.add_parser("master", help="Bootstrap a Marzban master")
+    master = bootstrap_sub.add_parser("master", help="Bootstrap a LinkRay master")
     add_common_master_args(master)
     master.add_argument("--root", type=Path, default=Path("/"), help="Install root. Use a temp directory for dry testing.")
     master.add_argument("--apply", action="store_true", help="Actually change files/services. Omit for dry-run.")
     master.add_argument("--issue-cert", action="store_true", help="Issue or renew a certificate with acme.sh DNS Cloudflare.")
     master.add_argument("--cf-token-env", default="CF_Token", help="Environment variable name containing the Cloudflare API token.")
 
-    node = bootstrap_sub.add_parser("node", help="Bootstrap a Marzban node")
+    node = bootstrap_sub.add_parser("node", help="Bootstrap a LinkRay node")
     add_common_node_args(node)
     node.add_argument("--root", type=Path, default=Path("/"), help="Install root. Use a temp directory for dry testing.")
     node.add_argument("--apply", action="store_true", help="Actually change files/services. Omit for dry-run.")
@@ -393,7 +393,7 @@ def main(argv: list[str] | None = None) -> int:
         if not args.apply:
             print("No files were written. Re-run with --apply to install.")
         else:
-            print("Files installed. Review hosts.sql before applying it to Marzban SQLite.")
+            print("Files installed. Review hosts.sql before applying it to the LinkRay SQLite database.")
         return 0
 
     if args.command == "install" and args.role == "node":

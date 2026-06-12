@@ -200,7 +200,7 @@ def runtime_checks(role: str, runner: Runner, root: Path = Path("/")) -> list[Ch
         checks.append(
             Check(
                 "PASS" if has_process(ps_output, "/usr/local/bin/xray run -config stdin:") else "FAIL",
-                "Marzban-managed Xray",
+                "LinkRay panel-managed Xray",
                 "running" if has_process(ps_output, "/usr/local/bin/xray run -config stdin:") else "not found",
             )
         )

@@ -26,7 +26,7 @@ PROTOCOL_CAPABILITIES: tuple[ProtocolCapability, ...] = (
         "tcp",
         "tls",
         ("native", "clash-meta", "egern", "shadowrocket", "sing-box"),
-        "Marzban-managed Xray inbound with user and traffic stats.",
+        "LinkRay panel-managed Xray inbound with user and traffic stats.",
     ),
     ProtocolCapability(
         "vless_reality",
@@ -36,7 +36,7 @@ PROTOCOL_CAPABILITIES: tuple[ProtocolCapability, ...] = (
         "tcp",
         "reality",
         ("native", "clash-meta", "sing-box"),
-        "Marzban-managed Xray inbound with user and traffic stats.",
+        "LinkRay panel-managed Xray inbound with user and traffic stats.",
     ),
     ProtocolCapability(
         "vless_grpc_reality",
@@ -46,7 +46,7 @@ PROTOCOL_CAPABILITIES: tuple[ProtocolCapability, ...] = (
         "grpc",
         "reality",
         ("native", "clash-meta", "sing-box"),
-        "Marzban-managed Xray inbound with user and traffic stats.",
+        "LinkRay panel-managed Xray inbound with user and traffic stats.",
     ),
     ProtocolCapability(
         "trojan_tls",
@@ -56,7 +56,7 @@ PROTOCOL_CAPABILITIES: tuple[ProtocolCapability, ...] = (
         "tcp",
         "tls",
         ("native", "clash-meta", "egern", "shadowrocket", "sing-box"),
-        "Marzban-managed Xray inbound with user and traffic stats.",
+        "LinkRay panel-managed Xray inbound with user and traffic stats.",
     ),
     ProtocolCapability(
         "vmess_tls",
@@ -66,7 +66,7 @@ PROTOCOL_CAPABILITIES: tuple[ProtocolCapability, ...] = (
         "tcp",
         "tls",
         ("native", "clash-meta", "sing-box"),
-        "Marzban-managed Xray inbound with user and traffic stats.",
+        "LinkRay panel-managed Xray inbound with user and traffic stats.",
     ),
     ProtocolCapability(
         "shadowsocks",
@@ -76,7 +76,7 @@ PROTOCOL_CAPABILITIES: tuple[ProtocolCapability, ...] = (
         "tcp/udp",
         "none",
         ("native", "clash-meta", "egern", "shadowrocket", "sing-box"),
-        "Marzban-managed Xray inbound with user and traffic stats.",
+        "LinkRay panel-managed Xray inbound with user and traffic stats.",
     ),
     ProtocolCapability(
         "vless_ws_tls",
@@ -86,7 +86,7 @@ PROTOCOL_CAPABILITIES: tuple[ProtocolCapability, ...] = (
         "websocket",
         "tls",
         ("native", "clash-meta", "egern", "shadowrocket", "sing-box"),
-        "Marzban-managed Xray inbound with user and traffic stats.",
+        "LinkRay panel-managed Xray inbound with user and traffic stats.",
     ),
     ProtocolCapability(
         "vless_grpc_tls",
@@ -96,7 +96,7 @@ PROTOCOL_CAPABILITIES: tuple[ProtocolCapability, ...] = (
         "grpc",
         "tls",
         ("native", "clash-meta", "sing-box"),
-        "Marzban-managed Xray inbound with user and traffic stats.",
+        "LinkRay panel-managed Xray inbound with user and traffic stats.",
     ),
     ProtocolCapability(
         "vless_xhttp_reality",
@@ -116,7 +116,7 @@ PROTOCOL_CAPABILITIES: tuple[ProtocolCapability, ...] = (
         "websocket",
         "tls",
         ("native", "clash-meta", "egern", "shadowrocket", "sing-box"),
-        "Marzban-managed Xray inbound with user and traffic stats.",
+        "LinkRay panel-managed Xray inbound with user and traffic stats.",
     ),
     ProtocolCapability(
         "vmess_httpupgrade_tls",
@@ -126,7 +126,7 @@ PROTOCOL_CAPABILITIES: tuple[ProtocolCapability, ...] = (
         "httpupgrade",
         "tls",
         ("native", "clash-meta", "sing-box"),
-        "Marzban-managed Xray inbound with user and traffic stats.",
+        "LinkRay panel-managed Xray inbound with user and traffic stats.",
     ),
     ProtocolCapability(
         "trojan_grpc_tls",
@@ -136,7 +136,7 @@ PROTOCOL_CAPABILITIES: tuple[ProtocolCapability, ...] = (
         "grpc",
         "tls",
         ("native", "clash-meta", "sing-box"),
-        "Marzban-managed Xray inbound with user and traffic stats.",
+        "LinkRay panel-managed Xray inbound with user and traffic stats.",
     ),
     ProtocolCapability(
         "hysteria2",
@@ -146,7 +146,7 @@ PROTOCOL_CAPABILITIES: tuple[ProtocolCapability, ...] = (
         "udp",
         "tls",
         ("sing-box",),
-        "LinkRay-managed sing-box runtime with generated credentials and Marzban stats sync.",
+        "LinkRay-managed sing-box runtime with generated credentials and LinkRay stats sync.",
     ),
     ProtocolCapability(
         "tuic",
@@ -156,7 +156,7 @@ PROTOCOL_CAPABILITIES: tuple[ProtocolCapability, ...] = (
         "udp",
         "tls",
         ("sing-box",),
-        "LinkRay-managed sing-box runtime with generated credentials and Marzban stats sync.",
+        "LinkRay-managed sing-box runtime with generated credentials and LinkRay stats sync.",
     ),
     ProtocolCapability(
         "anytls",
@@ -166,7 +166,7 @@ PROTOCOL_CAPABILITIES: tuple[ProtocolCapability, ...] = (
         "tcp",
         "tls",
         ("sing-box",),
-        "LinkRay-managed sing-box runtime with generated credentials and Marzban stats sync.",
+        "LinkRay-managed sing-box runtime with generated credentials and LinkRay stats sync.",
     ),
     ProtocolCapability(
         "snell",
@@ -176,7 +176,7 @@ PROTOCOL_CAPABILITIES: tuple[ProtocolCapability, ...] = (
         "tcp",
         "psk",
         ("shadowrocket", "clash-meta"),
-        "LinkRay-managed Snell runtime with per-user subscription credentials and Marzban stats sync via port counters.",
+        "LinkRay-managed Snell runtime with per-user subscription credentials and LinkRay stats sync via port counters.",
     ),
 )
 

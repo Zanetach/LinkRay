@@ -244,7 +244,7 @@ def master_compose(config: LinkRayConfig) -> str:
 
 def linkray_node_service() -> str:
     return """[Unit]
-Description=LinkRay Marzban Node control service
+Description=LinkRay Node control service
 After=network-online.target linkray-xray.service
 Wants=network-online.target
 

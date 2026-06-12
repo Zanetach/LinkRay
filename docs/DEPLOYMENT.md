@@ -38,15 +38,15 @@ linkray bootstrap master \
   --apply
 ```
 
-The master bootstrap writes LinkRay-managed files, installs required system packages, installs Docker when missing, builds sing-box with LinkRay-required tags, obtains the TLS certificate through acme.sh DNS Cloudflare, starts Marzban, applies `hosts.sql`, validates Nginx, reloads Nginx, and runs `doctor`.
+The master bootstrap writes LinkRay-managed files, installs required system packages, installs Docker when missing, builds sing-box with LinkRay-required tags, obtains the TLS certificate through acme.sh DNS Cloudflare, starts the LinkRay panel container, applies `hosts.sql`, validates Nginx, reloads Nginx, and runs `doctor`.
 
-By default, Xray-core remains Marzban-managed for compatibility with Marzban user, subscription, and traffic workflows. To render the optional unified runtime shape where LinkRay owns the Xray systemd unit, pass:
+By default, Xray-core remains LinkRay panel-managed for compatibility with user, subscription, and traffic workflows. To render the optional unified runtime shape where LinkRay owns the Xray systemd unit, pass:
 
 ```bash
 --xray-runtime linkray
 ```
 
-That mode adds `linkray-xray.service` and removes the Xray binary bind mount from the Marzban Docker Compose file.
+That mode adds `linkray-xray.service` and removes the Xray binary bind mount from the LinkRay Docker Compose file.
 
 LinkRay builds `/usr/local/bin/sing-box` with:
 
@@ -54,7 +54,7 @@ LinkRay builds `/usr/local/bin/sing-box` with:
 with_v2ray_api with_quic with_utls with_clash_api
 ```
 
-The ordinary upstream release binary does not include the V2Ray API stats service needed by the LinkRay sing-box usage sync job. That job also reconciles active Marzban usernames with the local sing-box sidecar, pruning disabled, deleted, expired, or limited users from the sing-box runtime config.
+The ordinary upstream release binary does not include the V2Ray API stats service needed by the LinkRay sing-box usage sync job. That job also reconciles active LinkRay usernames with the local sing-box sidecar, pruning disabled, deleted, expired, or limited users from the sing-box runtime config.
 
 LinkRay also installs the pinned Snell v5 server binary and renders:
 
@@ -65,11 +65,11 @@ LinkRay also installs the pinned Snell v5 server binary and renders:
 /etc/systemd/system/linkray-snell-usage.service
 ```
 
-The Clash/Mihomo and Shadowrocket adapters generate per-user Snell credentials on subscription request, write `/var/lib/marzban/linkray/snell/users/<instance>.conf`, and start `linkray-snell@<instance>`. Snell usage sync is handled by `linkray-snell-usage.service`: it maintains per-user port counters and lets the Marzban job write deltas into user, admin, and hourly usage tables.
+The Clash/Mihomo and Shadowrocket adapters generate per-user Snell credentials on subscription request, write `/var/lib/marzban/linkray/snell/users/<instance>.conf`, and start `linkray-snell@<instance>`. Snell usage sync is handled by `linkray-snell-usage.service`: it maintains per-user port counters and lets the LinkRay job write deltas into user, admin, and hourly usage tables.
 
 If Reality values are not provided through `--reality-private-key` and `--reality-short-id`, `bootstrap master --apply` generates them automatically before writing `/var/lib/marzban/xray_config.json`.
 
-On a new node server, place the Marzban node client certificate at `/var/lib/marzban-node/ssl_client_cert.pem`, then run:
+On a new node server, place the LinkRay node client certificate at `/var/lib/marzban-node/ssl_client_cert.pem`, then run:
 
 ```bash
 linkray bootstrap node \
@@ -77,7 +77,7 @@ linkray bootstrap node \
   --apply
 ```
 
-The node bootstrap installs required packages, installs the LinkRay Marzban Node host app under `/opt/linkray-node-app/current`, creates `/opt/linkray-node-app/venv`, installs Xray-core under `/var/lib/marzban/linkray/bin`, starts `linkray-node.service`, enables `linkray-xray.service`, and runs `doctor`.
+The node bootstrap installs required packages, installs the LinkRay Node host app under `/opt/linkray-node-app/current`, creates `/opt/linkray-node-app/venv`, installs Xray-core under `/var/lib/marzban/linkray/bin`, starts `linkray-node.service`, enables `linkray-xray.service`, and runs `doctor`.
 
 ## Master Render
 
@@ -152,7 +152,7 @@ The rendered node tree contains:
 ## Master Deployment Shape
 
 1. Install Docker and the Docker Compose plugin.
-2. Create `/opt/marzban/.env` with Marzban production values.
+2. Create `/opt/marzban/.env` with LinkRay production values.
 3. Copy rendered `/tmp/linkray-master/var/lib/marzban/*` into `/var/lib/marzban/`.
 4. Copy rendered `/tmp/linkray-master/opt/marzban/docker-compose.yml` into `/opt/marzban/docker-compose.yml`.
 5. Copy rendered `/tmp/linkray-master/etc/nginx/conf.d/marzban-panel.conf` into `/etc/nginx/conf.d/marzban-panel.conf`.
@@ -241,10 +241,10 @@ linkray doctor --role node
 
 `doctor` checks:
 
-- Required LinkRay/Marzban files.
+- Required LinkRay files.
 - Nginx systemd state.
 - Standalone `xray.service` is inactive.
-- Marzban-managed Xray process exists in the default mode.
+- LinkRay panel-managed Xray process exists in the default mode.
 - `linkray-xray.service` and the LinkRay-managed Xray process exist when the manifest says `xray_runtime_mode=linkray`.
 - Expected LinkRay ports are listening.
 - The sing-box runtime API port and Hysteria2/TUIC/AnyTLS inbound ports are listening on the master.
