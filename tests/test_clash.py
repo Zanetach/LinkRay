@@ -214,6 +214,24 @@ class ClashTests(unittest.TestCase):
         self.assertIn("servername: la.example.com", text)
         self.assertIn("Host: la.example.com", text)
 
+    def test_build_clash_meta_yaml_public_only_excludes_origin_ips_from_tun_routes(self):
+        payload = encoded_subscription(
+            "vless://11111111-1111-1111-1111-111111111111@ca.example.com:443?encryption=none&security=tls&fp=chrome&type=tcp&sni=ca.example.com#ca-VLESS_TLS_Vision",
+            "vless://11111111-1111-1111-1111-111111111111@la.example.com:443?encryption=none&security=tls&fp=chrome&type=ws&sni=la.example.com&host=la.example.com&path=/vless-ws#la-VLESS_WS_TLS",
+        )
+
+        def fake_getaddrinfo(host, *args, **kwargs):
+            addresses = {"ca.example.com": "107.172.216.169", "la.example.com": "69.63.198.100"}
+            return [(None, None, None, "", (addresses[host], 0))]
+
+        with patch("linkray.clash.socket.getaddrinfo", side_effect=fake_getaddrinfo):
+            text = build_clash_meta_yaml(payload, config=LinkRayConfig(domain="ca.example.com"), public_only=True)
+
+        self.assertIn("tun:", text)
+        self.assertIn("route-exclude-address:", text)
+        self.assertIn("- 107.172.216.169/32", text)
+        self.assertIn("- 69.63.198.100/32", text)
+
     def test_build_clash_meta_yaml_ignores_fake_ip_host_resolution(self):
         payload = encoded_subscription(
             "trojan://secret@ca.example.com:8443?security=tls&type=tcp&sni=ca.example.com#ca-Trojan_TLS"

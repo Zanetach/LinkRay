@@ -128,6 +128,15 @@ def proxy_server_hosts(domains: list[str]) -> dict[str, str]:
     return hosts
 
 
+def proxy_server_ip_exclusions(proxies: list[dict[str, Any]], host_map: Mapping[str, str]) -> list[str]:
+    addresses: set[str] = set(host_map.values())
+    for proxy in proxies:
+        server = proxy.get("server")
+        if isinstance(server, str) and is_ip_address(server):
+            addresses.add(server)
+    return [f"{address}/32" for address in sorted(addresses)]
+
+
 def proxy_name(parsed, host: str) -> str:
     return unquote(parsed.fragment) or host
 
@@ -579,6 +588,9 @@ def build_clash_meta_yaml(
     }
     if host_map:
         data["hosts"] = host_map
+    route_exclusions = proxy_server_ip_exclusions(proxies, host_map) if public_only else []
+    if route_exclusions:
+        data["tun"] = {"route-exclude-address": route_exclusions}
     if clean_base:
         data["geox-url"] = metacubex_geox_url(clean_base)
         data["rule-providers"] = metacubex_rule_providers(clean_base)
