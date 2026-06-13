@@ -175,10 +175,19 @@ def transport_options(query: Mapping[str, list[str]], network: str, fallback_hos
         }
     if network == "httpupgrade":
         return {
-            "network": "httpupgrade",
-            "httpupgrade-opts": {
+            "network": "ws",
+            "ws-opts": {
                 "path": first_query_value(query, "path") or "/",
                 "headers": {"Host": first_query_value(query, "host") or fallback_host},
+                "v2ray-http-upgrade": True,
+            },
+        }
+    if network == "xhttp":
+        return {
+            "network": "xhttp",
+            "xhttp-opts": {
+                "path": first_query_value(query, "path") or "/",
+                "host": first_query_value(query, "host") or fallback_host,
             },
         }
     return None
@@ -245,7 +254,7 @@ def vless_to_clash(link: str) -> dict[str, Any] | None:
     query = parse_qs(parsed.query)
     network = first_query_value(query, "type") or "tcp"
     security = first_query_value(query, "security") or ""
-    if network == "xhttp" or network not in {"tcp", "ws", "grpc", "httpupgrade"}:
+    if network not in {"tcp", "ws", "grpc", "httpupgrade", "xhttp"}:
         return None
     if security not in {"tls", "reality"}:
         return None
@@ -259,6 +268,8 @@ def vless_to_clash(link: str) -> dict[str, Any] | None:
     }
     proxy.update(tls_common(query, host))
     if network == "grpc" and security == "tls":
+        proxy.setdefault("alpn", ["h2"])
+    if network == "xhttp":
         proxy.setdefault("alpn", ["h2"])
     flow = first_query_value(query, "flow")
     if flow:
@@ -314,8 +325,6 @@ def vmess_to_clash(link: str) -> dict[str, Any] | None:
     if not host or not port or not uuid:
         return None
     network = str(data.get("net") or "tcp")
-    if network == "httpupgrade":
-        return None
     if network == "xhttp" or network not in {"tcp", "ws", "grpc", "httpupgrade"}:
         return None
     proxy: dict[str, Any] = {
