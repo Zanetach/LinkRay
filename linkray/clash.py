@@ -215,6 +215,27 @@ def normalize_relayed_tls_proxy(proxy: dict[str, Any]) -> dict[str, Any]:
     return proxy
 
 
+def relay_secondary_node_proxy(proxy: dict[str, Any], config: LinkRayConfig | None) -> dict[str, Any]:
+    if not config or not config.domain:
+        return proxy
+    server = proxy.get("server")
+    port = proxy.get("port")
+    name = proxy.get("name")
+    if not isinstance(server, str) or not isinstance(port, int) or not isinstance(name, str):
+        return proxy
+    if server == config.domain or is_ip_address(server):
+        return proxy
+    if not same_parent_domain(config.domain, server):
+        return proxy
+    target_prefix = server.split(".", 1)[0].lower()
+    if not name.lower().startswith(f"{target_prefix}-"):
+        return proxy
+    proxy = dict(proxy)
+    proxy["server"] = config.domain
+    proxy["port"] = port + RELAY_PORT_OFFSET
+    return proxy
+
+
 def vless_to_clash(link: str) -> dict[str, Any] | None:
     parsed = urlparse(link)
     host_port = parse_link_netloc(parsed)
@@ -272,6 +293,8 @@ def trojan_to_clash(link: str) -> dict[str, Any] | None:
         "udp": True,
     }
     proxy.update(tls_common(query, host))
+    if "servername" in proxy:
+        proxy["sni"] = proxy.pop("servername")
     if network == "grpc":
         proxy.setdefault("alpn", ["h2"])
     transport = transport_options(query, network, host)
@@ -386,19 +409,12 @@ def convert_link(link: str) -> dict[str, Any] | None:
 
 def public_stable_proxy(proxy: dict[str, Any]) -> bool:
     proxy_type = proxy.get("type")
-    network = proxy.get("network", "tcp")
-    port = proxy.get("port")
-    if proxy.get("reality-opts"):
-        return False
-    if proxy_type in {"vless", "trojan"}:
-        if port != 443:
-            return False
-        return proxy.get("tls") is True and network in {"tcp", "ws"}
-    if proxy_type == "vmess":
-        if port != 443:
-            return False
-        return proxy.get("tls") is True and network in {"tcp", "ws"}
-    return False
+    return proxy_type in {"vless", "trojan", "vmess", "ss"}
+
+
+def legacy_marzban_proxy(proxy: dict[str, Any]) -> bool:
+    name = proxy.get("name")
+    return isinstance(name, str) and name.startswith("🚀 Marz ")
 
 
 def clean_rules_base_url(rules_base_url: str | None) -> str:
@@ -528,8 +544,12 @@ def build_clash_meta_yaml(
         if not proxy:
             continue
         proxy = normalize_relayed_tls_proxy(proxy)
+        if legacy_marzban_proxy(proxy):
+            continue
         if public_only and not public_stable_proxy(proxy):
             continue
+        if public_only:
+            proxy = relay_secondary_node_proxy(proxy, config)
         name = proxy.get("name")
         if not isinstance(name, str) or not name or name in seen:
             continue
@@ -616,7 +636,13 @@ class ClashHandler(AdapterHandler):
         token = match.group(1)
         try:
             _, upstream_headers, raw = fetch_upstream(self.marzban_url, token, {"Accept": "text/plain"})
-            body = build_clash_meta_yaml(raw, rules_base_url=self.rules_base_url, public_only=True).encode("utf-8")
+            config = LinkRayConfig(domain=self.server_domain) if self.server_domain else None
+            body = build_clash_meta_yaml(
+                raw,
+                config=config,
+                rules_base_url=self.rules_base_url,
+                public_only=True,
+            ).encode("utf-8")
         except HTTPError as exc:
             self.send_bytes(exc.code, dict(exc.headers.items()), exc.read() or b"upstream error\n")
             return
