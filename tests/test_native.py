@@ -1,6 +1,7 @@
 import base64
 import json
 import unittest
+from unittest.mock import patch
 
 from linkray.native import build_stable_native_subscription, decode_subscription_links
 
@@ -10,7 +11,7 @@ def b64(value: str) -> str:
 
 
 class NativeSubscriptionTests(unittest.TestCase):
-    def test_build_stable_native_subscription_filters_advanced_mobile_protocols(self):
+    def test_build_stable_native_subscription_filters_to_public_443_defaults(self):
         vmess_ws = {
             "ps": "vmess-ws",
             "add": "edge.example.com",
@@ -29,7 +30,8 @@ class NativeSubscriptionTests(unittest.TestCase):
         }
         links = "\n".join(
             [
-                "vless://11111111-1111-1111-1111-111111111111@edge.example.com:18080?security=tls&type=tcp#vless-tls",
+                "vless://11111111-1111-1111-1111-111111111111@edge.example.com:443?security=tls&type=tcp#vless-tls",
+                "vless://11111111-1111-1111-1111-111111111111@edge.example.com:18080?security=tls&type=tcp#vless-non443",
                 "vless://11111111-1111-1111-1111-111111111111@edge.example.com:18081?security=reality&type=tcp#vless-reality",
                 "vless://11111111-1111-1111-1111-111111111111@edge.example.com:18082?security=tls&type=grpc#vless-grpc",
                 "trojan://password@edge.example.com:18083?security=tls&type=tcp#trojan-tls",
@@ -44,13 +46,67 @@ class NativeSubscriptionTests(unittest.TestCase):
         decoded = "\n".join(decode_subscription_links(output))
 
         self.assertIn("vless-tls", decoded)
-        self.assertIn("trojan-tls", decoded)
-        self.assertIn(f"vmess://{b64(json.dumps(vmess_ws))}", decoded)
-        self.assertIn("#ss", decoded)
+        self.assertNotIn("vless-non443", decoded)
+        self.assertNotIn("trojan-tls", decoded)
+        self.assertNotIn(f"vmess://{b64(json.dumps(vmess_ws))}", decoded)
+        self.assertNotIn("#ss", decoded)
         self.assertNotIn("vless-reality", decoded)
         self.assertNotIn("vless-grpc", decoded)
         self.assertNotIn("trojan-grpc", decoded)
         self.assertNotIn("vmess-grpc", decoded)
+
+    def test_build_stable_native_subscription_can_keep_legacy_stable_links(self):
+        links = "\n".join(
+            [
+                "vless://11111111-1111-1111-1111-111111111111@edge.example.com:18080?security=tls&type=tcp#vless-tls",
+                "trojan://password@edge.example.com:18083?security=tls&type=tcp#trojan-tls",
+                "ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTpwYXNzd29yZA@edge.example.com:18085#ss",
+            ]
+        )
+
+        output = build_stable_native_subscription(base64.b64encode(links.encode()), public_only=False)
+        decoded = "\n".join(decode_subscription_links(output))
+
+        self.assertIn("vless-tls", decoded)
+        self.assertIn("trojan-tls", decoded)
+        self.assertIn("#ss", decoded)
+
+    def test_build_stable_native_subscription_can_resolve_vless_server_to_origin_ip(self):
+        links = "\n".join(
+            [
+                "vless://11111111-1111-1111-1111-111111111111@edge.example.com:443?security=tls&type=tcp&sni=edge.example.com&host=edge.example.com#vless-tls",
+            ]
+        )
+
+        with patch("linkray.native.public_ipv4_for_host", return_value="203.0.113.10"):
+            output = build_stable_native_subscription(base64.b64encode(links.encode()), resolve_public_hosts=True)
+
+        decoded = "\n".join(decode_subscription_links(output))
+        self.assertIn("@203.0.113.10:443", decoded)
+        self.assertIn("sni=edge.example.com", decoded)
+        self.assertIn("host=edge.example.com", decoded)
+
+    def test_build_stable_native_subscription_can_resolve_vmess_server_to_origin_ip(self):
+        vmess_ws = {
+            "ps": "vmess-ws",
+            "add": "edge.example.com",
+            "port": "443",
+            "id": "00000000-0000-0000-0000-000000000000",
+            "net": "ws",
+            "host": "edge.example.com",
+            "sni": "edge.example.com",
+            "tls": "tls",
+        }
+        links = f"vmess://{b64(json.dumps(vmess_ws))}"
+
+        with patch("linkray.native.public_ipv4_for_host", return_value="203.0.113.10"):
+            output = build_stable_native_subscription(base64.b64encode(links.encode()), resolve_public_hosts=True)
+
+        decoded_links = decode_subscription_links(output)
+        decoded_vmess = json.loads(base64.urlsafe_b64decode(decoded_links[0].removeprefix("vmess://") + "==").decode())
+        self.assertEqual(decoded_vmess["add"], "203.0.113.10")
+        self.assertEqual(decoded_vmess["host"], "edge.example.com")
+        self.assertEqual(decoded_vmess["sni"], "edge.example.com")
 
 
     def test_b64decode_text_handles_missing_padding(self):

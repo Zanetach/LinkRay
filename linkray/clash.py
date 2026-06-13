@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import json
 import re
+import socket
 from collections.abc import Mapping
 from http.server import ThreadingHTTPServer
 from pathlib import Path
@@ -21,6 +23,7 @@ from .snell_runtime import SnellUser
 
 TOKEN_RE = re.compile(r"^/sub/([^/]+)/clash-meta/?$")
 RELAY_PORT_OFFSET = 100
+FAKE_IP_NETWORK = ipaddress.ip_network("198.18.0.0/15")
 
 
 def yaml_scalar(value: Any) -> str:
@@ -81,18 +84,66 @@ def yaml_lines(value: Any, indent: int = 0) -> list[str]:
     return [f"{prefix}{yaml_scalar(value)}"]
 
 
+def is_ip_address(value: str) -> bool:
+    try:
+        ipaddress.ip_address(value)
+    except ValueError:
+        return False
+    return True
+
+
+def public_ipv4_for_host(host: str) -> str | None:
+    try:
+        infos = socket.getaddrinfo(host, None, socket.AF_INET, socket.SOCK_STREAM)
+    except OSError:
+        return None
+    for info in infos:
+        address = info[4][0]
+        try:
+            parsed = ipaddress.ip_address(address)
+        except ValueError:
+            continue
+        if parsed.version == 4 and parsed not in FAKE_IP_NETWORK:
+            return address
+    return None
+
+
+def proxy_server_domains(proxies: list[dict[str, Any]], config: LinkRayConfig | None = None) -> list[str]:
+    domains: list[str] = []
+    if config and config.domain and not is_ip_address(config.domain):
+        domains.append(config.domain)
+    for proxy in proxies:
+        server = proxy.get("server")
+        if isinstance(server, str) and server and not is_ip_address(server):
+            domains.append(server)
+    return sorted(set(domains))
+
+
+def proxy_server_hosts(domains: list[str]) -> dict[str, str]:
+    hosts: dict[str, str] = {}
+    for domain in domains:
+        address = public_ipv4_for_host(domain)
+        if address:
+            hosts[domain] = address
+    return hosts
+
+
 def proxy_name(parsed, host: str) -> str:
     return unquote(parsed.fragment) or host
 
 
 def tls_common(query: Mapping[str, list[str]], fallback_server_name: str) -> dict[str, Any]:
     server_name = first_query_value(query, "sni", "servername") or fallback_server_name
-    return {
+    common: dict[str, Any] = {
         "tls": True,
         "servername": server_name,
         "skip-cert-verify": first_query_value(query, "allowInsecure", "skip-cert-verify") in {"1", "true", "True"},
         "client-fingerprint": first_query_value(query, "fp", "fingerprint") or "chrome",
     }
+    alpn = first_query_value(query, "alpn")
+    if alpn:
+        common["alpn"] = [item.strip() for item in alpn.split(",") if item.strip()]
+    return common
 
 
 def transport_options(query: Mapping[str, list[str]], network: str, fallback_host: str) -> dict[str, Any] | None:
@@ -177,6 +228,8 @@ def vless_to_clash(link: str) -> dict[str, Any] | None:
         "udp": True,
     }
     proxy.update(tls_common(query, host))
+    if network == "grpc" and security == "tls":
+        proxy.setdefault("alpn", ["h2"])
     flow = first_query_value(query, "flow")
     if flow:
         proxy["flow"] = flow
@@ -210,6 +263,8 @@ def trojan_to_clash(link: str) -> dict[str, Any] | None:
         "udp": True,
     }
     proxy.update(tls_common(query, host))
+    if network == "grpc":
+        proxy.setdefault("alpn", ["h2"])
     transport = transport_options(query, network, host)
     if transport:
         proxy.update(transport)
@@ -245,6 +300,8 @@ def vmess_to_clash(link: str) -> dict[str, Any] | None:
         proxy["tls"] = True
         proxy["servername"] = str(data.get("sni") or data.get("host") or host)
         proxy["skip-cert-verify"] = False
+        if network == "grpc":
+            proxy["alpn"] = ["h2"]
     query_like = {
         "host": [str(data.get("host") or host)],
         "path": [str(data.get("path") or "/")],
@@ -316,6 +373,23 @@ def convert_link(link: str) -> dict[str, Any] | None:
     if link.startswith("ss://"):
         return shadowsocks_to_clash(link)
     return None
+
+
+def public_stable_proxy(proxy: dict[str, Any]) -> bool:
+    proxy_type = proxy.get("type")
+    network = proxy.get("network", "tcp")
+    port = proxy.get("port")
+    if proxy.get("reality-opts"):
+        return False
+    if proxy_type in {"vless", "trojan"}:
+        if port != 443:
+            return False
+        return proxy.get("tls") is True and network in {"tcp", "ws"}
+    if proxy_type == "vmess":
+        if port != 443:
+            return False
+        return proxy.get("tls") is True and network in {"tcp", "ws"}
+    return False
 
 
 def clean_rules_base_url(rules_base_url: str | None) -> str:
@@ -436,6 +510,7 @@ def build_clash_meta_yaml(
     snell_user: SnellUser | None = None,
     protocol_preferences: ProtocolPreferences | None = None,
     rules_base_url: str | None = None,
+    public_only: bool = False,
 ) -> str:
     proxies: list[dict[str, Any]] = []
     seen: set[str] = set()
@@ -444,6 +519,8 @@ def build_clash_meta_yaml(
         if not proxy:
             continue
         proxy = normalize_relayed_tls_proxy(proxy)
+        if public_only and not public_stable_proxy(proxy):
+            continue
         name = proxy.get("name")
         if not isinstance(name, str) or not name or name in seen:
             continue
@@ -453,6 +530,13 @@ def build_clash_meta_yaml(
     effective_rules = route_rules or load_route_rules()
     clean_base = clean_rules_base_url(rules_base_url)
     url_test_url = health_check_url_from_rules_base(clean_base) if clean_base else DEFAULT_URL_TEST_URL
+    server_domains = proxy_server_domains(proxies, config)
+    host_map = proxy_server_hosts(server_domains)
+    if public_only and host_map:
+        for proxy in proxies:
+            server = proxy.get("server")
+            if isinstance(server, str) and server in host_map:
+                proxy["server"] = host_map[server]
     data = {
         "mixed-port": 7890,
         "allow-lan": False,
@@ -467,7 +551,16 @@ def build_clash_meta_yaml(
             "listen": "127.0.0.1:1053",
             "ipv6": False,
             "enhanced-mode": "fake-ip",
-            "fake-ip-filter": ["*.lan", "*.local"],
+            "fake-ip-filter": [
+                "*.lan",
+                "*.local",
+                "*.localhost",
+                "localhost.ptlogin2.qq.com",
+                "dns.google",
+                "time.*.com",
+                "ntp.*.com",
+                *server_domains,
+            ],
             "default-nameserver": ["223.5.5.5", "119.29.29.29"],
             "nameserver": ["https://doh.pub/dns-query", "https://dns.alidns.com/dns-query"],
             "direct-nameserver": [
@@ -477,12 +570,15 @@ def build_clash_meta_yaml(
                 "119.29.29.29",
             ],
             "proxy-server-nameserver": ["223.5.5.5", "119.29.29.29"],
+            "nameserver-policy": {domain: "223.5.5.5" for domain in server_domains},
             "respect-rules": True,
         },
         "proxies": proxies,
         "proxy-groups": build_proxy_groups(names, url_test_url=url_test_url),
         "rules": build_rules(effective_rules, use_rule_sets=bool(clean_base)),
     }
+    if host_map:
+        data["hosts"] = host_map
     if clean_base:
         data["geox-url"] = metacubex_geox_url(clean_base)
         data["rule-providers"] = metacubex_rule_providers(clean_base)
@@ -508,7 +604,7 @@ class ClashHandler(AdapterHandler):
         token = match.group(1)
         try:
             _, upstream_headers, raw = fetch_upstream(self.marzban_url, token, {"Accept": "text/plain"})
-            body = build_clash_meta_yaml(raw, rules_base_url=self.rules_base_url).encode("utf-8")
+            body = build_clash_meta_yaml(raw, rules_base_url=self.rules_base_url, public_only=True).encode("utf-8")
         except HTTPError as exc:
             self.send_bytes(exc.code, dict(exc.headers.items()), exc.read() or b"upstream error\n")
             return

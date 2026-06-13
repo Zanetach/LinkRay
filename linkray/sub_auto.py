@@ -89,7 +89,7 @@ class SubAutoHandler(BaseHTTPRequestHandler):
         try:
             status, headers, body = fetch(url, request_headers(self.headers, extra))
             if suffix == "/native" and status == 200:
-                body = build_stable_native_subscription(body)
+                body = build_stable_native_subscription(body, resolve_public_hosts=True)
                 headers["Content-Type"] = "text/plain; charset=utf-8"
         except HTTPError as exc:
             self.send_bytes(exc.code, dict(exc.headers.items()), exc.read() or b"upstream error\n")

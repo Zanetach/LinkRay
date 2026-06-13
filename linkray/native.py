@@ -1,8 +1,13 @@
 from __future__ import annotations
 
 import base64
+import ipaddress
 import json
+import socket
 from urllib.parse import parse_qs, urlparse
+
+
+FAKE_IP_NETWORK = ipaddress.ip_network("198.18.0.0/15")
 
 
 def b64decode_text(value: str) -> str:
@@ -31,6 +36,78 @@ def first_query_value(query: dict[str, list[str]], *names: str) -> str:
     return ""
 
 
+def parsed_port(parsed) -> int | None:
+    try:
+        return parsed.port
+    except ValueError:
+        return None
+
+
+def is_ip_address(value: str) -> bool:
+    try:
+        ipaddress.ip_address(value)
+    except ValueError:
+        return False
+    return True
+
+
+def public_ipv4_for_host(host: str) -> str | None:
+    try:
+        infos = socket.getaddrinfo(host, None, socket.AF_INET, socket.SOCK_STREAM)
+    except OSError:
+        return None
+    for info in infos:
+        address = info[4][0]
+        try:
+            parsed = ipaddress.ip_address(address)
+        except ValueError:
+            continue
+        if parsed.version == 4 and parsed not in FAKE_IP_NETWORK:
+            return address
+    return None
+
+
+def rewrite_url_server_to_public_ip(link: str) -> str:
+    parsed = urlparse(link)
+    host = parsed.hostname
+    port = parsed_port(parsed)
+    if not host or not port or is_ip_address(host):
+        return link
+    address = public_ipv4_for_host(host)
+    if not address:
+        return link
+    if "@" not in parsed.netloc:
+        return link
+    userinfo, _server = parsed.netloc.rsplit("@", 1)
+    return parsed._replace(netloc=f"{userinfo}@{address}:{port}").geturl()
+
+
+def rewrite_vmess_server_to_public_ip(link: str) -> str:
+    try:
+        data = json.loads(b64decode_text(link.removeprefix("vmess://")))
+    except (ValueError, UnicodeDecodeError):
+        return link
+    host = data.get("add")
+    if not isinstance(host, str) or not host or is_ip_address(host):
+        return link
+    address = public_ipv4_for_host(host)
+    if not address:
+        return link
+    data["add"] = address
+    encoded = base64.urlsafe_b64encode(
+        json.dumps(data, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    ).decode("ascii").rstrip("=")
+    return f"vmess://{encoded}"
+
+
+def rewrite_server_to_public_ip(link: str) -> str:
+    if link.startswith(("vless://", "trojan://")):
+        return rewrite_url_server_to_public_ip(link)
+    if link.startswith("vmess://"):
+        return rewrite_vmess_server_to_public_ip(link)
+    return link
+
+
 def stable_vless(link: str) -> bool:
     parsed = urlparse(link)
     query = parse_qs(parsed.query)
@@ -41,11 +118,26 @@ def stable_vless(link: str) -> bool:
     return network in {"tcp", "ws"} and security in {"tls", ""}
 
 
+def public_stable_vless(link: str) -> bool:
+    parsed = urlparse(link)
+    query = parse_qs(parsed.query)
+    network = first_query_value(query, "type") or "tcp"
+    security = first_query_value(query, "security")
+    return parsed_port(parsed) == 443 and network in {"tcp", "ws"} and security == "tls"
+
+
 def stable_trojan(link: str) -> bool:
     parsed = urlparse(link)
     query = parse_qs(parsed.query)
     network = first_query_value(query, "type") or "tcp"
     return network in {"tcp", "ws"}
+
+
+def public_stable_trojan(link: str) -> bool:
+    parsed = urlparse(link)
+    query = parse_qs(parsed.query)
+    network = first_query_value(query, "type") or "tcp"
+    return parsed_port(parsed) == 443 and network in {"tcp", "ws"}
 
 
 def stable_vmess(link: str) -> bool:
@@ -54,6 +146,18 @@ def stable_vmess(link: str) -> bool:
     except (ValueError, UnicodeDecodeError):
         return False
     return (data.get("net") or "tcp") in {"tcp", "ws"}
+
+
+def public_stable_vmess(link: str) -> bool:
+    try:
+        data = json.loads(b64decode_text(link.removeprefix("vmess://")))
+    except (ValueError, UnicodeDecodeError):
+        return False
+    try:
+        port = int(data.get("port") or 0)
+    except (TypeError, ValueError):
+        return False
+    return port == 443 and data.get("tls") == "tls" and (data.get("net") or "tcp") in {"tcp", "ws"}
 
 
 def stable_native_link(link: str) -> bool:
@@ -68,12 +172,32 @@ def stable_native_link(link: str) -> bool:
     return False
 
 
-def build_stable_native_subscription(payload: bytes) -> bytes:
+def public_stable_native_link(link: str) -> bool:
+    if link.startswith("vless://"):
+        return public_stable_vless(link)
+    if link.startswith("trojan://"):
+        return public_stable_trojan(link)
+    if link.startswith("vmess://"):
+        return public_stable_vmess(link)
+    return False
+
+
+def build_stable_native_subscription(
+    payload: bytes,
+    *,
+    public_only: bool = True,
+    resolve_public_hosts: bool = False,
+) -> bytes:
     links: list[str] = []
     seen: set[str] = set()
     for link in decode_subscription_links(payload):
-        if not stable_native_link(link):
+        if public_only:
+            if not public_stable_native_link(link):
+                continue
+        elif not stable_native_link(link):
             continue
+        if resolve_public_hosts:
+            link = rewrite_server_to_public_ip(link)
         name = urlparse(link).fragment or link
         if name in seen:
             continue

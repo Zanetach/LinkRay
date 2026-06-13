@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+from dataclasses import replace
 from collections.abc import Mapping
 from http.server import ThreadingHTTPServer
 from pathlib import Path
@@ -11,7 +12,14 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 from ._http import PASS_HEADERS, AdapterHandler, fetch_subscription_username, fetch_upstream, first_query_value, parse_link_netloc
 from .config import LinkRayConfig
-from .native import b64decode_text, build_stable_native_subscription, decode_subscription_links
+from .native import (
+    b64decode_text,
+    build_stable_native_subscription,
+    decode_subscription_links,
+    public_ipv4_for_host,
+    public_stable_native_link,
+    rewrite_server_to_public_ip,
+)
 from .protocol_prefs import DEFAULT_PROTOCOL_PREFS_PATH, ProtocolPreferences, enabled_protocols_for_user, load_protocol_preferences
 from .rules import COMPACT_CN_DOMAIN_SUFFIXES, FOREIGN_DOMAIN_SUFFIXES, RouteRules, load_route_rules
 from .snell_runtime import DEFAULT_RUNTIME_DIR as SNELL_RUNTIME_DIR
@@ -235,11 +243,16 @@ def build_shadowrocket_conf(
     config: LinkRayConfig | None = None,
     snell_user: SnellUser | None = None,
     protocol_preferences: ProtocolPreferences | None = None,
+    public_only: bool = False,
 ) -> str:
     names: list[str] = []
     proxy_lines: list[str] = []
     seen: set[str] = set()
     for link in decode_subscription_links(subscription_payload):
+        if public_only and not public_stable_native_link(link):
+            continue
+        if public_only:
+            link = rewrite_server_to_public_ip(link)
         converted = convert_link(link)
         if not converted:
             continue
@@ -252,9 +265,14 @@ def build_shadowrocket_conf(
     if config and snell_user and "snell" in enabled_protocols_for_user(protocol_preferences, snell_user.name):
         name = f"{snell_user.name}-Snell"
         if name not in seen:
+            snell_config = config
+            if public_only:
+                address = public_ipv4_for_host(config.domain)
+                if address:
+                    snell_config = replace(config, domain=address)
             seen.add(name)
             names.append(name)
-            proxy_lines.append(snell_shadowrocket_line(config, snell_user))
+            proxy_lines.append(snell_shadowrocket_line(snell_config, snell_user))
 
     effective_rules = route_rules or load_route_rules()
     sections = [
@@ -278,7 +296,7 @@ def build_shadowrocket_conf(
 
 
 def build_shadowrocket_subscription(subscription_payload: bytes) -> bytes:
-    return build_stable_native_subscription(subscription_payload)
+    return build_stable_native_subscription(subscription_payload, resolve_public_hosts=True)
 
 
 class ShadowrocketHandler(AdapterHandler):
@@ -325,6 +343,7 @@ class ShadowrocketHandler(AdapterHandler):
                     config=config,
                     snell_user=snell_user,
                     protocol_preferences=protocol_preferences,
+                    public_only=True,
                 ).encode("utf-8")
         except HTTPError as exc:
             self.send_bytes(exc.code, dict(exc.headers.items()), exc.read() or b"upstream error\n")

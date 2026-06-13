@@ -1,6 +1,7 @@
 import base64
 import json
 import unittest
+from unittest.mock import patch
 
 from linkray.clash import build_clash_meta_yaml
 from linkray.config import LinkRayConfig
@@ -32,6 +33,10 @@ class ClashTests(unittest.TestCase):
         self.assertIn("rules:", text)
         self.assertIn("direct-nameserver:", text)
         self.assertIn("proxy-server-nameserver:", text)
+        self.assertIn("fake-ip-filter:", text)
+        self.assertIn("- ca.example.com", text)
+        self.assertIn("nameserver-policy:", text)
+        self.assertIn("ca.example.com: 223.5.5.5", text)
         self.assertIn("name: ca-VLESS_TLS_Vision", text)
         self.assertIn("type: vless", text)
         self.assertIn("flow: xtls-rprx-vision", text)
@@ -39,6 +44,8 @@ class ClashTests(unittest.TestCase):
         self.assertIn("name: ca-Trojan_gRPC_TLS", text)
         self.assertIn("network: grpc", text)
         self.assertIn("grpc-opts:", text)
+        self.assertIn("alpn:", text)
+        self.assertIn("- h2", text)
         self.assertIn("name: ca-VMess_WS_TLS", text)
         self.assertIn("ws-opts:", text)
         self.assertIn("name: 全球代理", text)
@@ -144,6 +151,83 @@ class ClashTests(unittest.TestCase):
 
         self.assertNotIn("ca-VMess_HTTPUpgrade_TLS", text)
         self.assertIn("name: ca-Trojan_TLS", text)
+
+    def test_build_clash_meta_yaml_public_only_filters_grpc_fallback_nodes(self):
+        payload = encoded_subscription(
+            "vless://11111111-1111-1111-1111-111111111111@ca.example.com:443?encryption=none&security=tls&fp=chrome&type=tcp&sni=ca.example.com&flow=xtls-rprx-vision#ca-VLESS_TLS_Vision",
+            "vless://11111111-1111-1111-1111-111111111111@ca.example.com:18087?encryption=none&security=tls&fp=chrome&type=grpc&sni=ca.example.com&serviceName=grpc#ca-VLESS_gRPC_TLS",
+            "trojan://secret@ca.example.com:18091?security=tls&type=grpc&sni=ca.example.com&serviceName=trojan-grpc#ca-Trojan_gRPC_TLS",
+            "trojan://secret@ca.example.com:18083?security=tls&type=tcp&sni=ca.example.com#ca-Trojan_TLS",
+        )
+
+        text = build_clash_meta_yaml(payload, public_only=True)
+
+        self.assertIn("name: ca-VLESS_TLS_Vision", text)
+        self.assertNotIn("name: ca-VLESS_gRPC_TLS", text)
+        self.assertNotIn("name: ca-Trojan_gRPC_TLS", text)
+        self.assertNotIn("network: grpc", text)
+        self.assertNotIn("name: ca-Trojan_TLS", text)
+
+    def test_build_clash_meta_yaml_pins_proxy_server_domains_to_public_hosts(self):
+        payload = encoded_subscription(
+            "trojan://secret@ca.example.com:8443?security=tls&type=tcp&sni=ca.example.com#ca-Trojan_TLS",
+            "trojan://secret@la.example.com:8443?security=tls&type=tcp&sni=la.example.com#la-Trojan_TLS",
+        )
+
+        def fake_getaddrinfo(host, *args, **kwargs):
+            addresses = {"ca.example.com": "107.172.216.169", "la.example.com": "69.63.198.100"}
+            return [(None, None, None, "", (addresses[host], 0))]
+
+        with patch("linkray.clash.socket.getaddrinfo", side_effect=fake_getaddrinfo):
+            text = build_clash_meta_yaml(payload, config=LinkRayConfig(domain="ca.example.com"))
+
+        self.assertIn("hosts:", text)
+        self.assertIn("ca.example.com: 107.172.216.169", text)
+        self.assertIn("la.example.com: 69.63.198.100", text)
+        self.assertIn("- ca.example.com", text)
+        self.assertIn("- la.example.com", text)
+        self.assertIn("ca.example.com: 223.5.5.5", text)
+        self.assertIn("la.example.com: 223.5.5.5", text)
+
+    def test_build_clash_meta_yaml_public_only_uses_origin_ip_as_proxy_server(self):
+        payload = encoded_subscription(
+            "vless://11111111-1111-1111-1111-111111111111@ca.example.com:443?encryption=none&security=tls&fp=chrome&type=tcp&sni=ca.example.com#ca-VLESS_TLS_Vision",
+            "vless://11111111-1111-1111-1111-111111111111@la.example.com:443?encryption=none&security=tls&fp=chrome&type=ws&sni=la.example.com&host=la.example.com&path=/vless-ws#la-VLESS_WS_TLS",
+        )
+
+        def fake_getaddrinfo(host, *args, **kwargs):
+            addresses = {"ca.example.com": "107.172.216.169", "la.example.com": "69.63.198.100"}
+            return [(None, None, None, "", (addresses[host], 0))]
+
+        with patch("linkray.clash.socket.getaddrinfo", side_effect=fake_getaddrinfo):
+            text = build_clash_meta_yaml(payload, config=LinkRayConfig(domain="ca.example.com"), public_only=True)
+
+        self.assertRegex(
+            text,
+            r"name: ca-VLESS_TLS_Vision\n\s+type: vless\n\s+server: 107\.172\.216\.169\n\s+port: 443\n\s+uuid:",
+        )
+        self.assertRegex(
+            text,
+            r"name: la-VLESS_WS_TLS\n\s+type: vless\n\s+server: 69\.63\.198\.100\n\s+port: 443\n\s+uuid:",
+        )
+        self.assertIn("servername: ca.example.com", text)
+        self.assertIn("servername: la.example.com", text)
+        self.assertIn("Host: la.example.com", text)
+
+    def test_build_clash_meta_yaml_ignores_fake_ip_host_resolution(self):
+        payload = encoded_subscription(
+            "trojan://secret@ca.example.com:8443?security=tls&type=tcp&sni=ca.example.com#ca-Trojan_TLS"
+        )
+
+        with patch(
+            "linkray.clash.socket.getaddrinfo",
+            return_value=[(None, None, None, "", ("198.18.0.31", 0))],
+        ):
+            text = build_clash_meta_yaml(payload, config=LinkRayConfig(domain="ca.example.com"))
+
+        self.assertNotIn("hosts:", text)
+        self.assertIn("- ca.example.com", text)
+        self.assertIn("ca.example.com: 223.5.5.5", text)
 
     def test_build_clash_meta_yaml_does_not_append_snell_v5_node(self):
         user = credential_for_token("subscription-token", "server-secret", name="cyclelink", port=40123)
