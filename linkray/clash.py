@@ -340,6 +340,7 @@ def metacubex_rule_providers(rules_base_url: str) -> dict[str, dict[str, Any]]:
             "url": f"{rules_base_url}/mihomo/geosite-cn.mrs",
             "path": "./ruleset/linkray-geosite-cn.mrs",
             "interval": 86400,
+            "proxy": "DIRECT",
         },
         "linkray-cn-ip": {
             "type": "http",
@@ -348,6 +349,7 @@ def metacubex_rule_providers(rules_base_url: str) -> dict[str, dict[str, Any]]:
             "url": f"{rules_base_url}/mihomo/geoip-cn.mrs",
             "path": "./ruleset/linkray-geoip-cn.mrs",
             "interval": 86400,
+            "proxy": "DIRECT",
         },
     }
 
@@ -356,9 +358,6 @@ DEFAULT_URL_TEST_URL = "https://cp.cloudflare.com/generate_204"
 
 
 def health_check_url_from_rules_base(rules_base_url: str) -> str:
-    base = rules_base_url.rstrip("/")
-    if base.endswith("/linkray/rules"):
-        return f"{base[: -len('/linkray/rules')]}/api/linkray/health"
     return DEFAULT_URL_TEST_URL
 
 
