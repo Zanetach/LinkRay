@@ -18,6 +18,7 @@ from .singbox_runtime import DEFAULT_RUNTIME_DIR, server_config
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_ROOT = Path(__file__).resolve().parent
 DASHBOARD_PATCH_JS = "index.linkray.js"
+DASHBOARD_LOGO_PNG = "linkray-logo.png"
 
 
 def first_existing_path(*paths: Path) -> Path:
@@ -243,6 +244,7 @@ def master_compose(config: LinkRayConfig) -> str:
             "      - /var/lib/marzban/linkray/jobs/linkray_singbox_usages.py:/code/app/jobs/linkray_singbox_usages.py:ro",
             "      - /var/lib/marzban/dashboard-patches/index.html:/code/app/dashboard/build/index.html:ro",
             f"      - /var/lib/marzban/dashboard-patches/{DASHBOARD_PATCH_JS}:/code/app/dashboard/build/statics/{DASHBOARD_PATCH_JS}:ro",
+            f"      - /var/lib/marzban/dashboard-patches/{DASHBOARD_LOGO_PNG}:/code/app/dashboard/build/statics/{DASHBOARD_LOGO_PNG}:ro",
             "      - /var/lib/marzban/dashboard-patches/index.original.js:/code/app/dashboard/build/statics/index.a1cce931.js:ro",
         ]
     )
@@ -305,6 +307,12 @@ def nginx_panel(config: LinkRayConfig) -> str:
     location = /statics/{DASHBOARD_PATCH_JS} {{
         alias /var/lib/marzban/dashboard-patches/{DASHBOARD_PATCH_JS};
         default_type application/javascript;
+        add_header Cache-Control "no-store" always;
+    }}
+
+    location = /statics/{DASHBOARD_LOGO_PNG} {{
+        alias /var/lib/marzban/dashboard-patches/{DASHBOARD_LOGO_PNG};
+        default_type image/png;
         add_header Cache-Control "no-store" always;
     }}
 
@@ -968,6 +976,7 @@ def render_master(
         ),
         copy_file(PATCH_ROOT / "marzban-dashboard/current/index.html", output / "var/lib/marzban/dashboard-patches/index.html"),
         copy_file(PATCH_ROOT / "marzban-dashboard/current/index.linkray.js", output / f"var/lib/marzban/dashboard-patches/{DASHBOARD_PATCH_JS}"),
+        copy_file(PATCH_ROOT / f"marzban-dashboard/current/{DASHBOARD_LOGO_PNG}", output / f"var/lib/marzban/dashboard-patches/{DASHBOARD_LOGO_PNG}"),
         copy_file(PATCH_ROOT / "marzban-dashboard/current/index.original.js", output / "var/lib/marzban/dashboard-patches/index.original.js"),
     ]
     if config.xray_runtime_mode == "linkray":

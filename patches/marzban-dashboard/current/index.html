@@ -135,9 +135,9 @@
             }
             .linkray-login-logo {
               display: block;
-              height: 48px;
-              overflow: visible;
-              width: 48px;
+              height: 56px;
+              object-fit: contain;
+              width: 56px;
             }
             .linkray-hidden-dashboard-donate {
               display: none !important;
@@ -380,29 +380,6 @@
               });
           }
 
-          function linkrayLoginLogoSvg() {
-            return `
-              <svg class="linkray-login-logo" viewBox="0 0 64 64" role="img" aria-label="LinkRay logo" xmlns="http://www.w3.org/2000/svg">
-                <defs>
-                  <linearGradient id="linkray-logo-bg" x1="9" y1="55" x2="55" y2="9" gradientUnits="userSpaceOnUse">
-                    <stop offset="0" stop-color="#0EA5E9"/>
-                    <stop offset="0.52" stop-color="#3B82F6"/>
-                    <stop offset="1" stop-color="#22D3EE"/>
-                  </linearGradient>
-                  <linearGradient id="linkray-logo-ray" x1="18" y1="46" x2="48" y2="16" gradientUnits="userSpaceOnUse">
-                    <stop offset="0" stop-color="#E0F2FE"/>
-                    <stop offset="1" stop-color="#FFFFFF"/>
-                  </linearGradient>
-                </defs>
-                <rect x="6" y="6" width="52" height="52" rx="16" fill="url(#linkray-logo-bg)"/>
-                <path d="M17 42.5L28.5 31L23.5 26L47 17L38 40.5L33 35.5L21.5 47" fill="none" stroke="url(#linkray-logo-ray)" stroke-width="4.8" stroke-linecap="round" stroke-linejoin="round"/>
-                <circle cx="17" cy="42.5" r="4" fill="#FFFFFF"/>
-                <circle cx="47" cy="17" r="4" fill="#FFFFFF"/>
-                <circle cx="32" cy="33" r="3.25" fill="#BAE6FD" stroke="#FFFFFF" stroke-width="2"/>
-              </svg>
-            `.trim();
-          }
-
           function replaceLoginLogo() {
             if (document.querySelector(".linkray-login-logo")) return;
             const currentLogo = Array.from(document.querySelectorAll("svg"))
@@ -412,9 +389,12 @@
                 return viewBox === "0 0 747 747" && box.width >= 40 && box.width <= 72 && box.height >= 40 && box.height <= 72;
               });
             if (!currentLogo) return;
-            const wrapper = document.createElement("div");
-            wrapper.innerHTML = linkrayLoginLogoSvg();
-            currentLogo.replaceWith(wrapper.firstElementChild);
+            const image = document.createElement("img");
+            image.className = "linkray-login-logo";
+            image.src = "/statics/linkray-logo.png";
+            image.alt = "LinkRay logo";
+            image.decoding = "async";
+            currentLogo.replaceWith(image);
           }
 
           function parseCreateUserBody(body) {

@@ -81,6 +81,7 @@ class PackageTests(unittest.TestCase):
                 "examples/master.example.json",
                 "templates/marzban/clash/default.yml",
                 "patches/marzban-dashboard/current/index.linkray.js",
+                "patches/marzban-dashboard/current/linkray-logo.png",
                 "patches/marzban-dashboard/source/linkray-dashboard.patch",
                 "linkray/assets/marzban-node-host/main.py",
                 "linkray/assets/marzban-node-host/xray.py",
@@ -92,6 +93,7 @@ class PackageTests(unittest.TestCase):
             for item in [
                 "linkray/assets/templates/marzban/clash/default.yml",
                 "linkray/assets/patches/marzban-dashboard/current/index.linkray.js",
+                "linkray/assets/patches/marzban-dashboard/current/linkray-logo.png",
                 "linkray/assets/source-patches/marzban-dashboard/linkray-dashboard.patch",
                 "linkray/assets/patches/marzban-subscription/current/clash.py",
                 "linkray/assets/marzban-node-host/main.py",

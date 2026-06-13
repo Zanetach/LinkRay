@@ -163,6 +163,7 @@ class RenderTests(unittest.TestCase):
             self.assertIn("var/lib/marzban/templates/clash/default.yml", relative)
             self.assertIn("var/lib/marzban/templates/subscription/index.html", relative)
             self.assertIn("var/lib/marzban/dashboard-patches/index.linkray.js", relative)
+            self.assertIn("var/lib/marzban/dashboard-patches/linkray-logo.png", relative)
             self.assertEqual(validate_rendered(output), [])
 
             xray = json.loads((output / "var/lib/marzban/xray_config.json").read_text())
@@ -198,6 +199,7 @@ class RenderTests(unittest.TestCase):
                 compose,
             )
             self.assertIn("index.linkray.js", compose)
+            self.assertIn("linkray-logo.png:/code/app/dashboard/build/statics/linkray-logo.png:ro", compose)
             env = (output / "opt/marzban/.env").read_text()
             self.assertIn("LINKRAY_SINGBOX_STATS_API = 127.0.0.1:61996", env)
             self.assertIn("LINKRAY_SINGBOX_SIDECAR_URL = http://127.0.0.1:61995", env)
@@ -214,6 +216,9 @@ class RenderTests(unittest.TestCase):
             self.assertIn("location ~ ^/sub/[^/]+/sing-box/?$", nginx)
             self.assertIn("proxy_pass http://127.0.0.1:61995", nginx)
             self.assertIn("location = /statics/index.linkray.js", nginx)
+            self.assertIn("location = /statics/linkray-logo.png", nginx)
+            self.assertIn("alias /var/lib/marzban/dashboard-patches/linkray-logo.png;", nginx)
+            self.assertIn("default_type image/png;", nginx)
             self.assertIn('add_header Cache-Control "no-store" always;', nginx)
             self.assertRegex(
                 nginx,
@@ -429,6 +434,8 @@ class RenderTests(unittest.TestCase):
                 self.assertIn("function replaceLoginLogo()", html)
                 self.assertIn("replaceLoginLogo();", html)
                 self.assertIn("linkray-login-logo", html)
+                self.assertIn('image.src = "/statics/linkray-logo.png"', html)
+                self.assertIn('image.alt = "LinkRay logo"', html)
                 self.assertIn("VLESS XHTTP REALITY", html)
                 self.assertIn("VMess HTTPUpgrade TLS", html)
                 self.assertIn("Trojan GRPC TLS", html)
