@@ -68,6 +68,120 @@ class SingBoxTests(unittest.TestCase):
         self.assertNotIn("download_detour", output)
         self.assertNotIn("raw.githubusercontent.com", output)
 
+    def test_build_singbox_json_public_only_filters_reset_prone_non_443_nodes(self):
+        from linkray.singbox import build_singbox_json
+
+        vmess_ws = {
+            "ps": "edge-a-VMess_WS_TLS",
+            "add": "edge-a.example.com",
+            "port": "443",
+            "id": "00000000-0000-0000-0000-000000000000",
+            "aid": "0",
+            "net": "ws",
+            "path": "/vmess-ws",
+            "host": "edge-a.example.com",
+            "tls": "tls",
+            "scy": "auto",
+        }
+        vmess_httpupgrade = {
+            "ps": "edge-a-VMess_HTTPUpgrade_TLS",
+            "add": "edge-a.example.com",
+            "port": "443",
+            "id": "00000000-0000-0000-0000-000000000000",
+            "aid": "0",
+            "net": "httpupgrade",
+            "path": "/vmess-httpupgrade",
+            "host": "edge-a.example.com",
+            "tls": "tls",
+            "scy": "auto",
+        }
+        vmess_tcp = {
+            "ps": "edge-a-VMess_TLS",
+            "add": "edge-a.example.com",
+            "port": "18084",
+            "id": "00000000-0000-0000-0000-000000000000",
+            "aid": "0",
+            "net": "tcp",
+            "tls": "tls",
+            "scy": "auto",
+        }
+        links = "\n".join(
+            [
+                "vless://11111111-1111-1111-1111-111111111111@edge-a.example.com:443?security=tls&type=tcp&sni=edge-a.example.com#edge-a-VLESS_TLS_Vision",
+                "vless://11111111-1111-1111-1111-111111111111@edge-a.example.com:18081?security=reality&type=tcp&sni=www.microsoft.com&pbk=public-key&sid=abcd#edge-a-VLESS_Reality_Vision",
+                "vless://11111111-1111-1111-1111-111111111111@edge-a.example.com:18087?security=tls&type=grpc&sni=edge-a.example.com&serviceName=grpc#edge-a-VLESS_gRPC_TLS",
+                "trojan://password@edge-a.example.com:18083?security=tls&type=tcp&sni=edge-a.example.com#edge-a-Trojan_TLS",
+                "ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTpwYXNzd29yZA@edge-a.example.com:18085#edge-a-Shadowsocks",
+                f"vmess://{b64(json.dumps(vmess_ws))}",
+                f"vmess://{b64(json.dumps(vmess_httpupgrade))}",
+                f"vmess://{b64(json.dumps(vmess_tcp))}",
+            ]
+        )
+
+        data = json.loads(build_singbox_json(base64.b64encode(links.encode()), public_only=True))
+        outbounds = {item["tag"]: item for item in data["outbounds"]}
+
+        self.assertIn("edge-a-VLESS_TLS_Vision", outbounds)
+        self.assertIn("edge-a-VMess_WS_TLS", outbounds)
+        self.assertIn("edge-a-VMess_HTTPUpgrade_TLS", outbounds)
+        self.assertNotIn("edge-a-VLESS_Reality_Vision", outbounds)
+        self.assertNotIn("edge-a-VLESS_gRPC_TLS", outbounds)
+        self.assertNotIn("edge-a-Trojan_TLS", outbounds)
+        self.assertNotIn("edge-a-Shadowsocks", outbounds)
+        self.assertNotIn("edge-a-VMess_TLS", outbounds)
+
+    def test_build_singbox_json_public_only_resolves_server_to_origin_ip(self):
+        from unittest.mock import patch
+
+        from linkray.singbox import build_singbox_json
+
+        link = (
+            "vless://11111111-1111-1111-1111-111111111111@edge-a.example.com:443"
+            "?security=tls&type=tcp&sni=edge-a.example.com#edge-a-VLESS_TLS_Vision"
+        )
+
+        def fake_getaddrinfo(host, *args, **kwargs):
+            self.assertEqual(host, "edge-a.example.com")
+            return [(None, None, None, "", ("203.0.113.10", 0))]
+
+        with patch("linkray.singbox.socket.getaddrinfo", side_effect=fake_getaddrinfo):
+            data = json.loads(build_singbox_json(base64.b64encode(link.encode()), public_only=True))
+
+        proxy = next(item for item in data["outbounds"] if item.get("tag") == "edge-a-VLESS_TLS_Vision")
+        self.assertEqual(proxy["server"], "203.0.113.10")
+        self.assertEqual(proxy["tls"]["server_name"], "edge-a.example.com")
+
+    def test_build_singbox_json_public_only_ignores_fake_ip_resolution(self):
+        from unittest.mock import patch
+
+        from linkray.singbox import build_singbox_json
+
+        link = (
+            "vless://11111111-1111-1111-1111-111111111111@edge-a.example.com:443"
+            "?security=tls&type=tcp&sni=edge-a.example.com#edge-a-VLESS_TLS_Vision"
+        )
+
+        with patch(
+            "linkray.singbox.socket.getaddrinfo",
+            return_value=[(None, None, None, "", ("198.18.0.31", 0))],
+        ):
+            data = json.loads(build_singbox_json(base64.b64encode(link.encode()), public_only=True))
+
+        proxy = next(item for item in data["outbounds"] if item.get("tag") == "edge-a-VLESS_TLS_Vision")
+        self.assertEqual(proxy["server"], "edge-a.example.com")
+
+    def test_build_singbox_json_public_only_omits_auto_detect_interface(self):
+        from linkray.singbox import build_singbox_json
+
+        link = (
+            "vless://11111111-1111-1111-1111-111111111111@edge-a.example.com:443"
+            "?security=tls&type=tcp&sni=edge-a.example.com#edge-a-VLESS_TLS_Vision"
+        )
+
+        data = json.loads(build_singbox_json(base64.b64encode(link.encode()), public_only=True))
+
+        self.assertNotIn("auto_detect_interface", data["route"])
+
     def test_build_singbox_json_uses_local_metacubex_rule_sets(self):
         from linkray.singbox import build_singbox_json
 
@@ -155,6 +269,21 @@ class SingBoxTests(unittest.TestCase):
         self.assertIsNotNone(reality["public_key"])
         self.assertIsNotNone(reality["short_id"])
 
+    def test_singbox_preserves_grpc_tls_alpn(self):
+        from linkray.singbox import build_singbox_json
+
+        links = "\n".join(
+            [
+                "vless://11111111-1111-1111-1111-111111111111@edge-a.example.com:443?security=tls&type=grpc&sni=edge-a.example.com&serviceName=grpc#edge-a-VLESS_gRPC_TLS",
+                "trojan://password@edge-a.example.com:443?security=tls&type=grpc&sni=edge-a.example.com&serviceName=trojan-grpc#edge-a-Trojan_gRPC_TLS",
+            ]
+        )
+        data = json.loads(build_singbox_json(base64.b64encode(links.encode())))
+        outbounds = {item["tag"]: item for item in data["outbounds"]}
+
+        self.assertEqual(outbounds["edge-a-VLESS_gRPC_TLS"]["tls"]["alpn"], ["h2"])
+        self.assertEqual(outbounds["edge-a-Trojan_gRPC_TLS"]["tls"]["alpn"], ["h2"])
+
     def test_build_singbox_json_can_append_linkray_advanced_outbounds(self):
         from linkray.config import LinkRayConfig
         from linkray.protocol_prefs import ProtocolPreferences
@@ -191,6 +320,62 @@ class SingBoxTests(unittest.TestCase):
         self.assertIn("TUIC", filtered_outbounds)
         self.assertNotIn("AnyTLS", filtered_outbounds)
 
+    def test_build_singbox_json_public_only_keeps_linkray_advanced_outbounds(self):
+        from linkray.config import LinkRayConfig
+        from linkray.protocol_prefs import ProtocolPreferences
+        from linkray.singbox import build_singbox_json
+        from linkray.singbox_runtime import credential_for_token
+
+        user = credential_for_token("token-a", "secret-a", name="sample-user")
+        data = json.loads(
+            build_singbox_json(
+                base64.b64encode(b""),
+                config=LinkRayConfig(domain="edge-a.example.com"),
+                advanced_user=user,
+                protocol_preferences=ProtocolPreferences(users={"sample-user": {"hysteria2", "tuic", "anytls"}}),
+                public_only=True,
+            )
+        )
+        outbounds = {item["tag"]: item for item in data["outbounds"]}
+
+        self.assertIn("Hysteria2", outbounds)
+        self.assertIn("TUIC", outbounds)
+        self.assertIn("AnyTLS", outbounds)
+        self.assertEqual(outbounds["Hysteria2"]["server_port"], 443)
+        self.assertEqual(outbounds["TUIC"]["server_port"], 8443)
+        self.assertEqual(outbounds["AnyTLS"]["server_port"], 8444)
+        self.assertNotIn("auto_detect_interface", data["route"])
+        self.assertIn("TUIC", outbounds["全球代理"]["outbounds"])
+
+    def test_build_singbox_json_can_append_multiple_linkray_advanced_domains(self):
+        from linkray.config import LinkRayConfig
+        from linkray.singbox import build_singbox_json
+        from linkray.singbox_runtime import credential_for_token
+
+        user = credential_for_token("token-a", "secret-a", name="sample-user")
+        data = json.loads(
+            build_singbox_json(
+                base64.b64encode(b""),
+                config=LinkRayConfig(domain="edge-a.example.com"),
+                advanced_configs=[
+                    LinkRayConfig(domain="edge-a.example.com"),
+                    LinkRayConfig(domain="edge-b.example.com"),
+                ],
+                advanced_user=user,
+                public_only=True,
+            )
+        )
+        outbounds = {item["tag"]: item for item in data["outbounds"]}
+
+        self.assertEqual(outbounds["edge-a-Hysteria2"]["server_port"], 443)
+        self.assertEqual(outbounds["edge-a-TUIC"]["server_port"], 8443)
+        self.assertEqual(outbounds["edge-a-AnyTLS"]["server_port"], 8444)
+        self.assertEqual(outbounds["edge-b-Hysteria2"]["server_port"], 443)
+        self.assertEqual(outbounds["edge-b-TUIC"]["server_port"], 8443)
+        self.assertEqual(outbounds["edge-b-AnyTLS"]["server_port"], 8444)
+        self.assertIn("edge-a-Hysteria2", outbounds["全球代理"]["outbounds"])
+        self.assertIn("edge-b-Hysteria2", outbounds["全球代理"]["outbounds"])
+
     def test_singbox_sidecar_reconcile_endpoint_prunes_runtime_users(self):
         from linkray.config import LinkRayConfig
         from linkray.singbox import make_singbox_server
@@ -207,6 +392,7 @@ class SingBoxTests(unittest.TestCase):
                 "http://127.0.0.1:1",
                 server_domain="edge-a.example.com",
                 runtime_dir=runtime_dir,
+                sync_command=f"touch {Path(tmp) / 'synced'}",
             )
             thread = threading.Thread(target=server.serve_forever, daemon=True)
             thread.start()
@@ -224,6 +410,7 @@ class SingBoxTests(unittest.TestCase):
                 self.assertEqual(payload["remaining"], 1)
                 self.assertTrue(payload["changed"])
                 self.assertEqual([user.name for user in load_users(runtime_dir)], ["active-user"])
+                self.assertTrue((Path(tmp) / "synced").exists())
             finally:
                 server.shutdown()
                 server.server_close()

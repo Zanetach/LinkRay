@@ -24,16 +24,16 @@ The production goal is explicit:
 
 ## Latest Release
 
-Current release: [LinkRay v0.1.1](https://github.com/Zanetach/LinkRay/releases/tag/v0.1.1)
+Current release: [LinkRay v0.2.0](https://github.com/Zanetach/LinkRay/releases/tag/v0.2.0)
 
 Release artifacts:
 
 ```text
-linkray-0.1.1.tar.gz
-linkray-0.1.1-py3-none-any.whl
+linkray-0.2.0.tar.gz
+linkray-0.2.0-py3-none-any.whl
 ```
 
-v0.1.1 adds production network acceleration to the deployment contract. Fresh master and node bootstraps, plus rendered deployment scripts, now install and apply BBR/fq tuning automatically.
+v0.2.0 is the first stable deployment release. A fresh environment can be brought to a usable LinkRay service with the release tarball, `linkray bootstrap master --apply`, and, for extra servers, `linkray bootstrap node --apply`. The release includes LinkRay branding, the dashboard subscription dialog, Node Info, Xray-core host runtimes, sing-box advanced runtime, Snell runtime, local MetaCubeX rule assets, traffic sidecars, and BBR/fq network acceleration.
 
 ## Architecture
 
@@ -135,6 +135,21 @@ Advanced LinkRay runtimes:
 
 Clash/Mihomo output deliberately excludes Snell v5 because common Mihomo cores reject `version: 5`. Use the `/shadowrocket-conf` full configuration path for Snell-capable Shadowrocket imports.
 
+### Client Subscription Matrix
+
+LinkRay separates server protocol inventory from client-compatible subscription output. A two-server deployment has 32 open server entries in Node Info: 12 Xray-core entries, 3 sing-box entries, and 1 Snell entry per server. Client subscriptions intentionally expose only the entries that the target client can import reliably.
+
+| Client route | Stable output shape |
+|---|---|
+| `/sub/<token>` | Automatic client detection; falls back to native/base output |
+| `/sub/<token>/clash-meta` | Xray-core Clash/Mihomo YAML; no Snell v5 |
+| `/sub/<token>/egern` | Egern-compatible Xray subset, including Reality where Egern supports it |
+| `/sub/<token>/shadowrocket` | Shadowrocket node subscription for ordinary imports |
+| `/sub/<token>/shadowrocket-conf` | Full Shadowrocket config with routing rules and Snell support |
+| `/sub/<token>/sing-box` | sing-box JSON with Hysteria2, TUIC, AnyTLS, and supported Xray outbounds |
+
+This is why a client may show fewer nodes than the Node Info panel. The dashboard reports server-side port availability; the subscription route reports the client-safe subset.
+
 Check the generated capability matrix:
 
 ```bash
@@ -164,6 +179,10 @@ The dashboard link dialog is intentionally client-oriented:
 - sing-box: use for sing-box clients and LinkRay advanced sing-box outbounds.
 - Shadowrocket: use `/shadowrocket` for normal node subscriptions; use `/shadowrocket-conf` only when importing a full configuration.
 - Native/Base subscription: use for v2rayN/v2rayNG and generic import paths.
+
+Clash/Mihomo subscriptions protect proxy server domains from `fake-ip` DNS
+pollution by adding those domains to `fake-ip-filter`, `nameserver-policy`, and,
+when resolvable on the server, top-level `hosts`.
 
 ## Rule Assets
 
@@ -247,9 +266,9 @@ tc qdisc show dev "$(ip route show default | sed -n 's/.* dev \([^ ]*\).*/\1/p' 
 From a release tarball:
 
 ```bash
-curl -L https://github.com/Zanetach/LinkRay/archive/refs/tags/v0.1.1.tar.gz -o linkray-v0.1.1.tar.gz
-tar -xzf linkray-v0.1.1.tar.gz
-cd LinkRay-0.1.1
+curl -L https://github.com/Zanetach/LinkRay/releases/download/v0.2.0/linkray-0.2.0.tar.gz -o linkray-0.2.0.tar.gz
+tar -xzf linkray-0.2.0.tar.gz
+cd linkray-0.2.0
 sudo ./install.sh
 ```
 
@@ -283,6 +302,33 @@ scripts/build-release.sh
 The release script creates `dist/*.tar.gz` and `dist/*.whl`, installs the wheel into a temporary virtualenv, and smoke-tests `linkray --help`.
 
 ## Fresh Master Bootstrap
+
+For a new master server, the shortest usable path is:
+
+```bash
+curl -L https://github.com/Zanetach/LinkRay/releases/download/v0.2.0/linkray-0.2.0.tar.gz -o linkray-0.2.0.tar.gz
+tar -xzf linkray-0.2.0.tar.gz
+cd linkray-0.2.0
+sudo ./install.sh
+
+export CF_Token='YOUR_CLOUDFLARE_DNS_API_TOKEN'
+sudo -E linkray bootstrap master \
+  --domain edge-a.example.com \
+  --node edge-a=edge-a.example.com \
+  --node edge-b=edge-b.example.com \
+  --admin-username admin \
+  --admin-password 'CHANGE_THIS_PASSWORD' \
+  --issue-cert \
+  --apply
+```
+
+After it finishes, open:
+
+```text
+https://edge-a.example.com:9443/dashboard/
+```
+
+The master bootstrap installs system packages, Docker for the panel only, host-native Xray-core, sing-box, Snell, Nginx, systemd sidecars, local rule assets, certificates when `--issue-cert` is set, network acceleration, and `linkray doctor` verification.
 
 Run a dry-run first:
 
@@ -410,9 +456,14 @@ Default per-node public runtime ports:
 
 | Range | Runtime |
 |---|---|
-| `18080-18091` | Xray-core protocol inbounds |
-| `19080-19082` | sing-box Hysteria2, TUIC, AnyTLS |
+| `443` | Primary Xray VLESS TCP TLS inbound for maximum client/network compatibility |
+| `18081-18091` | Additional Xray-core protocol inbounds |
+| `443/udp`, `8443/udp`, `8444/tcp` | sing-box Hysteria2, TUIC, AnyTLS |
 | `19180` | Snell |
+
+Multi-node subscriptions point each node at its own public domain and runtime
+ports. The master hosts the panel and subscription adapters; secondary nodes do
+not need Docker or the panel container.
 
 Override Xray inbound ports:
 
@@ -430,7 +481,7 @@ Override advanced runtime ports:
 ```bash
 linkray render master \
   --domain edge-a.example.com \
-  --singbox-inbound hysteria2=29080 \
+  --singbox-inbound hysteria2=443 \
   --snell-inbound snell=29180 \
   --output /tmp/linkray-master
 ```

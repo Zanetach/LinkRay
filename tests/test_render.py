@@ -29,15 +29,27 @@ class RenderTests(unittest.TestCase):
 
         inbounds = data["inbounds"]
         self.assertEqual(len(inbounds), 12)
-        self.assertEqual({item["port"] for item in inbounds}, set(DEFAULT_PORTS.values()))
         self.assertEqual(
             {item["protocol"] for item in inbounds},
             {"vless", "trojan", "vmess", "shadowsocks"},
         )
         by_tag = {item["tag"]: item for item in inbounds}
+        self.assertEqual(by_tag["VLESS TCP TLS"]["port"], 443)
+        self.assertIn("fallbacks", by_tag["VLESS TCP TLS"]["settings"])
+        self.assertEqual(by_tag["VLESS TCP TLS"]["streamSettings"]["tlsSettings"]["alpn"], ["h2", "http/1.1"])
+        self.assertIn(
+            {"path": "/vless-ws", "dest": f"127.0.0.1:{DEFAULT_PORTS['vless_ws_tls']}"},
+            by_tag["VLESS TCP TLS"]["settings"]["fallbacks"],
+        )
+        self.assertNotIn("grpc", json.dumps(by_tag["VLESS TCP TLS"]["settings"]["fallbacks"]))
         self.assertEqual(by_tag["VLESS WS TLS"]["streamSettings"]["network"], "ws")
+        self.assertEqual(by_tag["VLESS WS TLS"]["listen"], "127.0.0.1")
+        self.assertEqual(by_tag["VLESS WS TLS"]["streamSettings"]["security"], "none")
         self.assertNotIn("headers", by_tag["VLESS WS TLS"]["streamSettings"]["wsSettings"])
         self.assertEqual(by_tag["VLESS GRPC TLS"]["streamSettings"]["network"], "grpc")
+        self.assertEqual(by_tag["VLESS GRPC TLS"]["listen"], "0.0.0.0")
+        self.assertEqual(by_tag["VLESS GRPC TLS"]["streamSettings"]["security"], "tls")
+        self.assertEqual(by_tag["VLESS GRPC TLS"]["streamSettings"]["tlsSettings"]["alpn"], ["h2", "http/1.1"])
         self.assertEqual(by_tag["VLESS XHTTP REALITY"]["streamSettings"]["network"], "xhttp")
         self.assertNotIn("host", by_tag["VLESS XHTTP REALITY"]["streamSettings"]["xhttpSettings"])
         self.assertEqual(
@@ -49,8 +61,13 @@ class RenderTests(unittest.TestCase):
             ["www.microsoft.com"],
         )
         self.assertEqual(by_tag["VMess HTTPUpgrade TLS"]["streamSettings"]["network"], "httpupgrade")
+        self.assertEqual(by_tag["VMess HTTPUpgrade TLS"]["listen"], "127.0.0.1")
+        self.assertEqual(by_tag["VMess HTTPUpgrade TLS"]["streamSettings"]["security"], "none")
         self.assertNotIn("host", by_tag["VMess HTTPUpgrade TLS"]["streamSettings"]["httpupgradeSettings"])
         self.assertEqual(by_tag["Trojan GRPC TLS"]["streamSettings"]["network"], "grpc")
+        self.assertEqual(by_tag["Trojan GRPC TLS"]["listen"], "0.0.0.0")
+        self.assertEqual(by_tag["Trojan GRPC TLS"]["streamSettings"]["security"], "tls")
+        self.assertEqual(by_tag["Trojan GRPC TLS"]["streamSettings"]["tlsSettings"]["alpn"], ["h2", "http/1.1"])
 
     def test_custom_inbound_ports_apply_to_xray_hosts_and_api_service(self):
         config = LinkRayConfig(
@@ -66,7 +83,8 @@ class RenderTests(unittest.TestCase):
 
         rows = host_rows(config, [NodeHost("edge-a", "edge-a.example.com")])
         self.assertIn(28080, [row[2] for row in rows])
-        self.assertIn(28091, [row[2] for row in rows])
+        trojan_grpc_row = next(row for row in rows if row[0] == "edge-a-Trojan_gRPC_TLS")
+        self.assertEqual(trojan_grpc_row[2], 28091)
 
         with tempfile.TemporaryDirectory() as tmp:
             output = Path(tmp)
@@ -100,7 +118,7 @@ class RenderTests(unittest.TestCase):
     def test_render_master_rejects_relay_port_conflicts(self):
         config = LinkRayConfig(
             domain="edge-a.example.com",
-            inbound_ports=parse_inbound_ports(["trojan_tls=17980"]),
+            inbound_ports=parse_inbound_ports(["vless_reality=17982"]),
         )
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -200,6 +218,9 @@ class RenderTests(unittest.TestCase):
             )
             self.assertIn("index.linkray.js", compose)
             self.assertIn("linkray-logo.png:/code/app/dashboard/build/statics/linkray-logo.png:ro", compose)
+            xray_core_patch = (output / "var/lib/marzban/linkray/patches/0_xray_core.py").read_text()
+            self.assertIn("Skipping Marzban nodes Xray core", xray_core_patch)
+            self.assertIn("if LINKRAY_EXTERNAL_XRAY:\n        return", xray_core_patch)
             env = (output / "opt/marzban/.env").read_text()
             self.assertIn("LINKRAY_SINGBOX_STATS_API = 127.0.0.1:61996", env)
             self.assertIn("LINKRAY_SINGBOX_SIDECAR_URL = http://127.0.0.1:61995", env)
@@ -254,6 +275,7 @@ class RenderTests(unittest.TestCase):
             self.assertIn("ExecStart=/usr/local/bin/linkray sing-box --listen 127.0.0.1 --port 61995", singbox_service)
             self.assertIn("--runtime-dir /var/lib/marzban/linkray/singbox", singbox_service)
             self.assertIn("--server-domain edge-a.example.com", singbox_service)
+            self.assertIn("--advanced-domain edge-b.example.com", singbox_service)
             self.assertIn("--rules-base-url https://edge-a.example.com:9443/linkray/rules", singbox_service)
             self.assertIn("--rules-base-url https://edge-a.example.com:9443/linkray/rules", clash_service)
             runtime_service = (output / "etc/systemd/system/linkray-singbox-runtime.service").read_text()
@@ -292,6 +314,7 @@ class RenderTests(unittest.TestCase):
             self.assertIn("Description=LinkRay Node control service", node_service)
             self.assertIn("ExecStart=/opt/linkray-node-app/venv/bin/python /opt/linkray-node-app/current/main.py", node_service)
             self.assertIn("LINKRAY_EXTERNAL_XRAY=true", node_service)
+            self.assertIn("XRAY_TLS_CERT_FILE=/var/lib/marzban/certs/linkray/fullchain.cer", node_service)
             self.assertIn("Description=LinkRay Xray-core runtime", xray_service)
             self.assertIn("Environment=XRAY_LOCATION_ASSET=/var/lib/marzban/linkray/bin", xray_service)
             self.assertTrue((output / "opt/linkray-node-app/current/main.py").exists())
@@ -611,13 +634,28 @@ class RenderTests(unittest.TestCase):
             self.assertIn("etc/systemd/system/linkray-snell-usage.service", relative)
             self.assertIn("var/lib/marzban/linkray/singbox/config.json", relative)
             self.assertIn("var/lib/marzban/linkray/singbox/users.json", relative)
+            self.assertIn("var/lib/marzban/linkray/xray/runtime.json", relative)
             self.assertIn("var/lib/marzban/linkray/snell/snell-server.conf", relative)
             self.assertIn("var/lib/marzban/linkray/linkray-manifest.json", relative)
 
+            node_service = (output / "etc/systemd/system/linkray-node.service").read_text()
+            self.assertIn("LINKRAY_NODE_DOMAIN=edge-b.example.com", node_service)
             singbox_runtime = json.loads((output / "var/lib/marzban/linkray/singbox/config.json").read_text())
             by_tag = {item["tag"]: item for item in singbox_runtime["inbounds"]}
             self.assertEqual(by_tag["Hysteria2"]["tls"]["certificate_path"], config.cert_file)
-            self.assertEqual(by_tag["AnyTLS"]["listen_port"], 19082)
+            xray_runtime = json.loads((output / "var/lib/marzban/linkray/xray/runtime.json").read_text())
+            xray_by_tag = {item["tag"]: item for item in xray_runtime["inbounds"]}
+            self.assertEqual(
+                xray_by_tag["VLESS GRPC TLS"]["streamSettings"]["tlsSettings"]["serverName"],
+                "edge-b.example.com",
+            )
+            self.assertEqual(
+                xray_by_tag["VLESS GRPC TLS"]["streamSettings"]["tlsSettings"]["alpn"],
+                ["h2", "http/1.1"],
+            )
+            self.assertEqual(by_tag["Hysteria2"]["listen_port"], 443)
+            self.assertEqual(by_tag["TUIC"]["listen_port"], 8443)
+            self.assertEqual(by_tag["AnyTLS"]["listen_port"], 8444)
             snell_config = (output / "var/lib/marzban/linkray/snell/snell-server.conf").read_text()
             self.assertIn("listen = ::0:19180", snell_config)
             self.assertIn("psk = node-snell-secret", snell_config)
@@ -639,9 +677,26 @@ class RenderTests(unittest.TestCase):
         self.assertIn("edge-a-VMess_HTTPUpgrade_TLS", sql)
         self.assertIn("edge-a-Trojan_gRPC_TLS", sql)
         self.assertIn("edge-b-Shadowsocks", sql)
-        self.assertIn("'edge-a.example.com', 18180, 'VLESS TCP TLS'", sql)
-        self.assertIn("'edge-a.example.com', 18191, 'Trojan GRPC TLS'", sql)
+        self.assertIn("'edge-a.example.com', 443, 'VLESS TCP TLS'", sql)
+        self.assertIn("'edge-b.example.com', 443, 'VLESS TCP TLS'", sql)
+        self.assertIn("'edge-b.example.com', 18091, 'Trojan GRPC TLS'", sql)
+        edge_b_tls = next(row for row in rows if row[0] == "edge-b-VLESS_TLS_Vision")
+        self.assertEqual(edge_b_tls[1], "edge-b.example.com")
+        self.assertEqual(edge_b_tls[4], "edge-b.example.com")
+        edge_b_ws = next(row for row in rows if row[0] == "edge-b-VLESS_WS_TLS")
+        self.assertEqual(edge_b_ws[4], "edge-b.example.com")
+        self.assertEqual(edge_b_ws[5], "edge-b.example.com")
+        self.assertEqual(edge_b_ws[6], "tls")
+        edge_b_grpc = next(row for row in rows if row[0] == "edge-b-VLESS_gRPC_TLS")
+        self.assertEqual(edge_b_grpc[2], DEFAULT_PORTS["vless_grpc_tls"])
+        self.assertEqual(edge_b_grpc[6], "inbound_default")
+        self.assertEqual(edge_b_grpc[7], "h2")
+        edge_b_trojan_grpc = next(row for row in rows if row[0] == "edge-b-Trojan_gRPC_TLS")
+        self.assertEqual(edge_b_trojan_grpc[2], DEFAULT_PORTS["trojan_grpc_tls"])
+        self.assertEqual(edge_b_trojan_grpc[6], "inbound_default")
+        self.assertEqual(edge_b_trojan_grpc[7], "h2")
         self.assertIn("'VLESS TCP REALITY'", sql)
+        self.assertIn("'edge-b.example.com', 18091, 'Trojan GRPC TLS'", sql)
         self.assertIn("'www.microsoft.com'", sql)
         self.assertIn("'/vless-ws'", sql)
         self.assertIn("'/vmess-httpupgrade'", sql)
@@ -711,6 +766,9 @@ class RenderTests(unittest.TestCase):
             self.assertTrue((root / "etc/modules-load.d/linkray-bbr.conf").exists())
             self.assertIn("tcp_bbr", (root / "etc/modules-load.d/linkray-bbr.conf").read_text())
             self.assertFalse((root / "opt/marzban-node/docker-compose.yml").exists())
+            xray_source = (root / "opt/linkray-node-app/current/xray.py").read_text()
+            api_block = xray_source.split('"tag": "API_INBOUND"', 1)[0].rsplit("inbound = {", 1)[-1]
+            self.assertNotIn("streamSettings", api_block)
 
     def test_install_node_with_config_copies_advanced_runtime_files(self):
         with tempfile.TemporaryDirectory() as tmp:

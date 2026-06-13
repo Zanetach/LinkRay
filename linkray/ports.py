@@ -15,6 +15,7 @@ from .config import (
     SINGBOX_PORT_KEYS,
     SNELL_DEFAULT_PORTS,
     SNELL_PORT_KEYS,
+    TLS_FALLBACK_PORT_KEYS,
     NodeHost,
 )
 from .render import ACTIVE_INBOUND_TAGS
@@ -71,13 +72,14 @@ def _runtime_specs(
     if overrides:
         ports.update(dict(overrides))
     transport_map = transports or {}
+    public_port = ports.get("vless_tls")
     return [
         PortSpec(
             key=key,
             runtime=runtime,
             transport=transport_map.get(key, "tcp"),
             inbound_tag=tag_map[key],
-            port=ports[key],
+            port=public_port if runtime == "xray" and key in TLS_FALLBACK_PORT_KEYS and public_port else ports[key],
         )
         for key in keys
     ]

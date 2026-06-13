@@ -82,12 +82,14 @@ def tls_server_config(config: LinkRayConfig) -> dict[str, Any]:
     }
 
 
-def tls_client_config(config: LinkRayConfig) -> dict[str, Any]:
-    return {
+def tls_client_config(config: LinkRayConfig, *, utls: bool = True) -> dict[str, Any]:
+    tls: dict[str, Any] = {
         "enabled": True,
         "server_name": config.domain,
-        "utls": {"enabled": True, "fingerprint": "chrome"},
     }
+    if utls:
+        tls["utls"] = {"enabled": True, "fingerprint": "chrome"}
+    return tls
 
 
 def server_config(config: LinkRayConfig, users: list[SingBoxUser]) -> dict[str, Any]:
@@ -150,7 +152,7 @@ def singbox_user_outbounds(config: LinkRayConfig, user: SingBoxUser) -> list[dic
             "server": config.domain,
             "server_port": ports["hysteria2"],
             "password": user.hysteria2_password,
-            "tls": tls_client_config(config),
+            "tls": tls_client_config(config, utls=False),
         },
         {
             "type": "tuic",
@@ -161,7 +163,7 @@ def singbox_user_outbounds(config: LinkRayConfig, user: SingBoxUser) -> list[dic
             "password": user.tuic_password,
             "congestion_control": "bbr",
             "udp_relay_mode": "native",
-            "tls": tls_client_config(config),
+            "tls": tls_client_config(config, utls=False),
         },
         {
             "type": "anytls",

@@ -12,7 +12,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, unquote, urlparse
 
 from ._http import PASS_HEADERS, AdapterHandler, fetch_upstream, first_query_value, parse_link_netloc
-from .native import b64decode_text, decode_subscription_links
+from .config import LinkRayConfig
+from .native import b64decode_text, decode_subscription_links, legacy_marzban_native_link, relay_secondary_node_link, stable_native_link
 from .rules import COMPACT_CN_DOMAIN_SUFFIXES, FOREIGN_DOMAIN_SUFFIXES, RouteRules, load_route_rules
 
 
@@ -104,6 +105,19 @@ def tls_transport(query: Mapping[str, list[str]], fallback_sni: str) -> dict[str
     }
 
 
+def reality_transport(query: Mapping[str, list[str]], fallback_sni: str) -> dict[str, Any] | None:
+    public_key = first_query_value(query, "pbk", "public-key", "public_key")
+    short_id = first_query_value(query, "sid", "short-id", "short_id")
+    if not public_key:
+        return None
+    payload = tls_transport(query, fallback_sni)
+    reality: dict[str, Any] = {"public_key": public_key}
+    if short_id:
+        reality["short_id"] = short_id
+    payload["tls"]["reality"] = reality
+    return payload
+
+
 def ws_transport(query: Mapping[str, list[str]], fallback_host: str) -> dict[str, Any]:
     host = first_query_value(query, "host") or fallback_host
     path = first_query_value(query, "path") or "/"
@@ -124,7 +138,7 @@ def vless_to_egern(link: str) -> dict[str, dict[str, Any]] | None:
     query = parse_qs(parsed.query)
     network = first_query_value(query, "type") or "tcp"
     security = first_query_value(query, "security") or ""
-    if security == "reality" or network in {"grpc", "xhttp", "httpupgrade", "h2"}:
+    if network in {"grpc", "xhttp", "httpupgrade", "h2"}:
         return None
     item = base_proxy(unquote(parsed.fragment) or host, host, port)
     item["user_id"] = unquote(parsed.username)
@@ -135,6 +149,11 @@ def vless_to_egern(link: str) -> dict[str, dict[str, Any]] | None:
         item["transport"] = ws_transport(query, host)
     elif network == "tcp" and security == "tls":
         item["transport"] = tls_transport(query, host)
+    elif network == "tcp" and security == "reality":
+        transport = reality_transport(query, host)
+        if not transport:
+            return None
+        item["transport"] = transport
     else:
         return None
     return {"vless": item}
@@ -296,10 +315,22 @@ def apply_prev_hops(proxies: list[dict[str, dict[str, Any]]]) -> None:
             item["prev_hop"] = primary_name
 
 
-def build_egern_yaml(subscription_payload: bytes, route_rules: RouteRules | None = None) -> str:
+def build_egern_yaml(
+    subscription_payload: bytes,
+    route_rules: RouteRules | None = None,
+    config: LinkRayConfig | None = None,
+    *,
+    public_only: bool = False,
+) -> str:
     proxies = []
     seen = set()
     for link in decode_subscription_links(subscription_payload):
+        if legacy_marzban_native_link(link):
+            continue
+        if public_only and not stable_native_link(link):
+            continue
+        if public_only and config:
+            link = relay_secondary_node_link(link, config.domain)
         converted = convert_link(link)
         if not converted:
             continue
@@ -308,7 +339,6 @@ def build_egern_yaml(subscription_payload: bytes, route_rules: RouteRules | None
             continue
         seen.add(name)
         proxies.append(converted)
-    apply_prev_hops(proxies)
     effective_rules = route_rules or load_route_rules()
     return dump_egern_yaml(
         proxies,
@@ -318,6 +348,8 @@ def build_egern_yaml(subscription_payload: bytes, route_rules: RouteRules | None
 
 
 class EgernHandler(AdapterHandler):
+    server_domain = ""
+
     def do_GET(self) -> None:
         path = urlparse(self.path).path
         if path == "/health":
@@ -330,7 +362,8 @@ class EgernHandler(AdapterHandler):
         token = match.group(1)
         try:
             _, upstream_headers, raw = fetch_upstream(self.marzban_url, token, {"Accept": "text/plain"})
-            body = build_egern_yaml(raw).encode("utf-8")
+            config = LinkRayConfig(domain=self.server_domain) if self.server_domain else None
+            body = build_egern_yaml(raw, config=config, public_only=True).encode("utf-8")
         except HTTPError as exc:
             self.send_bytes(exc.code, dict(exc.headers.items()), exc.read() or b"upstream error\n")
             return
@@ -341,16 +374,17 @@ class EgernHandler(AdapterHandler):
         headers["Content-Type"] = "text/yaml; charset=utf-8"
         self.send_bytes(200, headers, body)
 
-def make_egern_server(listen: str, port: int, marzban_url: str) -> ThreadingHTTPServer:
+def make_egern_server(listen: str, port: int, marzban_url: str, server_domain: str = "") -> ThreadingHTTPServer:
     class Handler(EgernHandler):
         pass
 
     Handler.marzban_url = marzban_url
+    Handler.server_domain = server_domain
     return ThreadingHTTPServer((listen, port), Handler)
 
 
 def serve_egern(args: argparse.Namespace) -> int:
-    server = make_egern_server(args.listen, args.port, args.marzban_url)
+    server = make_egern_server(args.listen, args.port, args.marzban_url, server_domain=getattr(args, "server_domain", ""))
     try:
         server.serve_forever()
     except KeyboardInterrupt:

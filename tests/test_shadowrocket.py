@@ -76,7 +76,7 @@ class ShadowrocketTests(unittest.TestCase):
     def test_build_shadowrocket_conf_can_append_snell_user_node(self):
         module = self.shadowrocket_module()
         links = "trojan://password@edge-a.example.com:18083?security=tls&type=tcp&sni=edge-a.example.com#edge-a-Trojan_TLS"
-        user = credential_for_token("subscription-token", "server-secret", name="cyclelink", port=40123)
+        user = credential_for_token("subscription-token", "server-secret", name="sample-user", port=40123)
 
         output = module.build_shadowrocket_conf(
             base64.b64encode(links.encode()),
@@ -84,23 +84,28 @@ class ShadowrocketTests(unittest.TestCase):
             snell_user=user,
         )
 
-        self.assertIn("cyclelink-Snell = snell,edge-a.example.com,40123", output)
+        self.assertIn("sample-user-Snell = snell,edge-a.example.com,40123", output)
         self.assertIn(f"psk={user.psk}", output)
         self.assertIn("version=5", output)
-        self.assertIn("手动切换 = select,edge-a-Trojan_TLS,cyclelink-Snell", output)
+        self.assertIn("手动切换 = select,edge-a-Trojan_TLS,sample-user-Snell", output)
 
         filtered = module.build_shadowrocket_conf(
             base64.b64encode(links.encode()),
             config=LinkRayConfig(domain="edge-a.example.com"),
             snell_user=user,
-            protocol_preferences=ProtocolPreferences(users={"cyclelink": {"hysteria2"}}),
+            protocol_preferences=ProtocolPreferences(users={"sample-user": {"hysteria2"}}),
         )
-        self.assertNotIn("cyclelink-Snell", filtered)
+        self.assertNotIn("sample-user-Snell", filtered)
 
     def test_build_shadowrocket_conf_public_only_resolves_proxy_and_snell_servers(self):
         module = self.shadowrocket_module()
-        links = "vless://11111111-1111-1111-1111-111111111111@edge-a.example.com:443?security=tls&type=tcp&sni=edge-a.example.com#edge-a-VLESS_TLS_Vision"
-        user = credential_for_token("subscription-token", "server-secret", name="cyclelink", port=40123)
+        links = "\n".join(
+            [
+                "vless://11111111-1111-1111-1111-111111111111@edge-a.example.com:443?security=tls&type=tcp&sni=edge-a.example.com#edge-a-VLESS_TLS_Vision",
+                "vless://11111111-1111-1111-1111-111111111111@edge-b.example.com:443?security=tls&type=tcp&sni=edge-b.example.com#edge-b-VLESS_TLS_Vision",
+            ]
+        )
+        user = credential_for_token("subscription-token", "server-secret", name="sample-user", port=40123)
 
         with (
             patch("linkray.native.public_ipv4_for_host", return_value="203.0.113.10"),
@@ -114,8 +119,10 @@ class ShadowrocketTests(unittest.TestCase):
             )
 
         self.assertIn("edge-a-VLESS_TLS_Vision = vless,203.0.113.10,443", output)
+        self.assertIn("edge-b-VLESS_TLS_Vision = vless,203.0.113.10,543", output)
         self.assertIn("peer=edge-a.example.com", output)
-        self.assertIn("cyclelink-Snell = snell,203.0.113.10,40123", output)
+        self.assertIn("peer=edge-b.example.com", output)
+        self.assertIn("sample-user-Snell = snell,203.0.113.10,40123", output)
 
     def test_build_shadowrocket_conf_keeps_large_cn_rule_sets_compact(self):
         module = self.shadowrocket_module()
@@ -179,12 +186,12 @@ class ShadowrocketTests(unittest.TestCase):
             self.assertNotIn("[General]", shadowrocket)
             self.assertNotIn("[Proxy]", shadowrocket)
             self.assertIn("vless://", shadowrocket)
-            self.assertNotIn("trojan://", shadowrocket)
+            self.assertIn("trojan://", shadowrocket)
             self.assertIn("[General]", legacy_conf)
             self.assertIn("[Proxy]", legacy_conf)
             self.assertIn("[Proxy Group]", legacy_conf)
             self.assertIn("edge-a-VLESS_TLS_Vision = vless,edge-a.example.com,443", legacy_conf)
-            self.assertNotIn("edge-a-Trojan_TLS = trojan,edge-a.example.com,18083", legacy_conf)
+            self.assertIn("edge-a-Trojan_TLS = trojan,edge-a.example.com,18083", legacy_conf)
         finally:
             adapter.shutdown()
             adapter.server_close()
@@ -220,9 +227,65 @@ class ShadowrocketTests(unittest.TestCase):
         self.assertNotIn("[General]", decoded)
         self.assertNotIn("[Proxy]", decoded)
         self.assertIn("edge-a-VLESS_TLS_Vision", decoded)
-        self.assertNotIn("edge-a-Trojan_TLS", decoded)
-        self.assertNotIn("vmess://", decoded)
-        self.assertNotIn("edge-a-VLESS_Reality_Vision", decoded)
+        self.assertIn("edge-a-Trojan_TLS", decoded)
+        self.assertIn("vmess://", decoded)
+        self.assertIn("edge-a-VLESS_Reality_Vision", decoded)
+
+    def test_build_shadowrocket_subscription_relays_secondary_nodes(self):
+        module = self.shadowrocket_module()
+        vmess = {
+            "ps": "edge-b-VMess_TLS",
+            "add": "edge-b.example.com",
+            "port": "18084",
+            "id": "00000000-0000-0000-0000-000000000000",
+            "aid": "0",
+            "net": "tcp",
+            "tls": "tls",
+            "sni": "edge-b.example.com",
+            "host": "edge-b.example.com",
+            "scy": "auto",
+        }
+        links = "\n".join(
+            [
+                "vless://11111111-1111-1111-1111-111111111111@edge-b.example.com:443?security=tls&type=tcp&sni=edge-b.example.com#edge-b-VLESS_TLS_Vision",
+                "trojan://password@edge-b.example.com:18083?security=tls&type=tcp&sni=edge-b.example.com#edge-b-Trojan_TLS",
+                f"vmess://{b64(json.dumps(vmess))}",
+                "ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTpwYXNzd29yZA@edge-b.example.com:18085#edge-b-Shadowsocks",
+            ]
+        )
+
+        with patch("linkray.native.public_ipv4_for_host", return_value="203.0.113.10"):
+            output = module.build_shadowrocket_subscription(
+                base64.b64encode(links.encode()),
+                config=LinkRayConfig(domain="edge-a.example.com"),
+            )
+
+        decoded = base64.b64decode(output).decode()
+        self.assertIn("@203.0.113.10:543", decoded)
+        self.assertIn("@203.0.113.10:18183", decoded)
+        self.assertIn("@203.0.113.10:18185", decoded)
+        self.assertIn("sni=edge-b.example.com", decoded)
+        vmess_links = [line for line in decoded.splitlines() if line.startswith("vmess://")]
+        self.assertEqual(len(vmess_links), 1)
+        vmess_payload = json.loads(base64.urlsafe_b64decode(vmess_links[0].removeprefix("vmess://") + "=="))
+        self.assertEqual(vmess_payload["add"], "203.0.113.10")
+        self.assertEqual(vmess_payload["port"], "18184")
+        self.assertEqual(vmess_payload["sni"], "edge-b.example.com")
+
+    def test_build_shadowrocket_subscription_skips_legacy_marzban_placeholder_node(self):
+        module = self.shadowrocket_module()
+        links = "\n".join(
+            [
+                "vless://11111111-1111-1111-1111-111111111111@ca.example.com:443?security=tls&type=tcp&sni=ca.example.com#ca-VLESS_TLS_Vision",
+                "vless://11111111-1111-1111-1111-111111111111@203.0.113.10:18080?security=tls&type=tcp&sni=edge-a.example.com#%F0%9F%9A%80%20Marz%20%28sampleadmin%29%20%5BVLESS%20-%20tcp%5D",
+            ]
+        )
+
+        output = module.build_shadowrocket_subscription(base64.b64encode(links.encode()))
+        decoded = base64.b64decode(output).decode()
+
+        self.assertIn("ca-VLESS_TLS_Vision", decoded)
+        self.assertNotIn("Marz (sampleadmin)", decoded)
 
     def test_shadowrocket_token_regex_accepts_config_subscription(self):
         module = self.shadowrocket_module()

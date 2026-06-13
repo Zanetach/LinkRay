@@ -15,7 +15,7 @@ class ProtocolPreferenceTests(unittest.TestCase):
     def test_missing_user_defaults_to_all_advanced_protocols(self):
         prefs = ProtocolPreferences(users={})
 
-        self.assertEqual(enabled_protocols_for_user(prefs, "cyclelink"), set(ADVANCED_PROTOCOL_KEYS))
+        self.assertEqual(enabled_protocols_for_user(prefs, "sample-user"), set(ADVANCED_PROTOCOL_KEYS))
 
     def test_save_and_load_user_protocol_selection(self):
         with tempfile.TemporaryDirectory() as tmp:

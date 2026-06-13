@@ -14,11 +14,13 @@ from ._http import PASS_HEADERS, AdapterHandler, fetch_subscription_username, fe
 from .config import LinkRayConfig
 from .native import (
     b64decode_text,
-    build_stable_native_subscription,
     decode_subscription_links,
+    encode_subscription_links,
+    legacy_marzban_native_link,
     public_ipv4_for_host,
-    public_stable_native_link,
+    relay_secondary_node_link,
     rewrite_server_to_public_ip,
+    stable_native_link,
 )
 from .protocol_prefs import DEFAULT_PROTOCOL_PREFS_PATH, ProtocolPreferences, enabled_protocols_for_user, load_protocol_preferences
 from .rules import COMPACT_CN_DOMAIN_SUFFIXES, FOREIGN_DOMAIN_SUFFIXES, RouteRules, load_route_rules
@@ -249,9 +251,13 @@ def build_shadowrocket_conf(
     proxy_lines: list[str] = []
     seen: set[str] = set()
     for link in decode_subscription_links(subscription_payload):
-        if public_only and not public_stable_native_link(link):
+        if legacy_marzban_native_link(link):
+            continue
+        if public_only and not stable_native_link(link):
             continue
         if public_only:
+            if config:
+                link = relay_secondary_node_link(link, config.domain)
             link = rewrite_server_to_public_ip(link)
         converted = convert_link(link)
         if not converted:
@@ -295,8 +301,23 @@ def build_shadowrocket_conf(
     return "\n".join(sections)
 
 
-def build_shadowrocket_subscription(subscription_payload: bytes) -> bytes:
-    return build_stable_native_subscription(subscription_payload, resolve_public_hosts=True)
+def build_shadowrocket_subscription(subscription_payload: bytes, config: LinkRayConfig | None = None) -> bytes:
+    links: list[str] = []
+    seen: set[str] = set()
+    for link in decode_subscription_links(subscription_payload):
+        if legacy_marzban_native_link(link):
+            continue
+        if not stable_native_link(link):
+            continue
+        if config:
+            link = relay_secondary_node_link(link, config.domain)
+        link = rewrite_server_to_public_ip(link)
+        name = urlparse(link).fragment or link
+        if name in seen:
+            continue
+        seen.add(name)
+        links.append(link)
+    return encode_subscription_links(links)
 
 
 class ShadowrocketHandler(AdapterHandler):
@@ -318,14 +339,13 @@ class ShadowrocketHandler(AdapterHandler):
         mode = match.group(2)
         try:
             _, upstream_headers, raw = fetch_upstream(self.marzban_url, token, {"Accept": "text/plain"})
+            config = LinkRayConfig(domain=self.server_domain) if self.server_domain else None
             if mode == "shadowrocket":
-                body = build_shadowrocket_subscription(raw)
+                body = build_shadowrocket_subscription(raw, config=config)
             else:
-                config = None
                 snell_user = None
                 protocol_preferences = None
                 if self.server_domain:
-                    config = LinkRayConfig(domain=self.server_domain)
                     username = fetch_subscription_username(self.marzban_url, token)
                     if not username:
                         raise ValueError("missing Marzban username for Snell runtime user")

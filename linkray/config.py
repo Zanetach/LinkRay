@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 DEFAULT_PORTS = {
-    "vless_tls": 18080,
+    "vless_tls": 443,
     "vless_reality": 18081,
     "vless_grpc_reality": 18082,
     "trojan_tls": 18083,
@@ -21,9 +21,9 @@ DEFAULT_PORTS = {
 }
 
 SINGBOX_DEFAULT_PORTS = {
-    "hysteria2": 19080,
-    "tuic": 19081,
-    "anytls": 19082,
+    "hysteria2": 443,
+    "tuic": 8443,
+    "anytls": 8444,
 }
 
 SNELL_DEFAULT_PORTS = {
@@ -33,6 +33,11 @@ SNELL_DEFAULT_PORTS = {
 PORT_KEYS = tuple(DEFAULT_PORTS.keys())
 SINGBOX_PORT_KEYS = tuple(SINGBOX_DEFAULT_PORTS.keys())
 SNELL_PORT_KEYS = tuple(SNELL_DEFAULT_PORTS.keys())
+TLS_FALLBACK_PORT_KEYS = (
+    "vless_ws_tls",
+    "vmess_ws_tls",
+    "vmess_httpupgrade_tls",
+)
 RELAY_PORT_OFFSET = 100
 XRAY_RUNTIME_MODES = ("marzban", "linkray")
 LINKRAY_XRAY_API_PORT = 61998
@@ -123,7 +128,7 @@ def validate_unique_ports(ports: Mapping[str, int]) -> None:
 
 def parse_inbound_port(value: str) -> tuple[str, int]:
     if "=" not in value:
-        raise ValueError("inbound must be formatted as key=port, for example vless_tls=18080")
+        raise ValueError("inbound must be formatted as key=port, for example vless_tls=443")
     key, raw_port = value.split("=", 1)
     key = key.strip()
     if key not in DEFAULT_PORTS:
@@ -154,7 +159,7 @@ def parse_inbound_ports(values: list[str] | None) -> tuple[tuple[str, int], ...]
 
 def parse_singbox_inbound_port(value: str) -> tuple[str, int]:
     if "=" not in value:
-        raise ValueError("sing-box inbound must be formatted as key=port, for example hysteria2=19080")
+        raise ValueError("sing-box inbound must be formatted as key=port, for example hysteria2=443")
     key, raw_port = value.split("=", 1)
     key = key.strip()
     if key not in SINGBOX_DEFAULT_PORTS:

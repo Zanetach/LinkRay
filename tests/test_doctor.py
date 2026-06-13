@@ -87,7 +87,7 @@ class DoctorTests(unittest.TestCase):
         self.assertIn("systemd linkray-singbox-runtime", check_names)
         self.assertIn("systemd linkray-snell-runtime", check_names)
         self.assertIn("systemd linkray-snell-usage", check_names)
-        self.assertIn("port 19080", check_names)
+        self.assertIn("port 443", check_names)
         self.assertIn("port 19180", check_names)
         self.assertEqual(exit_code(checks), 0)
 

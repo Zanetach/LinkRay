@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import json
 import re
+import socket
+import subprocess
 from collections.abc import Mapping
 from http.server import ThreadingHTTPServer
 from pathlib import Path
@@ -31,6 +34,7 @@ from .singbox_runtime import (
 
 
 TOKEN_RE = re.compile(r"^/sub/([^/]+)/sing-box/?$")
+FAKE_IP_NETWORK = ipaddress.ip_network("198.18.0.0/15")
 
 
 def proxy_tag(parsed, host: str) -> str:
@@ -47,6 +51,9 @@ def tls_config(query: Mapping[str, list[str]], fallback_server_name: str, realit
             "fingerprint": first_query_value(query, "fp", "fingerprint") or "chrome",
         },
     }
+    alpn = first_query_value(query, "alpn")
+    if alpn:
+        config["alpn"] = [item.strip() for item in alpn.split(",") if item.strip()]
     if reality:
         public_key = first_query_value(query, "pbk", "public-key", "public_key") or ""
         short_id = first_query_value(query, "sid", "short-id", "short_id") or ""
@@ -110,6 +117,8 @@ def vless_to_singbox(link: str) -> dict[str, Any] | None:
         outbound["transport"] = transport
     if security == "tls":
         outbound["tls"] = tls_config(query, host)
+        if network == "grpc":
+            outbound["tls"].setdefault("alpn", ["h2"])
     elif security == "reality":
         outbound["tls"] = tls_config(query, host, reality=True)
     else:
@@ -135,6 +144,8 @@ def trojan_to_singbox(link: str) -> dict[str, Any] | None:
         "password": unquote(parsed.username),
         "tls": tls_config(query, host),
     }
+    if network == "grpc":
+        outbound["tls"].setdefault("alpn", ["h2"])
     transport = transport_config(query, network, host)
     if transport:
         outbound["transport"] = transport
@@ -175,6 +186,8 @@ def vmess_to_singbox(link: str) -> dict[str, Any] | None:
         outbound["transport"] = transport
     if data.get("tls") == "tls":
         outbound["tls"] = tls_config(query, str(host))
+        if str(network) == "grpc":
+            outbound["tls"].setdefault("alpn", ["h2"])
     return outbound
 
 
@@ -237,6 +250,83 @@ def convert_link(link: str) -> dict[str, Any] | None:
     if link.startswith("ss://"):
         return shadowsocks_to_singbox(link)
     return None
+
+
+def is_ip_address(value: str) -> bool:
+    try:
+        ipaddress.ip_address(value)
+    except ValueError:
+        return False
+    return True
+
+
+def public_ipv4_for_host(host: str) -> str | None:
+    try:
+        infos = socket.getaddrinfo(host, None, socket.AF_INET, socket.SOCK_STREAM)
+    except OSError:
+        return None
+    for info in infos:
+        address = info[4][0]
+        try:
+            parsed = ipaddress.ip_address(address)
+        except ValueError:
+            continue
+        if parsed.version == 4 and parsed not in FAKE_IP_NETWORK:
+            return address
+    return None
+
+
+def resolve_public_server(outbound: dict[str, Any]) -> dict[str, Any]:
+    server = outbound.get("server")
+    if not isinstance(server, str) or not server or is_ip_address(server):
+        return outbound
+    address = public_ipv4_for_host(server)
+    if not address:
+        return outbound
+    outbound["server"] = address
+    return outbound
+
+
+def advanced_domain_label(domain: str) -> str:
+    label = domain.split(".", 1)[0]
+    clean = re.sub(r"[^A-Za-z0-9_-]+", "-", label).strip("-")
+    return clean or "node"
+
+
+def label_advanced_outbound(outbound: dict[str, Any], domain: str) -> dict[str, Any]:
+    labeled = dict(outbound)
+    labeled["tag"] = f"{advanced_domain_label(domain)}-{outbound['tag']}"
+    return labeled
+
+
+def run_sync_command(command: str) -> None:
+    if not command:
+        return
+    try:
+        subprocess.run(command, shell=True, check=False, timeout=30)
+    except (OSError, subprocess.TimeoutExpired):
+        return
+
+
+def public_stable_outbound(outbound: dict[str, Any]) -> bool:
+    proxy_type = outbound.get("type")
+    transport = outbound.get("transport") or {}
+    network = transport.get("type", "tcp") if isinstance(transport, dict) else "tcp"
+    port = outbound.get("server_port")
+    tls = outbound.get("tls")
+    if proxy_type == "vless":
+        if not isinstance(tls, dict) or tls.get("reality"):
+            return False
+        return port == 443 and network in {"tcp", "ws"}
+    if proxy_type == "vmess":
+        if not isinstance(tls, dict):
+            return False
+        return port == 443 and network in {"ws", "httpupgrade"}
+    if proxy_type == "trojan":
+        if not isinstance(tls, dict):
+            return False
+        return port == 443 and network in {"tcp", "ws"}
+    return False
 
 
 def clean_rules_base_url(rules_base_url: str | None) -> str:
@@ -309,9 +399,11 @@ def build_singbox_json(
     subscription_payload: bytes,
     route_rules: RouteRules | None = None,
     config: LinkRayConfig | None = None,
+    advanced_configs: list[LinkRayConfig] | None = None,
     advanced_user: SingBoxUser | None = None,
     protocol_preferences: ProtocolPreferences | None = None,
     rules_base_url: str | None = None,
+    public_only: bool = False,
 ) -> str:
     outbounds: list[dict[str, Any]] = []
     seen: set[str] = set()
@@ -319,25 +411,43 @@ def build_singbox_json(
         outbound = convert_link(link)
         if not outbound:
             continue
+        if public_only and not public_stable_outbound(outbound):
+            continue
+        if public_only:
+            outbound = resolve_public_server(outbound)
         tag = outbound.get("tag")
         if not isinstance(tag, str) or not tag or tag in seen:
             continue
         seen.add(tag)
         outbounds.append(outbound)
-    if config and advanced_user:
+    configs = advanced_configs if advanced_configs is not None else ([config] if config else [])
+    if configs and advanced_user:
         enabled = enabled_protocols_for_user(protocol_preferences, advanced_user.name)
         tag_keys = {"Hysteria2": "hysteria2", "TUIC": "tuic", "AnyTLS": "anytls"}
-        for outbound in singbox_user_outbounds(config, advanced_user):
-            tag = outbound["tag"]
-            if tag_keys.get(str(tag)) not in enabled:
-                continue
-            if tag not in seen:
-                seen.add(tag)
-                outbounds.append(outbound)
+        multi_domain = len(configs) > 1
+        for advanced_config in configs:
+            for outbound in singbox_user_outbounds(advanced_config, advanced_user):
+                raw_tag = outbound["tag"]
+                if tag_keys.get(str(raw_tag)) not in enabled:
+                    continue
+                if multi_domain:
+                    outbound = label_advanced_outbound(outbound, advanced_config.domain)
+                if public_only:
+                    outbound = resolve_public_server(outbound)
+                tag = outbound["tag"]
+                if tag not in seen:
+                    seen.add(tag)
+                    outbounds.append(outbound)
 
     names = [str(outbound["tag"]) for outbound in outbounds]
     effective_rules = route_rules or load_route_rules()
     clean_base = clean_rules_base_url(rules_base_url)
+    route: dict[str, Any] = {
+        "rules": build_route_rules(effective_rules, use_rule_sets=bool(clean_base)),
+        "final": "漏网之鱼",
+    }
+    if not public_only:
+        route["auto_detect_interface"] = True
     data = {
         "log": {"level": "warning"},
         "dns": {
@@ -371,11 +481,7 @@ def build_singbox_json(
             {"type": "block", "tag": "REJECT"},
             *build_group_outbounds(names),
         ],
-        "route": {
-            "rules": build_route_rules(effective_rules, use_rule_sets=bool(clean_base)),
-            "final": "漏网之鱼",
-            "auto_detect_interface": True,
-        },
+        "route": route,
         "experimental": {
             "clash_api": {
                 "external_controller": "127.0.0.1:9090",
@@ -390,8 +496,10 @@ def build_singbox_json(
 
 class SingBoxHandler(AdapterHandler):
     server_domain = ""
+    advanced_domains = ()
     runtime_dir = DEFAULT_RUNTIME_DIR
     reload_command = ""
+    sync_command = ""
     singbox_inbound_ports = ()
     protocol_preferences_path = DEFAULT_PROTOCOL_PREFS_PATH
     rules_base_url = ""
@@ -409,29 +517,39 @@ class SingBoxHandler(AdapterHandler):
         try:
             _, upstream_headers, raw = fetch_upstream(self.marzban_url, token, {"Accept": "text/plain"})
             config = None
+            advanced_configs = None
             advanced_user = None
             protocol_preferences = None
             if self.server_domain:
                 config = LinkRayConfig(domain=self.server_domain, singbox_inbound_ports=self.singbox_inbound_ports)
+                domains = list(dict.fromkeys([self.server_domain, *self.advanced_domains]))
+                advanced_configs = [
+                    LinkRayConfig(domain=domain, singbox_inbound_ports=self.singbox_inbound_ports)
+                    for domain in domains
+                ]
                 username = fetch_subscription_username(self.marzban_url, token)
                 if not username:
                     raise ValueError("missing Marzban username for sing-box runtime user")
                 protocol_preferences = load_protocol_preferences(Path(self.protocol_preferences_path))
                 enabled = enabled_protocols_for_user(protocol_preferences, username)
                 if enabled.intersection(SINGBOX_PROTOCOL_KEYS):
-                    advanced_user, _ = ensure_runtime_user(
+                    advanced_user, changed = ensure_runtime_user(
                         token,
                         config,
                         runtime_dir=Path(self.runtime_dir),
                         reload_command=self.reload_command or None,
                         name=username,
                     )
+                    if changed:
+                        run_sync_command(self.sync_command)
             body = build_singbox_json(
                 raw,
                 config=config,
+                advanced_configs=advanced_configs,
                 advanced_user=advanced_user,
                 protocol_preferences=protocol_preferences,
                 rules_base_url=self.rules_base_url,
+                public_only=True,
             ).encode("utf-8")
         except HTTPError as exc:
             self.send_bytes(exc.code, dict(exc.headers.items()), exc.read() or b"upstream error\n")
@@ -464,6 +582,8 @@ class SingBoxHandler(AdapterHandler):
                 runtime_dir=Path(self.runtime_dir),
                 reload_command=self.reload_command or None,
             )
+            if changed and self.sync_command:
+                run_sync_command(self.sync_command)
             remaining = len([name for name in usernames if name])
             body = json.dumps({"ok": True, "changed": changed, "remaining": remaining}).encode("utf-8")
             self.send_bytes(200, {"Content-Type": "application/json; charset=utf-8"}, body)
@@ -475,8 +595,10 @@ def make_singbox_server(
     port: int,
     marzban_url: str,
     server_domain: str = "",
+    advanced_domains=(),
     runtime_dir=DEFAULT_RUNTIME_DIR,
     reload_command: str = "",
+    sync_command: str = "",
     singbox_inbound_ports=(),
     protocol_preferences_path=DEFAULT_PROTOCOL_PREFS_PATH,
     rules_base_url: str = "",
@@ -486,8 +608,10 @@ def make_singbox_server(
 
     Handler.marzban_url = marzban_url
     Handler.server_domain = server_domain
+    Handler.advanced_domains = tuple(advanced_domains or ())
     Handler.runtime_dir = runtime_dir
     Handler.reload_command = reload_command
+    Handler.sync_command = sync_command
     Handler.singbox_inbound_ports = singbox_inbound_ports
     Handler.protocol_preferences_path = protocol_preferences_path
     Handler.rules_base_url = rules_base_url
@@ -500,8 +624,10 @@ def serve_singbox(args: argparse.Namespace) -> int:
         args.port,
         args.marzban_url,
         server_domain=getattr(args, "server_domain", ""),
+        advanced_domains=getattr(args, "advanced_domain", None),
         runtime_dir=getattr(args, "runtime_dir", DEFAULT_RUNTIME_DIR),
         reload_command=getattr(args, "reload_command", ""),
+        sync_command=getattr(args, "sync_command", ""),
         singbox_inbound_ports=parse_singbox_inbound_ports(getattr(args, "singbox_inbound", None)),
         rules_base_url=getattr(args, "rules_base_url", ""),
     )

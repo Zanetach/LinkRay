@@ -8,7 +8,16 @@ from collections.abc import Sequence
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .config import DEFAULT_PORTS, LINKRAY_XRAY_API_PORT, RELAY_PORT_OFFSET, LinkRayConfig, NodeHost, RenderResult, relay_port
+from .config import (
+    DEFAULT_PORTS,
+    LINKRAY_XRAY_API_PORT,
+    RELAY_PORT_OFFSET,
+    TLS_FALLBACK_PORT_KEYS,
+    LinkRayConfig,
+    NodeHost,
+    RenderResult,
+    relay_port,
+)
 from .rules import BUILTIN_CN_DOMAIN_SUFFIXES, BUILTIN_CN_IP_CIDRS, RouteRules, write_route_rules
 from .snell_runtime import DEFAULT_RUNTIME_DIR as SNELL_RUNTIME_DIR
 from .snell_runtime import server_config_text as snell_server_config_text
@@ -54,20 +63,23 @@ def network_tuning_modules() -> str:
     return "tcp_bbr\n"
 
 
-def tls_stream(config: LinkRayConfig) -> dict:
+def tls_stream(config: LinkRayConfig, *, alpn: Sequence[str] | None = None) -> dict:
+    tls_settings = {
+        "serverName": config.domain,
+        "minVersion": "1.2",
+        "certificates": [
+            {
+                "certificateFile": config.cert_file,
+                "keyFile": config.key_file,
+            }
+        ],
+    }
+    if alpn:
+        tls_settings["alpn"] = list(alpn)
     return {
         "network": "tcp",
         "security": "tls",
-        "tlsSettings": {
-            "serverName": config.domain,
-            "minVersion": "1.2",
-            "certificates": [
-                {
-                    "certificateFile": config.cert_file,
-                    "keyFile": config.key_file,
-                }
-            ],
-        },
+        "tlsSettings": tls_settings,
     }
 
 
@@ -78,8 +90,16 @@ def ws_tls_stream(config: LinkRayConfig, path: str) -> dict:
     return stream
 
 
+def ws_plain_stream(path: str) -> dict:
+    return {
+        "network": "ws",
+        "security": "none",
+        "wsSettings": {"path": path},
+    }
+
+
 def grpc_tls_stream(config: LinkRayConfig, service_name: str) -> dict:
-    stream = tls_stream(config)
+    stream = tls_stream(config, alpn=("h2", "http/1.1"))
     stream["network"] = "grpc"
     stream["grpcSettings"] = {
         "serviceName": service_name,
@@ -88,11 +108,30 @@ def grpc_tls_stream(config: LinkRayConfig, service_name: str) -> dict:
     return stream
 
 
+def grpc_plain_stream(service_name: str) -> dict:
+    return {
+        "network": "grpc",
+        "security": "none",
+        "grpcSettings": {
+            "serviceName": service_name,
+            "multiMode": False,
+        },
+    }
+
+
 def httpupgrade_tls_stream(config: LinkRayConfig, path: str) -> dict:
     stream = tls_stream(config)
     stream["network"] = "httpupgrade"
     stream["httpupgradeSettings"] = {"path": path}
     return stream
+
+
+def httpupgrade_plain_stream(path: str) -> dict:
+    return {
+        "network": "httpupgrade",
+        "security": "none",
+        "httpupgradeSettings": {"path": path},
+    }
 
 
 def reality_stream(config: LinkRayConfig, network: str = "tcp") -> dict:
@@ -137,22 +176,38 @@ def _inbound(tag: str, port_key: str, protocol: str, stream: dict | None, ports:
     return entry
 
 
+def _local_inbound(tag: str, port_key: str, protocol: str, stream: dict | None, ports: dict[str, int]) -> dict:
+    entry = _inbound(tag, port_key, protocol, stream, ports)
+    entry["listen"] = "127.0.0.1"
+    return entry
+
+
+def tls_fallbacks(config: LinkRayConfig, ports: dict[str, int]) -> list[dict[str, object]]:
+    return [
+        {"path": "/vless-ws", "dest": f"127.0.0.1:{ports['vless_ws_tls']}"},
+        {"path": "/vmess-ws", "dest": f"127.0.0.1:{ports['vmess_ws_tls']}"},
+        {"path": "/vmess-httpupgrade", "dest": f"127.0.0.1:{ports['vmess_httpupgrade_tls']}"},
+    ]
+
+
 def xray_config(config: LinkRayConfig) -> dict:
     config.validate()
     ports = config.port_map()
+    vless_tls = _inbound("VLESS TCP TLS", "vless_tls", "vless", tls_stream(config, alpn=("h2", "http/1.1")), ports)
+    vless_tls["settings"]["fallbacks"] = tls_fallbacks(config, ports)
     inbounds = [
-        _inbound("VLESS TCP TLS",        "vless_tls",             "vless",       tls_stream(config),                              ports),
+        vless_tls,
         _inbound("VLESS TCP REALITY",    "vless_reality",         "vless",       reality_stream(config),                          ports),
         _inbound("VLESS GRPC REALITY",   "vless_grpc_reality",    "vless",       reality_stream(config, network="grpc"),           ports),
         _inbound("Trojan TCP TLS",       "trojan_tls",            "trojan",      tls_stream(config),                              ports),
         _inbound("VMess TCP TLS",        "vmess_tls",             "vmess",       tls_stream(config),                              ports),
         _inbound("Shadowsocks TCP UDP",  "shadowsocks",           "shadowsocks", None,                                            ports),
-        _inbound("VLESS WS TLS",         "vless_ws_tls",          "vless",       ws_tls_stream(config, "/vless-ws"),              ports),
-        _inbound("VLESS GRPC TLS",       "vless_grpc_tls",        "vless",       grpc_tls_stream(config, config.grpc_service_name), ports),
+        _local_inbound("VLESS WS TLS",   "vless_ws_tls",          "vless",       ws_plain_stream("/vless-ws"),                    ports),
+        _inbound("VLESS GRPC TLS", "vless_grpc_tls",              "vless",       grpc_tls_stream(config, config.grpc_service_name),  ports),
         _inbound("VLESS XHTTP REALITY",  "vless_xhttp_reality",   "vless",       xhttp_reality_stream(config, "/vless-xhttp"),    ports),
-        _inbound("VMess WS TLS",         "vmess_ws_tls",          "vmess",       ws_tls_stream(config, "/vmess-ws"),              ports),
-        _inbound("VMess HTTPUpgrade TLS","vmess_httpupgrade_tls", "vmess",       httpupgrade_tls_stream(config, "/vmess-httpupgrade"), ports),
-        _inbound("Trojan GRPC TLS",      "trojan_grpc_tls",       "trojan",      grpc_tls_stream(config, "trojan-grpc"),          ports),
+        _local_inbound("VMess WS TLS",   "vmess_ws_tls",          "vmess",       ws_plain_stream("/vmess-ws"),                    ports),
+        _local_inbound("VMess HTTPUpgrade TLS","vmess_httpupgrade_tls", "vmess", httpupgrade_plain_stream("/vmess-httpupgrade"), ports),
+        _inbound("Trojan GRPC TLS","trojan_grpc_tls",             "trojan",      grpc_tls_stream(config, "trojan-grpc"),            ports),
     ]
     return {
         "log": {"loglevel": "warning"},
@@ -261,8 +316,9 @@ def master_compose(config: LinkRayConfig) -> str:
 """
 
 
-def linkray_node_service() -> str:
-    return """[Unit]
+def linkray_node_service(config: LinkRayConfig | None = None) -> str:
+    node_domain_env = f"Environment=LINKRAY_NODE_DOMAIN={config.domain}\n" if config else ""
+    return f"""[Unit]
 Description=LinkRay Node control service
 After=network-online.target linkray-xray.service
 Wants=network-online.target
@@ -281,6 +337,8 @@ Environment=XRAY_ASSETS_PATH=/var/lib/marzban/linkray/bin
 Environment=SSL_CERT_FILE=/var/lib/marzban-node/ssl_cert.pem
 Environment=SSL_KEY_FILE=/var/lib/marzban-node/ssl_key.pem
 Environment=SSL_CLIENT_CERT_FILE=/var/lib/marzban-node/ssl_client_cert.pem
+{node_domain_env}Environment=XRAY_TLS_CERT_FILE=/var/lib/marzban/certs/linkray/fullchain.cer
+Environment=XRAY_TLS_KEY_FILE=/var/lib/marzban/certs/linkray/linkray.key
 Environment=LINKRAY_EXTERNAL_XRAY=true
 Environment=LINKRAY_XRAY_RUNTIME_CONFIG=/var/lib/marzban/linkray/xray/runtime.json
 Environment=LINKRAY_XRAY_SERVICE=linkray-xray
@@ -520,7 +578,10 @@ def rendered_xray_runtime_mode(path: Path) -> str:
 
 # Per-inbound host row specification.
 # Columns: remark_suffix, port_key, inbound_tag, sni_src, host_src, fingerprint, path
-# sni_src/host_src: "N"=node.domain  "R"=reality_server_name  None=NULL
+# sni_src/host_src:
+#   "N"=node.domain
+#   "R"=reality_server_name
+#   None=NULL
 # path: None, a literal string, or "grpc"=config.grpc_service_name
 _HOST_SPECS: tuple[tuple, ...] = (
     ("VLESS_TLS_Vision",      "vless_tls",             "VLESS TCP TLS",         "N",  None, "chrome", None),
@@ -586,7 +647,20 @@ WantedBy=multi-user.target
 
 
 def linkray_egern_service(config: LinkRayConfig) -> str:
-    return _marzban_adapter_service("LinkRay Egern subscription adapter", "egern", 61992, config.marzban_http_port)
+    return f"""[Unit]
+Description=LinkRay Egern subscription adapter
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/linkray egern --listen 127.0.0.1 --port 61992 --marzban-url http://127.0.0.1:{config.marzban_http_port} --server-domain {shlex.quote(config.domain)}
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+"""
 
 
 def linkray_clash_service(config: LinkRayConfig) -> str:
@@ -624,12 +698,16 @@ WantedBy=multi-user.target
 """
 
 
-def linkray_singbox_service(config: LinkRayConfig) -> str:
+def linkray_singbox_service(config: LinkRayConfig, nodes: Sequence[NodeHost] | None = None) -> str:
     inbound_flags = " ".join(
         f"--singbox-inbound {shlex.quote(f'{key}={port}')}" for key, port in config.singbox_inbound_ports
     )
     if inbound_flags:
         inbound_flags = " " + inbound_flags
+    advanced_domains = list(dict.fromkeys(node.domain for node in (nodes or []) if node.domain != config.domain))
+    advanced_flags = " ".join(f"--advanced-domain {shlex.quote(domain)}" for domain in advanced_domains)
+    if advanced_flags:
+        advanced_flags = " " + advanced_flags
     rules_base_url = f"https://{config.domain}:{config.panel_port}/linkray/rules"
     return f"""[Unit]
 Description=LinkRay sing-box subscription adapter
@@ -638,7 +716,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/linkray sing-box --listen 127.0.0.1 --port 61995 --marzban-url http://127.0.0.1:{config.marzban_http_port} --server-domain {shlex.quote(config.domain)} --runtime-dir {DEFAULT_RUNTIME_DIR}{inbound_flags} --reload-command 'systemctl try-restart linkray-singbox-runtime' --rules-base-url {shlex.quote(rules_base_url)}
+ExecStart=/usr/local/bin/linkray sing-box --listen 127.0.0.1 --port 61995 --marzban-url http://127.0.0.1:{config.marzban_http_port} --server-domain {shlex.quote(config.domain)}{advanced_flags} --runtime-dir {DEFAULT_RUNTIME_DIR}{inbound_flags} --reload-command 'systemctl try-restart linkray-singbox-runtime' --rules-base-url {shlex.quote(rules_base_url)}
 Restart=always
 RestartSec=3
 
@@ -781,6 +859,16 @@ WantedBy=timers.target
 
 def linkray_relay_service(nodes: Sequence[NodeHost], config: LinkRayConfig) -> str:
     relay_nodes = list(nodes[1:])
+    ports = config.port_map()
+    occupied_ports = {port: f"primary:{key}" for key, port in ports.items()}
+    for node_index, node in enumerate(relay_nodes, start=1):
+        for key, target_port in ports.items():
+            listen_port = relay_port(target_port, node_index)
+            if listen_port in occupied_ports:
+                raise ValueError(
+                    f"relay port conflict {listen_port}: {node.name}:{key} conflicts with {occupied_ports[listen_port]}"
+                )
+            occupied_ports[listen_port] = f"{node.name}:{key}"
     node_flags = [
         f"--node {shlex.quote(f'{node.name}={node.domain}:{RELAY_PORT_OFFSET}')}"
         for node in relay_nodes
@@ -817,34 +905,39 @@ def sql_string(value: object) -> str:
 def host_rows(config: LinkRayConfig, nodes: Sequence[NodeHost]) -> list[tuple[object, ...]]:
     rows: list[tuple[object, ...]] = []
     ports = config.port_map()
-    occupied_ports = {port: f"primary:{key}" for key, port in ports.items()}
-    for node_index, node in enumerate(nodes):
+    h2_fallback_tags = {"VLESS GRPC TLS", "Trojan GRPC TLS"}
+    for node in nodes:
         node.validate()
-        address = node.domain if node_index == 0 else config.domain
         for remark_suffix, port_key, inbound_tag, sni_src, host_src, fingerprint, path_src in _HOST_SPECS:
-            sni = node.domain if sni_src == "N" else config.reality_server_name if sni_src == "R" else None
-            host = node.domain if host_src == "N" else None
+            sni = _host_source_value(config, node, sni_src)
+            host = _host_source_value(config, node, host_src)
             path = config.grpc_service_name if path_src == "grpc" else path_src
-            port = relay_port(ports[port_key], node_index)
-            if node_index > 0:
-                if port in occupied_ports:
-                    raise ValueError(f"relay port conflict {port}: {node.name}:{port_key} conflicts with {occupied_ports[port]}")
-                occupied_ports[port] = f"{node.name}:{port_key}"
+            public_port = ports["vless_tls"] if port_key in TLS_FALLBACK_PORT_KEYS else ports[port_key]
+            security = "tls" if port_key in TLS_FALLBACK_PORT_KEYS else "inbound_default"
+            alpn = "h2" if inbound_tag in h2_fallback_tags else "none"
             rows.append((
                 f"{node.name}-{remark_suffix}",
-                address,
-                port,
+                node.domain,
+                public_port,
                 inbound_tag,
                 sni,
                 host,
-                "inbound_default",
-                "none",
+                security,
+                alpn,
                 fingerprint,
                 0, 0,
                 path,
                 0, None, 0, None, 0,
             ))
     return rows
+
+
+def _host_source_value(config: LinkRayConfig, node: NodeHost, source: str | None) -> str | None:
+    if source == "N":
+        return node.domain
+    if source == "R":
+        return config.reality_server_name
+    return None
 
 
 def hosts_sql(config: LinkRayConfig, nodes: Sequence[NodeHost]) -> str:
@@ -926,7 +1019,7 @@ def render_master(
         write_text(output / "etc/systemd/system/linkray-clash.service", linkray_clash_service(config)),
         write_text(output / "etc/systemd/system/linkray-egern.service", linkray_egern_service(config)),
         write_text(output / "etc/systemd/system/linkray-shadowrocket.service", linkray_shadowrocket_service(config)),
-        write_text(output / "etc/systemd/system/linkray-singbox.service", linkray_singbox_service(config)),
+        write_text(output / "etc/systemd/system/linkray-singbox.service", linkray_singbox_service(config, effective_nodes)),
         write_text(output / "etc/systemd/system/linkray-singbox-runtime.service", linkray_singbox_runtime_service()),
         write_text(output / "etc/systemd/system/linkray-snell-runtime.service", linkray_snell_runtime_service()),
         write_text(output / "etc/systemd/system/linkray-snell@.service", linkray_snell_user_service()),
@@ -987,7 +1080,7 @@ def render_master(
 def render_node(output: Path, config: LinkRayConfig | None = None) -> RenderResult:
     files = [
         *copy_tree_files(NODE_APP_ROOT, output / "opt/linkray-node-app/current"),
-        write_text(output / "etc/systemd/system/linkray-node.service", linkray_node_service()),
+        write_text(output / "etc/systemd/system/linkray-node.service", linkray_node_service(config)),
         write_text(output / "etc/systemd/system/linkray-xray.service", linkray_xray_service()),
         write_text(output / "etc/sysctl.d/99-linkray-network.conf", network_tuning_sysctl()),
         write_text(output / "etc/modules-load.d/linkray-bbr.conf", network_tuning_modules()),
@@ -1008,6 +1101,10 @@ def render_node(output: Path, config: LinkRayConfig | None = None) -> RenderResu
                     json.dumps({"version": 1, "users": []}, indent=2) + "\n",
                 ),
                 write_text(output / "var/lib/marzban/linkray/snell/snell-server.conf", snell_server_config_text(config)),
+                write_text(
+                    output / "var/lib/marzban/linkray/xray/runtime.json",
+                    json.dumps(xray_runtime_config(config), indent=2) + "\n",
+                ),
                 write_text(output / "var/lib/marzban/linkray/linkray-manifest.json", render_manifest(config, [NodeHost("node", config.domain)], role="node")),
             ]
         )

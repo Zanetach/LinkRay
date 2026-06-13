@@ -66,21 +66,21 @@ class SnellRuntimeTests(unittest.TestCase):
                 config,
                 runtime_dir,
                 secret="server-secret",
-                name="cyclelink",
+                name="sample-user",
             )
             same_user, second_changed = ensure_runtime_user(
                 "subscription-token",
                 config,
                 runtime_dir,
                 secret="server-secret",
-                name="cyclelink",
+                name="sample-user",
             )
 
             self.assertTrue(changed)
             self.assertFalse(second_changed)
             self.assertEqual(same_user, user)
             self.assertEqual(load_users(runtime_dir), [user])
-            self.assertEqual(user.name, "cyclelink")
+            self.assertEqual(user.name, "sample-user")
             self.assertTrue(40000 <= user.port <= 49999)
             user_config = (runtime_dir / "users" / f"{user.instance}.conf").read_text()
             self.assertIn(f"listen = ::0:{user.port}", user_config)
@@ -89,15 +89,15 @@ class SnellRuntimeTests(unittest.TestCase):
 
     def test_snell_subscription_builders_use_user_credentials(self):
         config = LinkRayConfig(domain="edge-a.example.com")
-        user = credential_for_token("subscription-token", "server-secret", name="cyclelink", port=40123)
+        user = credential_for_token("subscription-token", "server-secret", name="sample-user", port=40123)
 
         shadowrocket = snell_shadowrocket_line(config, user)
         clash = snell_clash_proxy(config, user)
 
-        self.assertIn("cyclelink-Snell = snell,edge-a.example.com,40123", shadowrocket)
+        self.assertIn("sample-user-Snell = snell,edge-a.example.com,40123", shadowrocket)
         self.assertIn(f"psk={user.psk}", shadowrocket)
         self.assertIn("version=5", shadowrocket)
-        self.assertEqual(clash["name"], "cyclelink-Snell")
+        self.assertEqual(clash["name"], "sample-user-Snell")
         self.assertEqual(clash["type"], "snell")
         self.assertEqual(clash["server"], "edge-a.example.com")
         self.assertEqual(clash["port"], 40123)
@@ -144,7 +144,7 @@ class SnellRuntimeTests(unittest.TestCase):
             save_users(
                 runtime_dir,
                 [
-                    SnellUser("cyclelink", "hash-a", "lr-a", "psk-a", 40123),
+                    SnellUser("sample-user", "hash-a", "lr-a", "psk-a", 40123),
                     SnellUser("lichen", "hash-b", "lr-b", "psk-b", 40124),
                 ],
             )
@@ -155,7 +155,7 @@ class SnellRuntimeTests(unittest.TestCase):
 
             deltas = snell_usage_deltas(runtime_dir, {40123: 1600, 40124: 100, 49999: 9000})
 
-            self.assertEqual(deltas, {"cyclelink": 600})
+            self.assertEqual(deltas, {"sample-user": 600})
             snapshot = (runtime_dir / "usage-snapshot.json").read_text(encoding="utf-8")
             self.assertIn('"40123": 1600', snapshot)
             self.assertIn('"40124": 100', snapshot)
@@ -174,13 +174,13 @@ class SnellRuntimeTests(unittest.TestCase):
             with urlopen(f"{base}/health", timeout=3) as response:
                 health = json.loads(response.read().decode("utf-8"))
 
-            with patch("linkray.snell_runtime.collect_snell_usage", return_value={"cyclelink": 900}):
+            with patch("linkray.snell_runtime.collect_snell_usage", return_value={"sample-user": 900}):
                 request = Request(f"{base}/usage/collect", data=b"", method="POST")
                 with urlopen(request, timeout=3) as response:
                     usage = json.loads(response.read().decode("utf-8"))
 
             self.assertEqual(health, {"status": "ok"})
-            self.assertEqual(usage, {"usage": {"cyclelink": 900}, "total": 900})
+            self.assertEqual(usage, {"usage": {"sample-user": 900}, "total": 900})
 
 
 if __name__ == "__main__":

@@ -4,10 +4,11 @@ import base64
 import ipaddress
 import json
 import socket
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 
 FAKE_IP_NETWORK = ipaddress.ip_network("198.18.0.0/15")
+RELAY_PORT_OFFSET = 100
 
 
 def b64decode_text(value: str) -> str:
@@ -26,6 +27,20 @@ def decode_subscription_links(payload: bytes) -> list[str]:
 def encode_subscription_links(links: list[str]) -> bytes:
     text = "\n".join(links).encode("utf-8")
     return base64.b64encode(text)
+
+
+def native_link_name(link: str) -> str:
+    if link.startswith("vmess://"):
+        try:
+            data = json.loads(b64decode_text(link.removeprefix("vmess://")))
+        except (ValueError, UnicodeDecodeError):
+            return ""
+        return str(data.get("ps") or "")
+    return unquote(urlparse(link).fragment or "")
+
+
+def legacy_marzban_native_link(link: str) -> bool:
+    return native_link_name(link).startswith("🚀 Marz ")
 
 
 def first_query_value(query: dict[str, list[str]], *names: str) -> str:
@@ -49,6 +64,23 @@ def is_ip_address(value: str) -> bool:
     except ValueError:
         return False
     return True
+
+
+def same_parent_domain(left: str, right: str) -> bool:
+    left_labels = left.lower().strip(".").split(".")
+    right_labels = right.lower().strip(".").split(".")
+    if len(left_labels) < 3 or len(right_labels) < 3:
+        return False
+    return left_labels[-2:] == right_labels[-2:] and left_labels[0] != right_labels[0]
+
+
+def should_relay_secondary_node(name: str, server: str, master_domain: str) -> bool:
+    if not master_domain or not server or server == master_domain or is_ip_address(server):
+        return False
+    if not same_parent_domain(master_domain, server):
+        return False
+    target_prefix = server.split(".", 1)[0].lower()
+    return name.lower().startswith(f"{target_prefix}-")
 
 
 def public_ipv4_for_host(host: str) -> str | None:
@@ -101,10 +133,52 @@ def rewrite_vmess_server_to_public_ip(link: str) -> str:
 
 
 def rewrite_server_to_public_ip(link: str) -> str:
-    if link.startswith(("vless://", "trojan://")):
+    if link.startswith(("vless://", "trojan://", "ss://")):
         return rewrite_url_server_to_public_ip(link)
     if link.startswith("vmess://"):
         return rewrite_vmess_server_to_public_ip(link)
+    return link
+
+
+def relay_secondary_url_link(link: str, master_domain: str, *, offset: int = RELAY_PORT_OFFSET) -> str:
+    parsed = urlparse(link)
+    host = parsed.hostname
+    port = parsed_port(parsed)
+    name = parsed.fragment or ""
+    if not host or not port or not should_relay_secondary_node(name, host, master_domain):
+        return link
+    if "@" not in parsed.netloc:
+        return link
+    userinfo, _server = parsed.netloc.rsplit("@", 1)
+    return parsed._replace(netloc=f"{userinfo}@{master_domain}:{port + offset}").geturl()
+
+
+def relay_secondary_vmess_link(link: str, master_domain: str, *, offset: int = RELAY_PORT_OFFSET) -> str:
+    try:
+        data = json.loads(b64decode_text(link.removeprefix("vmess://")))
+    except (ValueError, UnicodeDecodeError):
+        return link
+    host = data.get("add")
+    name = data.get("ps") or ""
+    try:
+        port = int(data.get("port") or 0)
+    except (TypeError, ValueError):
+        return link
+    if not isinstance(host, str) or not should_relay_secondary_node(str(name), host, master_domain):
+        return link
+    data["add"] = master_domain
+    data["port"] = str(port + offset)
+    encoded = base64.urlsafe_b64encode(
+        json.dumps(data, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    ).decode("ascii").rstrip("=")
+    return f"vmess://{encoded}"
+
+
+def relay_secondary_node_link(link: str, master_domain: str, *, offset: int = RELAY_PORT_OFFSET) -> str:
+    if link.startswith(("vless://", "trojan://", "ss://")):
+        return relay_secondary_url_link(link, master_domain, offset=offset)
+    if link.startswith("vmess://"):
+        return relay_secondary_vmess_link(link, master_domain, offset=offset)
     return link
 
 
@@ -114,7 +188,7 @@ def stable_vless(link: str) -> bool:
     network = first_query_value(query, "type") or "tcp"
     security = first_query_value(query, "security")
     if security == "reality":
-        return False
+        return network == "tcp"
     return network in {"tcp", "ws"} and security in {"tls", ""}
 
 

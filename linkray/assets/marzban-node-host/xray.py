@@ -8,7 +8,17 @@ from collections import deque
 from contextlib import contextmanager
 from pathlib import Path
 
-from config import DEBUG, SSL_CERT_FILE, SSL_KEY_FILE, XRAY_API_HOST, XRAY_API_PORT, INBOUNDS
+from config import (
+    DEBUG,
+    INBOUNDS,
+    LINKRAY_NODE_DOMAIN,
+    SSL_CERT_FILE,
+    SSL_KEY_FILE,
+    XRAY_API_HOST,
+    XRAY_API_PORT,
+    XRAY_TLS_CERT_FILE,
+    XRAY_TLS_KEY_FILE,
+)
 from logger import logger
 
 
@@ -25,10 +35,33 @@ class XRayConfig(dict):
         self.api_port = XRAY_API_PORT
         self.ssl_cert = SSL_CERT_FILE
         self.ssl_key = SSL_KEY_FILE
+        self.node_domain = LINKRAY_NODE_DOMAIN
+        self.xray_tls_cert = XRAY_TLS_CERT_FILE
+        self.xray_tls_key = XRAY_TLS_KEY_FILE
         self.peer_ip = peer_ip
 
         super().__init__(config)
+        self._apply_node_tls()
         self._apply_api()
+
+    def _apply_node_tls(self):
+        if not self.node_domain:
+            return
+        for inbound in self.get("inbounds", []):
+            stream = inbound.get("streamSettings") or {}
+            if stream.get("security") != "tls":
+                continue
+            tls_settings = stream.get("tlsSettings")
+            if not isinstance(tls_settings, dict):
+                continue
+            tls_settings["serverName"] = self.node_domain
+            if self.xray_tls_cert and self.xray_tls_key:
+                tls_settings["certificates"] = [
+                    {
+                        "certificateFile": self.xray_tls_cert,
+                        "keyFile": self.xray_tls_key,
+                    }
+                ]
 
     def to_json(self, **json_kwargs):
         return json.dumps(self, **json_kwargs)
@@ -61,17 +94,6 @@ class XRayConfig(dict):
             "protocol": "dokodemo-door",
             "settings": {
                 "address": "127.0.0.1"
-            },
-            "streamSettings": {
-                "security": "tls",
-                "tlsSettings": {
-                    "certificates": [
-                        {
-                            "certificateFile": self.ssl_cert,
-                            "keyFile": self.ssl_key
-                        }
-                    ]
-                }
             },
             "tag": "API_INBOUND"
         }
@@ -118,6 +140,7 @@ class XRayCore:
             "XRAY_LOCATION_ASSET": assets_path
         }
         self.external = os.getenv("LINKRAY_EXTERNAL_XRAY", "").strip().lower() in {"1", "true", "yes", "on"}
+        self.external_stop_allowed = os.getenv("LINKRAY_EXTERNAL_STOP_ALLOWED", "").strip().lower() in {"1", "true", "yes", "on"}
         self.runtime_config = os.getenv("LINKRAY_XRAY_RUNTIME_CONFIG", "/var/lib/marzban/linkray/xray/runtime.json")
         self.service_name = os.getenv("LINKRAY_XRAY_SERVICE", "linkray-xray")
 
@@ -195,10 +218,21 @@ class XRayCore:
         if completed.returncode != 0:
             raise RuntimeError(completed.stdout.strip() or f"systemctl {action} {self.service_name} failed")
 
+    def _external_config_text(self, config: XRayConfig):
+        return config.to_json(indent=2) + chr(10)
+
     def _write_external_config(self, config: XRayConfig):
         path = Path(self.runtime_config)
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(config.to_json(indent=2) + chr(10), encoding="utf-8")
+        text = self._external_config_text(config)
+        if path.exists():
+            try:
+                if path.read_text(encoding="utf-8") == text:
+                    return False
+            except OSError:
+                pass
+        path.write_text(text, encoding="utf-8")
+        return True
 
     @property
     def started(self):
@@ -214,19 +248,22 @@ class XRayCore:
         return False
 
     def start(self, config: XRayConfig):
-        if self.started is True:
-            raise RuntimeError("Xray is started already")
-
         if config.get('log', {}).get('logLevel') in ('none', 'error'):
             config['log']['logLevel'] = 'warning'
 
         if self.external:
-            self._write_external_config(config)
-            self._external_systemctl("restart")
-            logger.warning("Xray core restarted by systemd service %s", self.service_name)
+            changed = self._write_external_config(config)
+            if changed or not self._external_active():
+                self._external_systemctl("restart")
+                logger.warning("Xray core restarted by systemd service %s", self.service_name)
+            else:
+                logger.warning("Xray core config unchanged; keeping systemd service %s running", self.service_name)
             for func in self._on_start_funcs:
                 threading.Thread(target=func).start()
             return
+
+        if self.started is True:
+            raise RuntimeError("Xray is started already")
 
         cmd = [
             self.executable_path,
@@ -257,6 +294,9 @@ class XRayCore:
             return
 
         if self.external:
+            if not self.external_stop_allowed:
+                logger.warning("Xray core stop requested; keeping external systemd service %s running", self.service_name)
+                return
             self._external_systemctl("stop")
             logger.warning("Xray core stopped by systemd service %s", self.service_name)
             for func in self._on_stop_funcs:
@@ -273,6 +313,24 @@ class XRayCore:
 
     def restart(self, config: XRayConfig):
         if self.restarting is True:
+            return
+
+        if self.external:
+            if config.get('log', {}).get('logLevel') in ('none', 'error'):
+                config['log']['logLevel'] = 'warning'
+            changed = self._write_external_config(config)
+            if not changed and self._external_active():
+                logger.warning("Xray core config unchanged; skipping systemd restart for %s", self.service_name)
+                return
+            self.restarting = True
+            try:
+                logger.warning("Restarting Xray core...")
+                self._external_systemctl("restart")
+                logger.warning("Xray core restarted by systemd service %s", self.service_name)
+                for func in self._on_start_funcs:
+                    threading.Thread(target=func).start()
+            finally:
+                self.restarting = False
             return
 
         self.restarting = True

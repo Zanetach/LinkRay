@@ -96,6 +96,8 @@ class PackageTests(unittest.TestCase):
                 "linkray/assets/patches/marzban-dashboard/current/linkray-logo.png",
                 "linkray/assets/source-patches/marzban-dashboard/linkray-dashboard.patch",
                 "linkray/assets/patches/marzban-subscription/current/clash.py",
+                "linkray/assets/patches/marzban-xray/current/0_xray_core.py",
+                "linkray/assets/patches/marzban-xray/current/xray_init.py",
                 "linkray/assets/marzban-node-host/main.py",
                 "linkray/assets/marzban-node-host/xray.py",
                 "linkray/assets/marzban-node-host/requirements.txt",

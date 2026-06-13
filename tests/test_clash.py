@@ -253,13 +253,13 @@ class ClashTests(unittest.TestCase):
     def test_build_clash_meta_yaml_skips_legacy_marzban_placeholder_node(self):
         payload = encoded_subscription(
             "vless://11111111-1111-1111-1111-111111111111@ca.example.com:443?encryption=none&security=tls&fp=chrome&type=tcp&sni=ca.example.com#ca-VLESS_TLS_Vision",
-            "vless://11111111-1111-1111-1111-111111111111@107.172.216.169:18080?encryption=none&security=tls&fp=chrome&type=tcp&sni=ca.cyclelink.org#%F0%9F%9A%80%20Marz%20%28cycleadmin%29%20%5BVLESS%20-%20tcp%5D",
+            "vless://11111111-1111-1111-1111-111111111111@203.0.113.10:18080?encryption=none&security=tls&fp=chrome&type=tcp&sni=edge-a.example.com#%F0%9F%9A%80%20Marz%20%28sampleadmin%29%20%5BVLESS%20-%20tcp%5D",
         )
 
         text = build_clash_meta_yaml(payload, public_only=True)
 
         self.assertIn("name: ca-VLESS_TLS_Vision", text)
-        self.assertNotIn("Marz (cycleadmin)", text)
+        self.assertNotIn("Marz (sampleadmin)", text)
 
     def test_build_clash_meta_yaml_pins_proxy_server_domains_to_public_hosts(self):
         payload = encoded_subscription(
@@ -268,7 +268,7 @@ class ClashTests(unittest.TestCase):
         )
 
         def fake_getaddrinfo(host, *args, **kwargs):
-            addresses = {"ca.example.com": "107.172.216.169", "la.example.com": "69.63.198.100"}
+            addresses = {"ca.example.com": "203.0.113.10", "la.example.com": "198.51.100.20"}
             address = addresses.get(host, host)
             port = args[0] if args else 0
             return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (address, port or 0))]
@@ -277,8 +277,8 @@ class ClashTests(unittest.TestCase):
             text = build_clash_meta_yaml(payload, config=LinkRayConfig(domain="ca.example.com"))
 
         self.assertIn("hosts:", text)
-        self.assertIn("ca.example.com: 107.172.216.169", text)
-        self.assertIn("la.example.com: 69.63.198.100", text)
+        self.assertIn("ca.example.com: 203.0.113.10", text)
+        self.assertIn("la.example.com: 198.51.100.20", text)
         self.assertIn("- ca.example.com", text)
         self.assertIn("- la.example.com", text)
         self.assertIn("ca.example.com: 223.5.5.5", text)
@@ -291,7 +291,7 @@ class ClashTests(unittest.TestCase):
         )
 
         def fake_getaddrinfo(host, *args, **kwargs):
-            addresses = {"ca.example.com": "107.172.216.169", "la.example.com": "69.63.198.100"}
+            addresses = {"ca.example.com": "203.0.113.10", "la.example.com": "198.51.100.20"}
             address = addresses.get(host, host)
             port = args[0] if args else 0
             return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (address, port or 0))]
@@ -301,11 +301,11 @@ class ClashTests(unittest.TestCase):
 
         self.assertRegex(
             text,
-            r"name: ca-VLESS_TLS_Vision\n\s+type: vless\n\s+server: 107\.172\.216\.169\n\s+port: 443\n\s+uuid:",
+            r"name: ca-VLESS_TLS_Vision\n\s+type: vless\n\s+server: 203\.0\.113\.10\n\s+port: 443\n\s+uuid:",
         )
         self.assertRegex(
             text,
-            r"name: la-VLESS_WS_TLS\n\s+type: vless\n\s+server: 107\.172\.216\.169\n\s+port: 543\n\s+uuid:",
+            r"name: la-VLESS_WS_TLS\n\s+type: vless\n\s+server: 203\.0\.113\.10\n\s+port: 543\n\s+uuid:",
         )
         self.assertIn("servername: ca.example.com", text)
         self.assertIn("servername: la.example.com", text)
@@ -318,7 +318,7 @@ class ClashTests(unittest.TestCase):
         )
 
         def fake_getaddrinfo(host, *args, **kwargs):
-            addresses = {"ca.example.com": "107.172.216.169", "la.example.com": "69.63.198.100"}
+            addresses = {"ca.example.com": "203.0.113.10", "la.example.com": "198.51.100.20"}
             address = addresses.get(host, host)
             return [(None, None, None, "", (address, 0))]
 
@@ -327,11 +327,11 @@ class ClashTests(unittest.TestCase):
 
         self.assertRegex(
             text,
-            r"name: la-VLESS_TLS_Vision\n\s+type: vless\n\s+server: 107\.172\.216\.169\n\s+port: 543\n\s+uuid:",
+            r"name: la-VLESS_TLS_Vision\n\s+type: vless\n\s+server: 203\.0\.113\.10\n\s+port: 543\n\s+uuid:",
         )
         self.assertRegex(
             text,
-            r"name: la-VLESS_Reality_Vision\n\s+type: vless\n\s+server: 107\.172\.216\.169\n\s+port: 18181\n\s+uuid:",
+            r"name: la-VLESS_Reality_Vision\n\s+type: vless\n\s+server: 203\.0\.113\.10\n\s+port: 18181\n\s+uuid:",
         )
         self.assertIn("servername: la.example.com", text)
         self.assertIn("servername: www.microsoft.com", text)
@@ -356,7 +356,7 @@ class ClashTests(unittest.TestCase):
                 return
 
         def fake_getaddrinfo(host, *args, **kwargs):
-            addresses = {"ca.example.com": "107.172.216.169", "la.example.com": "69.63.198.100"}
+            addresses = {"ca.example.com": "203.0.113.10", "la.example.com": "198.51.100.20"}
             address = addresses.get(host, host)
             port = args[0] if args else 0
             return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (address, port or 0))]
@@ -384,7 +384,7 @@ class ClashTests(unittest.TestCase):
 
         self.assertRegex(
             text,
-            r"name: la-VLESS_TLS_Vision\n\s+type: vless\n\s+server: 107\.172\.216\.169\n\s+port: 543\n\s+uuid:",
+            r"name: la-VLESS_TLS_Vision\n\s+type: vless\n\s+server: 203\.0\.113\.10\n\s+port: 543\n\s+uuid:",
         )
         self.assertIn("servername: la.example.com", text)
 
@@ -395,7 +395,7 @@ class ClashTests(unittest.TestCase):
         )
 
         def fake_getaddrinfo(host, *args, **kwargs):
-            addresses = {"ca.example.com": "107.172.216.169", "la.example.com": "69.63.198.100"}
+            addresses = {"ca.example.com": "203.0.113.10", "la.example.com": "198.51.100.20"}
             return [(None, None, None, "", (addresses[host], 0))]
 
         with patch("linkray.clash.socket.getaddrinfo", side_effect=fake_getaddrinfo):
@@ -403,8 +403,8 @@ class ClashTests(unittest.TestCase):
 
         self.assertIn("tun:", text)
         self.assertIn("route-exclude-address:", text)
-        self.assertIn("- 107.172.216.169/32", text)
-        self.assertNotIn("- 69.63.198.100/32", text)
+        self.assertIn("- 203.0.113.10/32", text)
+        self.assertNotIn("- 198.51.100.20/32", text)
 
     def test_build_clash_meta_yaml_ignores_fake_ip_host_resolution(self):
         payload = encoded_subscription(
@@ -422,7 +422,7 @@ class ClashTests(unittest.TestCase):
         self.assertIn("ca.example.com: 223.5.5.5", text)
 
     def test_build_clash_meta_yaml_does_not_append_snell_v5_node(self):
-        user = credential_for_token("subscription-token", "server-secret", name="cyclelink", port=40123)
+        user = credential_for_token("subscription-token", "server-secret", name="sample-user", port=40123)
         payload = encoded_subscription(
             "trojan://secret@ca.example.com:8443?security=tls&type=tcp&sni=ca.example.com#ca-Trojan_TLS"
         )
@@ -433,7 +433,7 @@ class ClashTests(unittest.TestCase):
             snell_user=user,
         )
 
-        self.assertNotIn("cyclelink-Snell", text)
+        self.assertNotIn("sample-user-Snell", text)
         self.assertNotIn("type: snell", text)
         self.assertNotIn("version: 5", text)
         self.assertIn("name: ca-Trojan_TLS", text)
@@ -442,9 +442,9 @@ class ClashTests(unittest.TestCase):
             payload,
             config=LinkRayConfig(domain="edge-a.example.com"),
             snell_user=user,
-            protocol_preferences=ProtocolPreferences(users={"cyclelink": {"tuic"}}),
+            protocol_preferences=ProtocolPreferences(users={"sample-user": {"tuic"}}),
         )
-        self.assertNotIn("cyclelink-Snell", filtered)
+        self.assertNotIn("sample-user-Snell", filtered)
 
 
 if __name__ == "__main__":

@@ -66,6 +66,7 @@ class InstallerTests(unittest.TestCase):
         self.assertIn("docker rmi gozargah/marzban:latest", script)
         self.assertIn("docker rm -f marzban-marzban-1", script)
         self.assertIn("docker compose up -d --force-recreate --remove-orphans linkray", script)
+        self.assertIn("delete from nodes", script)
 
     def test_deploy_rendered_node_script_supports_advanced_runtime_files(self):
         script = Path("scripts/deploy-rendered-node.sh").read_text()
@@ -86,6 +87,7 @@ class InstallerTests(unittest.TestCase):
         self.assertIn("etc/systemd/system/linkray-snell-runtime.service", script)
         self.assertIn("etc/systemd/system/linkray-snell@.service", script)
         self.assertIn("etc/systemd/system/linkray-snell-usage.service", script)
+        self.assertIn("var/lib/marzban/linkray/xray/runtime.json", script)
         self.assertIn("var/lib/marzban/linkray/singbox/config.json", script)
         self.assertIn("var/lib/marzban/linkray/singbox/users.json", script)
         self.assertIn("var/lib/marzban/linkray/snell/snell-server.conf", script)

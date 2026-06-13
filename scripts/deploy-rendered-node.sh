@@ -43,10 +43,12 @@ if [[ -f "$src/etc/systemd/system/linkray-singbox-runtime.service" ]]; then
   test -f "$src/etc/systemd/system/linkray-snell-runtime.service"
   test -f "$src/etc/systemd/system/linkray-snell@.service"
   test -f "$src/etc/systemd/system/linkray-snell-usage.service"
+  test -f "$src/var/lib/marzban/linkray/xray/runtime.json"
   test -f "$src/var/lib/marzban/linkray/singbox/config.json"
   test -f "$src/var/lib/marzban/linkray/singbox/users.json"
   test -f "$src/var/lib/marzban/linkray/snell/snell-server.conf"
 
+  install -m 0644 "$src/var/lib/marzban/linkray/xray/runtime.json" /var/lib/marzban/linkray/xray/runtime.json
   install -m 0644 "$src/etc/systemd/system/linkray-singbox-runtime.service" /etc/systemd/system/linkray-singbox-runtime.service
   install -m 0644 "$src/etc/systemd/system/linkray-snell-runtime.service" /etc/systemd/system/linkray-snell-runtime.service
   install -m 0644 "$src/etc/systemd/system/linkray-snell@.service" /etc/systemd/system/linkray-snell@.service

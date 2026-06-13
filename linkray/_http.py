@@ -14,6 +14,7 @@ PASS_HEADERS = {
     "profile-update-interval",
     "subscription-userinfo",
 }
+UPSTREAM_TIMEOUT_SECONDS = 45
 
 
 def first_query_value(query: Mapping[str, list[str]], *names: str) -> str | None:
@@ -35,14 +36,14 @@ def parse_link_netloc(parsed) -> tuple[str, int] | None:
 def fetch_upstream(marzban_url: str, token: str, headers: Mapping[str, str]) -> tuple[int, dict[str, str], bytes]:
     url = f"{marzban_url.rstrip('/')}/sub/{token}"
     req = Request(url, headers={k: v for k, v in headers.items() if v})
-    with urlopen(req, timeout=15) as response:
+    with urlopen(req, timeout=UPSTREAM_TIMEOUT_SECONDS) as response:
         return response.status, dict(response.headers.items()), response.read()
 
 
 def fetch_subscription_username(marzban_url: str, token: str) -> str:
     url = f"{marzban_url.rstrip('/')}/sub/{token}/info"
     request = Request(url, headers={"Accept": "application/json"})
-    with urlopen(request, timeout=15) as response:
+    with urlopen(request, timeout=UPSTREAM_TIMEOUT_SECONDS) as response:
         data = json.loads(response.read().decode("utf-8"))
     username = data.get("username") if isinstance(data, dict) else ""
     return username if isinstance(username, str) else ""

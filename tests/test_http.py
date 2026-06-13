@@ -2,9 +2,10 @@ import http.client
 import threading
 import unittest
 from http.server import ThreadingHTTPServer
+from unittest.mock import MagicMock, patch
 from urllib.parse import parse_qs, urlparse
 
-from linkray._http import AdapterHandler, first_query_value, parse_link_netloc
+from linkray._http import AdapterHandler, fetch_subscription_username, fetch_upstream, first_query_value, parse_link_netloc
 
 
 class FirstQueryValueTests(unittest.TestCase):
@@ -77,6 +78,32 @@ class AdapterHandlerTests(unittest.TestCase):
         finally:
             server.shutdown()
             server.server_close()
+
+
+class UpstreamFetchTests(unittest.TestCase):
+    def test_fetch_upstream_uses_cold_subscription_timeout_budget(self):
+        response = MagicMock()
+        response.__enter__.return_value.status = 200
+        response.__enter__.return_value.headers.items.return_value = [("Content-Type", "text/plain")]
+        response.__enter__.return_value.read.return_value = b"payload"
+
+        with patch("linkray._http.urlopen", return_value=response) as urlopen:
+            status, headers, body = fetch_upstream("http://127.0.0.1:8000", "token", {"Accept": "text/plain"})
+
+        self.assertEqual(status, 200)
+        self.assertEqual(headers["Content-Type"], "text/plain")
+        self.assertEqual(body, b"payload")
+        self.assertEqual(urlopen.call_args.kwargs["timeout"], 45)
+
+    def test_fetch_subscription_username_uses_cold_subscription_timeout_budget(self):
+        response = MagicMock()
+        response.__enter__.return_value.read.return_value = b'{"username": "sample-user"}'
+
+        with patch("linkray._http.urlopen", return_value=response) as urlopen:
+            username = fetch_subscription_username("http://127.0.0.1:8000", "token")
+
+        self.assertEqual(username, "sample-user")
+        self.assertEqual(urlopen.call_args.kwargs["timeout"], 45)
 
 
 if __name__ == "__main__":

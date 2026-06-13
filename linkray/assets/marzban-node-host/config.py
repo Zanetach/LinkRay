@@ -15,6 +15,10 @@ SSL_CERT_FILE = config("SSL_CERT_FILE", default="/var/lib/marzban-node/ssl_cert.
 SSL_KEY_FILE = config("SSL_KEY_FILE", default="/var/lib/marzban-node/ssl_key.pem")
 SSL_CLIENT_CERT_FILE = config("SSL_CLIENT_CERT_FILE", default="")
 
+LINKRAY_NODE_DOMAIN = config("LINKRAY_NODE_DOMAIN", default="")
+XRAY_TLS_CERT_FILE = config("XRAY_TLS_CERT_FILE", default="/var/lib/marzban/certs/linkray/fullchain.cer")
+XRAY_TLS_KEY_FILE = config("XRAY_TLS_KEY_FILE", default="/var/lib/marzban/certs/linkray/linkray.key")
+
 DEBUG = config("DEBUG", cast=bool, default=False)
 
 SERVICE_PROTOCOL = config('SERVICE_PROTOCOL', cast=str, default='rest')

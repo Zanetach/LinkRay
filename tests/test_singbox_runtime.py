@@ -23,7 +23,10 @@ class SingBoxRuntimeTests(unittest.TestCase):
         by_tag = {inbound["tag"]: inbound for inbound in data["inbounds"]}
 
         self.assertEqual(by_tag["Hysteria2"]["type"], "hysteria2")
-        self.assertEqual(by_tag["Hysteria2"]["listen_port"], SINGBOX_DEFAULT_PORTS["hysteria2"])
+        self.assertEqual(SINGBOX_DEFAULT_PORTS, {"hysteria2": 443, "tuic": 8443, "anytls": 8444})
+        self.assertEqual(by_tag["Hysteria2"]["listen_port"], 443)
+        self.assertEqual(by_tag["TUIC"]["listen_port"], 8443)
+        self.assertEqual(by_tag["AnyTLS"]["listen_port"], 8444)
         self.assertEqual(by_tag["Hysteria2"]["users"][0]["password"], user.hysteria2_password)
         self.assertEqual(by_tag["TUIC"]["type"], "tuic")
         self.assertEqual(by_tag["TUIC"]["users"][0]["uuid"], user.uuid)
@@ -52,11 +55,14 @@ class SingBoxRuntimeTests(unittest.TestCase):
         self.assertEqual(outbounds["AnyTLS"]["type"], "anytls")
         self.assertEqual(outbounds["AnyTLS"]["password"], user.anytls_password)
         self.assertEqual(outbounds["AnyTLS"]["tls"]["server_name"], "edge-a.example.com")
+        self.assertNotIn("utls", outbounds["Hysteria2"]["tls"])
+        self.assertNotIn("utls", outbounds["TUIC"]["tls"])
+        self.assertIn("utls", outbounds["AnyTLS"]["tls"])
 
     def test_credentials_can_use_marzban_username_for_stats_attribution(self):
-        user = credential_for_token("token-a", "secret-a", name="cyclelink")
+        user = credential_for_token("token-a", "secret-a", name="sample-user")
 
-        self.assertEqual(user.name, "cyclelink")
+        self.assertEqual(user.name, "sample-user")
         self.assertEqual(user.token_hash, credential_for_token("token-a", "secret-a").token_hash)
         self.assertNotIn("token-a", json.dumps(user.__dict__))
 
@@ -68,7 +74,7 @@ class SingBoxRuntimeTests(unittest.TestCase):
                 LinkRayConfig(domain="edge-a.example.com"),
                 runtime_dir,
                 secret="server-secret",
-                name="cyclelink",
+                name="sample-user",
             )
 
             self.assertTrue(changed)
@@ -83,7 +89,7 @@ class SingBoxRuntimeTests(unittest.TestCase):
                 LinkRayConfig(domain="edge-a.example.com"),
                 runtime_dir,
                 secret="server-secret",
-                name="cyclelink",
+                name="sample-user",
             )
             self.assertEqual(same_user, user)
             self.assertFalse(second_changed)

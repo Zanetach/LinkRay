@@ -1,5 +1,10 @@
 # Deployment Guide
 
+This guide describes the stable LinkRay v0.2.0 deployment shape. A fresh
+environment is expected to become usable from a release tarball plus one
+`bootstrap master --apply` command. Additional servers join with
+`bootstrap node --apply`.
+
 ## Install Command
 
 From the LinkRay repo on the server:
@@ -9,6 +14,15 @@ From the LinkRay repo on the server:
 ```
 
 This installs LinkRay into `/opt/linkray/venv` and creates `/usr/local/bin/linkray`, so operational commands use `linkray ...` instead of `python3 -m linkray ...`.
+
+From a release artifact:
+
+```bash
+curl -L https://github.com/Zanetach/LinkRay/releases/download/v0.2.0/linkray-0.2.0.tar.gz -o linkray-0.2.0.tar.gz
+tar -xzf linkray-0.2.0.tar.gz
+cd linkray-0.2.0
+sudo ./install.sh
+```
 
 ## Architecture Boundary
 
@@ -22,6 +36,27 @@ This boundary is part of the packaging contract. Future release bundles and one-
 - `scripts/deploy-rendered-node.sh` may stop/remove old legacy node containers, but must not install Docker or run Docker Compose.
 
 ## Fresh Server Bootstrap
+
+For a new master server, this is the intended one-command operational path
+after `install.sh`:
+
+```bash
+export CF_Token='YOUR_CLOUDFLARE_DNS_API_TOKEN'
+sudo -E linkray bootstrap master \
+  --domain edge-a.example.com \
+  --node edge-a=edge-a.example.com \
+  --node edge-b=edge-b.example.com \
+  --admin-username admin \
+  --admin-password 'CHANGE_THIS_PASSWORD' \
+  --issue-cert \
+  --apply
+```
+
+The resulting dashboard is available at:
+
+```text
+https://edge-a.example.com:9443/dashboard/
+```
 
 On a new master server, run the dry-run first:
 

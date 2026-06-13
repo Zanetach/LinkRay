@@ -67,7 +67,7 @@ def add_common_master_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--singbox-inbound",
         action="append",
-        help="Override a sing-box inbound port in key=port form, for example hysteria2=19080. Repeat as needed.",
+        help="Override a sing-box inbound port in key=port form, for example hysteria2=443. Repeat as needed.",
     )
     parser.add_argument(
         "--snell-inbound",
@@ -103,7 +103,7 @@ def add_common_node_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--singbox-inbound",
         action="append",
-        help="Override a sing-box inbound port in key=port form, for example hysteria2=19080. Repeat as needed.",
+        help="Override a sing-box inbound port in key=port form, for example hysteria2=443. Repeat as needed.",
     )
     parser.add_argument(
         "--snell-inbound",
@@ -237,6 +237,7 @@ def add_egern_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPar
     egern.add_argument("--listen", default="127.0.0.1")
     egern.add_argument("--port", default=61992, type=int)
     egern.add_argument("--marzban-url", default="http://127.0.0.1:8000")
+    egern.add_argument("--server-domain", default="")
 
 
 def add_clash_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -266,8 +267,14 @@ def add_singbox_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentP
     singbox.add_argument("--port", default=61995, type=int)
     singbox.add_argument("--marzban-url", default="http://127.0.0.1:8000")
     singbox.add_argument("--server-domain", default="")
+    singbox.add_argument(
+        "--advanced-domain",
+        action="append",
+        help="Additional LinkRay advanced runtime domain to include in sing-box subscriptions. Repeat for multi-node setups.",
+    )
     singbox.add_argument("--runtime-dir", type=Path, default=Path("/var/lib/marzban/linkray/singbox"))
     singbox.add_argument("--reload-command", default="")
+    singbox.add_argument("--sync-command", default="", help="Optional shell command to sync runtime users to secondary nodes after changes.")
     singbox.add_argument("--rules-base-url", default="")
     singbox.add_argument(
         "--singbox-inbound",

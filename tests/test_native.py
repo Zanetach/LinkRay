@@ -120,7 +120,7 @@ class NativeSubscriptionTests(unittest.TestCase):
 
         self.assertTrue(stable_vless("vless://u@h:1?security=tls&type=tcp"))
         self.assertTrue(stable_vless("vless://u@h:1?security=tls&type=ws"))
-        self.assertFalse(stable_vless("vless://u@h:1?security=reality&type=tcp"))
+        self.assertTrue(stable_vless("vless://u@h:1?security=reality&type=tcp"))
         self.assertFalse(stable_vless("vless://u@h:1?security=tls&type=grpc"))
 
     def test_stable_trojan_accepts_tcp_and_ws_only(self):

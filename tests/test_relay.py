@@ -52,7 +52,7 @@ class RelayTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "relay port conflict"):
             relay_specs(
                 [parse_relay_node("edge-b=edge-b.example.com:100")],
-                inbound_ports=[("trojan_tls", 17980)],
+                inbound_ports=[("vless_reality", 17982)],
             )
 
 

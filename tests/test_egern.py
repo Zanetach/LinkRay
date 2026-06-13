@@ -3,6 +3,7 @@ import json
 import unittest
 from unittest.mock import patch
 
+from linkray.config import LinkRayConfig
 from linkray.egern import PASS_HEADERS, build_egern_yaml, convert_link, resolve_server_address
 from linkray.rules import RouteRules
 
@@ -36,7 +37,7 @@ class EgernTests(unittest.TestCase):
         links = "\n".join(
             [
                 "vless://11111111-1111-1111-1111-111111111111@edge.example.com:18080?security=tls&type=tcp&sni=edge.example.com#vless-tls",
-                "vless://11111111-1111-1111-1111-111111111111@edge.example.com:18081?security=reality&type=tcp&sni=www.microsoft.com#vless-reality",
+                "vless://11111111-1111-1111-1111-111111111111@edge.example.com:18081?security=reality&type=tcp&sni=www.microsoft.com&pbk=abc&sid=1234#vless-reality",
                 "trojan://password@edge.example.com:18083?security=tls&type=tcp&sni=edge.example.com#trojan-tls",
                 f"vmess://{b64(json.dumps(vmess))}",
                 "ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTpwYXNzd29yZA@edge.example.com:18085#ss",
@@ -55,7 +56,9 @@ class EgernTests(unittest.TestCase):
         self.assertIn("- shadowsocks:", output)
         self.assertIn("vless-tls", output)
         self.assertIn("tfo: false", output)
-        self.assertNotIn("vless-reality", output)
+        self.assertIn("vless-reality", output)
+        self.assertIn("reality:", output)
+        self.assertIn('public_key: "abc"', output)
         self.assertNotIn("tfo: true", output)
 
     def test_convert_link_skips_vmess_httpupgrade(self):
@@ -71,20 +74,60 @@ class EgernTests(unittest.TestCase):
 
         self.assertIsNone(convert_link(f"vmess://{b64(json.dumps(vmess))}"))
 
-    def test_build_egern_yaml_adds_prev_hop_for_secondary_servers(self):
+    def test_build_egern_yaml_relays_secondary_servers_in_public_mode(self):
+        vmess = {
+            "ps": "la-VMess_TLS",
+            "add": "la.example.com",
+            "port": "18084",
+            "id": "00000000-0000-0000-0000-000000000000",
+            "net": "tcp",
+            "tls": "tls",
+            "sni": "la.example.com",
+            "host": "la.example.com",
+            "scy": "auto",
+        }
         links = "\n".join(
             [
-                "vless://11111111-1111-1111-1111-111111111111@198.51.100.10:18080?security=tls&type=tcp&sni=edge-a.example.com&flow=xtls-rprx-vision#edge-a-VLESS_TLS_Vision",
-                "vless://11111111-1111-1111-1111-111111111111@203.0.113.20:18080?security=tls&type=tcp&sni=edge-b.example.com&flow=xtls-rprx-vision#edge-b-VLESS_TLS_Vision",
-                "trojan://password@203.0.113.20:18083?security=tls&type=tcp&sni=edge-b.example.com#edge-b-Trojan_TLS",
+                "vless://11111111-1111-1111-1111-111111111111@ca.example.com:443?security=tls&type=tcp&sni=ca.example.com&flow=xtls-rprx-vision#ca-VLESS_TLS_Vision",
+                "vless://11111111-1111-1111-1111-111111111111@la.example.com:443?security=tls&type=tcp&sni=la.example.com&flow=xtls-rprx-vision#la-VLESS_TLS_Vision",
+                "trojan://password@la.example.com:18083?security=tls&type=tcp&sni=la.example.com#la-Trojan_TLS",
+                f"vmess://{b64(json.dumps(vmess))}",
+                "ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTpwYXNzd29yZA@la.example.com:18085#la-Shadowsocks",
             ]
         )
 
-        output = build_egern_yaml(base64.b64encode(links.encode()))
+        with patch("linkray.egern.socket.getaddrinfo", return_value=[(None, None, None, None, ("203.0.113.10", 0))]):
+            output = build_egern_yaml(
+                base64.b64encode(links.encode()),
+                config=LinkRayConfig(domain="ca.example.com"),
+                public_only=True,
+            )
 
         self.assertIn('flow: "xtls-rprx-vision"', output)
-        self.assertEqual(output.count('prev_hop: "edge-a-VLESS_TLS_Vision"'), 2)
-        self.assertLess(output.index('name: "edge-a-VLESS_TLS_Vision"'), output.index('prev_hop: "edge-a-VLESS_TLS_Vision"'))
+        self.assertIn('name: "ca-VLESS_TLS_Vision"', output)
+        self.assertIn('name: "la-VLESS_TLS_Vision"', output)
+        self.assertIn('name: "la-Trojan_TLS"', output)
+        self.assertIn('name: "la-VMess_TLS"', output)
+        self.assertIn('name: "la-Shadowsocks"', output)
+        self.assertIn('server: "203.0.113.10"', output)
+        self.assertIn("port: 543", output)
+        self.assertIn("port: 18183", output)
+        self.assertIn("port: 18184", output)
+        self.assertIn("port: 18185", output)
+        self.assertIn('sni: "la.example.com"', output)
+
+    def test_build_egern_yaml_skips_legacy_marzban_placeholder_node(self):
+        links = "\n".join(
+            [
+                "vless://11111111-1111-1111-1111-111111111111@ca.example.com:443?security=tls&type=tcp&sni=ca.example.com#ca-VLESS_TLS_Vision",
+                "vless://11111111-1111-1111-1111-111111111111@203.0.113.10:18080?security=tls&type=tcp&sni=edge-a.example.com#%F0%9F%9A%80%20Marz%20%28sampleadmin%29%20%5BVLESS%20-%20tcp%5D",
+            ]
+        )
+
+        output = build_egern_yaml(base64.b64encode(links.encode()), public_only=True)
+
+        self.assertIn('name: "ca-VLESS_TLS_Vision"', output)
+        self.assertNotIn("Marz (sampleadmin)", output)
 
     def test_build_egern_yaml_adds_policy_groups_and_route_rules(self):
         links = "\n".join(
@@ -148,10 +191,15 @@ class EgernTests(unittest.TestCase):
         self.assertEqual(item["port"], 18080)
         self.assertIn("tls", item["transport"])
 
-    def test_vless_to_egern_rejects_reality_and_grpc(self):
+    def test_vless_to_egern_supports_reality_and_rejects_grpc(self):
         from linkray.egern import vless_to_egern
 
-        self.assertIsNone(vless_to_egern("vless://u@h:1?security=reality&type=tcp"))
+        result = vless_to_egern("vless://u@h:1?security=reality&type=tcp&sni=www.microsoft.com&pbk=public-key&sid=abcd#reality")
+        self.assertIsNotNone(result)
+        item = result["vless"]
+        self.assertEqual(item["transport"]["tls"]["sni"], "www.microsoft.com")
+        self.assertEqual(item["transport"]["tls"]["reality"]["public_key"], "public-key")
+        self.assertEqual(item["transport"]["tls"]["reality"]["short_id"], "abcd")
         self.assertIsNone(vless_to_egern("vless://u@h:1?security=tls&type=grpc"))
 
     def test_vless_to_egern_ws(self):

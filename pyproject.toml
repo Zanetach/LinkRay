@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "linkray"
-version = "0.1.1"
+version = "0.2.0"
 description = "Repeatable LinkRay + Xray-core deployment tooling for multi-node proxy management."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -35,6 +35,8 @@ linkray = [
   "assets/patches/marzban-dashboard/current/linkray-logo.png",
   "assets/patches/marzban-dashboard/current/index.original.js",
   "assets/patches/marzban-jobs/current/linkray_singbox_usages.py",
+  "assets/patches/marzban-xray/current/0_xray_core.py",
+  "assets/patches/marzban-xray/current/xray_init.py",
   "assets/source-patches/marzban-dashboard/README.md",
   "assets/source-patches/marzban-dashboard/linkray-dashboard.patch",
   "assets/marzban-node-host/*",
