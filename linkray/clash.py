@@ -462,7 +462,7 @@ def metacubex_rule_providers(rules_base_url: str) -> dict[str, dict[str, Any]]:
     }
 
 
-DEFAULT_URL_TEST_URL = "https://cp.cloudflare.com/generate_204"
+DEFAULT_URL_TEST_URL = "https://www.gstatic.com/generate_204"
 
 
 def health_check_url_from_rules_base(rules_base_url: str) -> str:
@@ -481,6 +481,8 @@ def build_proxy_groups(names: list[str], url_test_url: str = DEFAULT_URL_TEST_UR
             "url": url_test_url,
             "interval": 300,
             "tolerance": 50,
+            "lazy": True,
+            "timeout": 10000,
         },
         {"name": "全球代理", "type": "select", "proxies": ["手动切换", "自动选择", *selector]},
         {"name": "Google", "type": "select", "proxies": ["全球代理", "自动选择", "手动切换", *selector]},
