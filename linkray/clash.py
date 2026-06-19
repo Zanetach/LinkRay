@@ -468,33 +468,38 @@ def health_check_url_from_rules_base(rules_base_url: str) -> str:
     return DEFAULT_URL_TEST_URL
 
 
-def build_proxy_groups(names: list[str], url_test_url: str = DEFAULT_URL_TEST_URL) -> list[dict[str, Any]]:
+def build_proxy_groups(
+    names: list[str],
+    url_test_url: str = DEFAULT_URL_TEST_URL,
+    auto_names: list[str] | None = None,
+) -> list[dict[str, Any]]:
     default = names[0] if names else "DIRECT"
     selector = names if names else ["DIRECT"]
+    auto_selector = auto_names or [default]
     return [
         {"name": "手动切换", "type": "select", "proxies": selector},
         {
             "name": "自动选择",
             "type": "url-test",
-            "proxies": selector,
+            "proxies": auto_selector,
             "url": url_test_url,
             "interval": 300,
             "tolerance": 50,
             "lazy": True,
             "timeout": 10000,
         },
-        {"name": "全球代理", "type": "select", "proxies": ["手动切换", "自动选择", *selector]},
-        {"name": "Google", "type": "select", "proxies": ["全球代理", "自动选择", "手动切换", *selector]},
-        {"name": "YouTube", "type": "select", "proxies": ["全球代理", "自动选择", "手动切换", *selector]},
-        {"name": "Telegram", "type": "select", "proxies": ["全球代理", "自动选择", "手动切换", *selector]},
-        {"name": "Facebook", "type": "select", "proxies": ["全球代理", "自动选择", "手动切换", *selector]},
-        {"name": "X", "type": "select", "proxies": ["全球代理", "自动选择", "手动切换", *selector]},
-        {"name": "TikTok", "type": "select", "proxies": ["全球代理", "自动选择", "手动切换", *selector]},
-        {"name": "OpenAI", "type": "select", "proxies": ["全球代理", "自动选择", "手动切换", *selector]},
-        {"name": "ClaudeAI", "type": "select", "proxies": ["全球代理", "自动选择", "手动切换", *selector]},
+        {"name": "全球代理", "type": "select", "proxies": ["自动选择", default, "手动切换"]},
+        {"name": "Google", "type": "select", "proxies": ["全球代理", "自动选择", default, "手动切换"]},
+        {"name": "YouTube", "type": "select", "proxies": ["全球代理", "自动选择", default, "手动切换"]},
+        {"name": "Telegram", "type": "select", "proxies": ["全球代理", "自动选择", default, "手动切换"]},
+        {"name": "Facebook", "type": "select", "proxies": ["全球代理", "自动选择", default, "手动切换"]},
+        {"name": "X", "type": "select", "proxies": ["全球代理", "自动选择", default, "手动切换"]},
+        {"name": "TikTok", "type": "select", "proxies": ["全球代理", "自动选择", default, "手动切换"]},
+        {"name": "OpenAI", "type": "select", "proxies": ["全球代理", "自动选择", default, "手动切换"]},
+        {"name": "ClaudeAI", "type": "select", "proxies": ["全球代理", "自动选择", default, "手动切换"]},
         {"name": "国内站点", "type": "select", "proxies": ["DIRECT", "全球代理", default]},
         {"name": "本地直连", "type": "select", "proxies": ["DIRECT", "全球代理"]},
-        {"name": "漏网之鱼", "type": "select", "proxies": ["全球代理", "自动选择", "手动切换", "DIRECT", *selector]},
+        {"name": "漏网之鱼", "type": "select", "proxies": ["全球代理", "自动选择", default, "手动切换", "DIRECT"]},
     ]
 
 

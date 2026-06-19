@@ -7,7 +7,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from unittest.mock import patch
 from urllib.request import urlopen
 
-from linkray.clash import build_clash_meta_yaml, make_clash_server
+from linkray.clash import build_clash_meta_yaml, build_proxy_groups, make_clash_server
 from linkray.config import LinkRayConfig
 from linkray.protocol_prefs import ProtocolPreferences
 from linkray.snell_runtime import credential_for_token
@@ -23,6 +23,26 @@ def vmess_link(payload: dict[str, object]) -> str:
 
 
 class ClashTests(unittest.TestCase):
+    def test_build_proxy_groups_keeps_manual_full_list_but_auto_uses_default(self):
+        groups = build_proxy_groups(
+            [
+                "ca-VLESS_TLS_Vision",
+                "la-VLESS_TLS_Vision",
+                "ca-Trojan_TLS",
+            ]
+        )
+
+        by_name = {group["name"]: group for group in groups}
+
+        self.assertEqual(
+            by_name["手动切换"]["proxies"],
+            ["ca-VLESS_TLS_Vision", "la-VLESS_TLS_Vision", "ca-Trojan_TLS"],
+        )
+        self.assertEqual(by_name["自动选择"]["proxies"], ["ca-VLESS_TLS_Vision"])
+        self.assertEqual(by_name["全球代理"]["proxies"], ["自动选择", "ca-VLESS_TLS_Vision", "手动切换"])
+        self.assertNotIn("la-VLESS_TLS_Vision", by_name["自动选择"]["proxies"])
+        self.assertNotIn("la-VLESS_TLS_Vision", by_name["全球代理"]["proxies"])
+
     def test_build_clash_meta_yaml_adds_groups_dns_and_route_rules(self):
         payload = encoded_subscription(
             "vless://11111111-1111-1111-1111-111111111111@ca.example.com:443?encryption=none&security=tls&fp=chrome&type=tcp&sni=ca.example.com&flow=xtls-rprx-vision#ca-VLESS_TLS_Vision",
