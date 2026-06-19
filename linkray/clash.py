@@ -415,9 +415,24 @@ def convert_link(link: str) -> dict[str, Any] | None:
     return None
 
 
-def public_stable_proxy(proxy: dict[str, Any]) -> bool:
+def public_stable_proxy(proxy: dict[str, Any], config: LinkRayConfig | None = None) -> bool:
+    if config and config.domain:
+        cert_name = proxy.get("servername") or proxy.get("sni")
+        ws_opts = proxy.get("ws-opts")
+        if not cert_name and isinstance(ws_opts, dict):
+            headers = ws_opts.get("headers")
+            if isinstance(headers, dict):
+                cert_name = headers.get("Host")
+        if cert_name != config.domain:
+            return False
+
     proxy_type = proxy.get("type")
-    return proxy_type in {"vless", "trojan", "vmess", "ss"}
+    network = proxy.get("network") or "tcp"
+    if proxy_type == "vless":
+        return bool(proxy.get("tls")) and network in {"tcp", "ws"} and "reality-opts" not in proxy
+    if proxy_type == "vmess":
+        return bool(proxy.get("tls")) and network == "ws"
+    return False
 
 
 def legacy_marzban_proxy(proxy: dict[str, Any]) -> bool:
@@ -561,7 +576,7 @@ def build_clash_meta_yaml(
         proxy = normalize_relayed_tls_proxy(proxy)
         if legacy_marzban_proxy(proxy):
             continue
-        if public_only and not public_stable_proxy(proxy):
+        if public_only and not public_stable_proxy(proxy, config):
             continue
         if public_only:
             proxy = relay_secondary_node_proxy(proxy, config)
