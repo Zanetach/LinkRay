@@ -20,6 +20,12 @@ class RelayTests(unittest.TestCase):
         self.assertEqual(by_tag["VLESS TCP TLS"].domain, "edge-b.example.com")
         self.assertEqual(by_tag["VLESS TCP REALITY"].listen_port, 18181)
         self.assertEqual(by_tag["VLESS TCP REALITY"].target_port, 18081)
+        self.assertEqual(by_tag["VLESS WS TLS"].listen_port, 18186)
+        self.assertEqual(by_tag["VLESS WS TLS"].target_port, 443)
+        self.assertEqual(by_tag["VMess WS TLS"].listen_port, 18189)
+        self.assertEqual(by_tag["VMess WS TLS"].target_port, 443)
+        self.assertEqual(by_tag["VMess HTTPUpgrade TLS"].listen_port, 18190)
+        self.assertEqual(by_tag["VMess HTTPUpgrade TLS"].target_port, 443)
 
 
     def test_parse_relay_node_defaults_offset_to_100(self):

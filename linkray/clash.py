@@ -13,7 +13,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, unquote, urlparse
 
 from ._http import PASS_HEADERS, AdapterHandler, fetch_upstream, first_query_value, parse_link_netloc
-from .config import RELAY_PORT_OFFSET, LinkRayConfig, relay_port
+from .config import DEFAULT_PORTS, RELAY_PORT_OFFSET, LinkRayConfig, relay_port
 from .native import b64decode_text, decode_subscription_links
 from .protocol_prefs import DEFAULT_PROTOCOL_PREFS_PATH, ProtocolPreferences
 from .rules import COMPACT_CN_DOMAIN_SUFFIXES, FOREIGN_DOMAIN_SUFFIXES, RouteRules, load_route_rules
@@ -237,6 +237,8 @@ def relay_secondary_node_proxy(proxy: dict[str, Any], config: LinkRayConfig | No
         return proxy
     target_prefix = server.split(".", 1)[0].lower()
     if not name.lower().startswith(f"{target_prefix}-"):
+        return proxy
+    if port == DEFAULT_PORTS["vless_tls"]:
         return proxy
     proxy = dict(proxy)
     proxy["server"] = config.domain

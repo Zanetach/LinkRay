@@ -3,11 +3,15 @@ import json
 import unittest
 from unittest.mock import patch
 
-from linkray.native import build_stable_native_subscription, decode_subscription_links
+from linkray.native import build_stable_native_subscription, decode_subscription_links, relay_secondary_node_link
 
 
 def b64(value: str) -> str:
     return base64.urlsafe_b64encode(value.encode()).decode().rstrip("=")
+
+
+def b64decode_vmess(link: str) -> str:
+    return base64.urlsafe_b64decode(link.removeprefix("vmess://") + "==").decode()
 
 
 class NativeSubscriptionTests(unittest.TestCase):
@@ -107,6 +111,32 @@ class NativeSubscriptionTests(unittest.TestCase):
         self.assertEqual(decoded_vmess["add"], "203.0.113.10")
         self.assertEqual(decoded_vmess["host"], "edge.example.com")
         self.assertEqual(decoded_vmess["sni"], "edge.example.com")
+
+    def test_relay_secondary_node_link_keeps_public_fallback_ports_direct(self):
+        vless_ws = "vless://11111111-1111-1111-1111-111111111111@edge-b.example.com:443?security=tls&type=ws&sni=edge-b.example.com#edge-b-VLESS_WS_TLS"
+        vmess_ws = {
+            "ps": "edge-b-VMess_WS_TLS",
+            "add": "edge-b.example.com",
+            "port": "443",
+            "id": "00000000-0000-0000-0000-000000000000",
+            "net": "ws",
+            "tls": "tls",
+        }
+        vmess_httpupgrade = dict(vmess_ws, ps="edge-b-VMess_HTTPUpgrade_TLS", net="httpupgrade")
+
+        relayed_vless_ws = relay_secondary_node_link(vless_ws, "edge-a.example.com")
+        relayed_vmess_ws = json.loads(
+            b64decode_vmess(relay_secondary_node_link(f"vmess://{b64(json.dumps(vmess_ws))}", "edge-a.example.com"))
+        )
+        relayed_vmess_httpupgrade = json.loads(
+            b64decode_vmess(relay_secondary_node_link(f"vmess://{b64(json.dumps(vmess_httpupgrade))}", "edge-a.example.com"))
+        )
+
+        self.assertIn("@edge-b.example.com:443", relayed_vless_ws)
+        self.assertEqual(relayed_vmess_ws["add"], "edge-b.example.com")
+        self.assertEqual(relayed_vmess_ws["port"], "443")
+        self.assertEqual(relayed_vmess_httpupgrade["add"], "edge-b.example.com")
+        self.assertEqual(relayed_vmess_httpupgrade["port"], "443")
 
 
     def test_b64decode_text_handles_missing_padding(self):

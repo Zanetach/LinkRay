@@ -6,7 +6,14 @@ import logging
 from dataclasses import dataclass
 from typing import Sequence
 
-from .config import DEFAULT_PORTS, PORT_KEYS, relay_port, validate_port, validate_unique_ports
+from .config import (
+    DEFAULT_PORTS,
+    PORT_KEYS,
+    TLS_FALLBACK_PORT_KEYS,
+    relay_port,
+    validate_port,
+    validate_unique_ports,
+)
 from .render import ACTIVE_INBOUND_TAGS
 
 
@@ -68,8 +75,9 @@ def relay_specs(
     occupied = {port: f"primary:{key}" for key, port in ports.items()}
     for node_index, node in enumerate(nodes, start=1):
         for key in PORT_KEYS:
-            target_port = ports[key]
-            listen_port = relay_port(target_port, node_index, node.port_offset)
+            source_port = ports[key]
+            target_port = relay_target_port(key, ports)
+            listen_port = relay_port(source_port, node_index, node.port_offset)
             if listen_port in occupied:
                 raise ValueError(f"relay port conflict {listen_port}: {node.name}:{key} conflicts with {occupied[listen_port]}")
             occupied[listen_port] = f"{node.name}:{key}"
@@ -83,6 +91,12 @@ def relay_specs(
                 )
             )
     return specs
+
+
+def relay_target_port(key: str, ports: dict[str, int]) -> int:
+    if key in TLS_FALLBACK_PORT_KEYS:
+        return ports["vless_tls"]
+    return ports[key]
 
 
 async def close_writer(writer: asyncio.StreamWriter) -> None:

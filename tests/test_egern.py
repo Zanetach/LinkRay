@@ -110,7 +110,7 @@ class EgernTests(unittest.TestCase):
         self.assertIn('name: "la-VMess_TLS"', output)
         self.assertIn('name: "la-Shadowsocks"', output)
         self.assertIn('server: "203.0.113.10"', output)
-        self.assertIn("port: 18180", output)
+        self.assertIn("port: 443", output)
         self.assertIn("port: 18183", output)
         self.assertIn("port: 18184", output)
         self.assertIn("port: 18185", output)
