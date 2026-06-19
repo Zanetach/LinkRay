@@ -119,7 +119,7 @@ class ShadowrocketTests(unittest.TestCase):
             )
 
         self.assertIn("edge-a-VLESS_TLS_Vision = vless,203.0.113.10,443", output)
-        self.assertIn("edge-b-VLESS_TLS_Vision = vless,203.0.113.10,443", output)
+        self.assertIn("edge-b-VLESS_TLS_Vision = vless,203.0.113.10,18180", output)
         self.assertIn("peer=edge-a.example.com", output)
         self.assertIn("peer=edge-b.example.com", output)
         self.assertIn("sample-user-Snell = snell,203.0.113.10,40123", output)
@@ -261,7 +261,7 @@ class ShadowrocketTests(unittest.TestCase):
             )
 
         decoded = base64.b64decode(output).decode()
-        self.assertIn("@203.0.113.10:443", decoded)
+        self.assertIn("@203.0.113.10:18180", decoded)
         self.assertIn("@203.0.113.10:18183", decoded)
         self.assertIn("@203.0.113.10:18185", decoded)
         self.assertIn("sni=edge-b.example.com", decoded)
@@ -271,7 +271,7 @@ class ShadowrocketTests(unittest.TestCase):
         self.assertEqual(vmess_payload["add"], "203.0.113.10")
         self.assertEqual(vmess_payload["port"], "18184")
 
-    def test_build_shadowrocket_subscription_keeps_secondary_fallback_nodes_on_public_tls_port(self):
+    def test_build_shadowrocket_subscription_relays_secondary_fallback_nodes_via_master(self):
         module = self.shadowrocket_module()
         vmess_ws = {
             "ps": "edge-b-VMess_WS_TLS",
@@ -302,15 +302,14 @@ class ShadowrocketTests(unittest.TestCase):
             )
 
         decoded = base64.b64decode(output).decode()
-        self.assertIn("@203.0.113.10:443", decoded)
-        self.assertNotIn("@203.0.113.10:18180", decoded)
+        self.assertIn("@203.0.113.10:18180", decoded)
         self.assertNotIn("@203.0.113.10:18186", decoded)
         vmess_ports = []
         for line in decoded.splitlines():
             if line.startswith("vmess://"):
                 payload = json.loads(base64.urlsafe_b64decode(line.removeprefix("vmess://") + "=="))
                 vmess_ports.append(payload["port"])
-        self.assertEqual(["443"], vmess_ports)
+        self.assertEqual(["18180"], vmess_ports)
 
     def test_build_shadowrocket_subscription_skips_legacy_marzban_placeholder_node(self):
         module = self.shadowrocket_module()

@@ -147,8 +147,6 @@ def relay_secondary_url_link(link: str, master_domain: str, *, offset: int = REL
     name = parsed.fragment or ""
     if not host or not port or not should_relay_secondary_node(name, host, master_domain):
         return link
-    if port == DEFAULT_PORTS["vless_tls"]:
-        return link
     if "@" not in parsed.netloc:
         return link
     userinfo, _server = parsed.netloc.rsplit("@", 1)
@@ -167,8 +165,6 @@ def relay_secondary_vmess_link(link: str, master_domain: str, *, offset: int = R
     except (TypeError, ValueError):
         return link
     if not isinstance(host, str) or not should_relay_secondary_node(str(name), host, master_domain):
-        return link
-    if port == DEFAULT_PORTS["vless_tls"]:
         return link
     data["add"] = master_domain
     data["port"] = str(relay_port(port, 1, offset))

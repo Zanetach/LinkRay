@@ -112,7 +112,7 @@ class NativeSubscriptionTests(unittest.TestCase):
         self.assertEqual(decoded_vmess["host"], "edge.example.com")
         self.assertEqual(decoded_vmess["sni"], "edge.example.com")
 
-    def test_relay_secondary_node_link_keeps_public_fallback_ports_direct(self):
+    def test_relay_secondary_node_link_relays_public_fallback_ports_via_master(self):
         vless_ws = "vless://11111111-1111-1111-1111-111111111111@edge-b.example.com:443?security=tls&type=ws&sni=edge-b.example.com#edge-b-VLESS_WS_TLS"
         vmess_ws = {
             "ps": "edge-b-VMess_WS_TLS",
@@ -132,11 +132,11 @@ class NativeSubscriptionTests(unittest.TestCase):
             b64decode_vmess(relay_secondary_node_link(f"vmess://{b64(json.dumps(vmess_httpupgrade))}", "edge-a.example.com"))
         )
 
-        self.assertIn("@edge-b.example.com:443", relayed_vless_ws)
-        self.assertEqual(relayed_vmess_ws["add"], "edge-b.example.com")
-        self.assertEqual(relayed_vmess_ws["port"], "443")
-        self.assertEqual(relayed_vmess_httpupgrade["add"], "edge-b.example.com")
-        self.assertEqual(relayed_vmess_httpupgrade["port"], "443")
+        self.assertIn("@edge-a.example.com:18180", relayed_vless_ws)
+        self.assertEqual(relayed_vmess_ws["add"], "edge-a.example.com")
+        self.assertEqual(relayed_vmess_ws["port"], "18180")
+        self.assertEqual(relayed_vmess_httpupgrade["add"], "edge-a.example.com")
+        self.assertEqual(relayed_vmess_httpupgrade["port"], "18180")
 
 
     def test_b64decode_text_handles_missing_padding(self):

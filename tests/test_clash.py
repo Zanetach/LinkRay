@@ -327,13 +327,13 @@ class ClashTests(unittest.TestCase):
         )
         self.assertRegex(
             text,
-            r"name: la-VLESS_WS_TLS\n\s+type: vless\n\s+server: 198\.51\.100\.20\n\s+port: 443\n\s+uuid:",
+            r"name: la-VLESS_WS_TLS\n\s+type: vless\n\s+server: 203\.0\.113\.10\n\s+port: 18180\n\s+uuid:",
         )
         self.assertIn("servername: ca.example.com", text)
         self.assertIn("servername: la.example.com", text)
         self.assertIn("Host: la.example.com", text)
 
-    def test_build_clash_meta_yaml_keeps_secondary_fallback_nodes_on_public_tls_port(self):
+    def test_build_clash_meta_yaml_relays_secondary_fallback_nodes_via_master(self):
         payload = encoded_subscription(
             "vless://11111111-1111-1111-1111-111111111111@la.example.com:443?encryption=none&security=tls&fp=chrome&type=tcp&sni=la.example.com&flow=xtls-rprx-vision#la-VLESS_TLS_Vision",
             "vless://11111111-1111-1111-1111-111111111111@la.example.com:443?encryption=none&security=tls&fp=chrome&type=ws&sni=la.example.com&host=la.example.com&path=/vless-ws#la-VLESS_WS_TLS",
@@ -375,10 +375,10 @@ class ClashTests(unittest.TestCase):
         with patch("linkray.clash.socket.getaddrinfo", side_effect=fake_getaddrinfo):
             text = build_clash_meta_yaml(payload, config=LinkRayConfig(domain="ca.example.com"), public_only=True)
 
-        self.assertRegex(text, r"name: la-VLESS_TLS_Vision\n\s+type: vless\n\s+server: 203\.0\.113\.10\n\s+port: 443")
-        self.assertRegex(text, r"name: la-VLESS_WS_TLS\n\s+type: vless\n\s+server: 203\.0\.113\.10\n\s+port: 443")
-        self.assertRegex(text, r"name: la-VMess_WS_TLS\n\s+type: vmess\n\s+server: 203\.0\.113\.10\n\s+port: 443")
-        self.assertRegex(text, r"name: la-VMess_HTTPUpgrade_TLS\n\s+type: vmess\n\s+server: 203\.0\.113\.10\n\s+port: 443")
+        self.assertRegex(text, r"name: la-VLESS_TLS_Vision\n\s+type: vless\n\s+server: 203\.0\.113\.10\n\s+port: 18180")
+        self.assertRegex(text, r"name: la-VLESS_WS_TLS\n\s+type: vless\n\s+server: 203\.0\.113\.10\n\s+port: 18180")
+        self.assertRegex(text, r"name: la-VMess_WS_TLS\n\s+type: vmess\n\s+server: 203\.0\.113\.10\n\s+port: 18180")
+        self.assertRegex(text, r"name: la-VMess_HTTPUpgrade_TLS\n\s+type: vmess\n\s+server: 203\.0\.113\.10\n\s+port: 18180")
 
     def test_build_clash_meta_yaml_public_only_relays_secondary_node_via_master(self):
         payload = encoded_subscription(
@@ -396,7 +396,7 @@ class ClashTests(unittest.TestCase):
 
         self.assertRegex(
             text,
-            r"name: la-VLESS_TLS_Vision\n\s+type: vless\n\s+server: 198\.51\.100\.20\n\s+port: 443\n\s+uuid:",
+            r"name: la-VLESS_TLS_Vision\n\s+type: vless\n\s+server: 203\.0\.113\.10\n\s+port: 18180\n\s+uuid:",
         )
         self.assertRegex(
             text,
@@ -453,7 +453,7 @@ class ClashTests(unittest.TestCase):
 
         self.assertRegex(
             text,
-            r"name: la-VLESS_TLS_Vision\n\s+type: vless\n\s+server: 198\.51\.100\.20\n\s+port: 443\n\s+uuid:",
+            r"name: la-VLESS_TLS_Vision\n\s+type: vless\n\s+server: 203\.0\.113\.10\n\s+port: 18180\n\s+uuid:",
         )
         self.assertIn("servername: la.example.com", text)
 
@@ -473,7 +473,7 @@ class ClashTests(unittest.TestCase):
         self.assertIn("tun:", text)
         self.assertIn("route-exclude-address:", text)
         self.assertIn("- 203.0.113.10/32", text)
-        self.assertIn("- 198.51.100.20/32", text)
+        self.assertNotIn("- 198.51.100.20/32", text)
 
     def test_build_clash_meta_yaml_ignores_fake_ip_host_resolution(self):
         payload = encoded_subscription(

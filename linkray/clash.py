@@ -238,8 +238,6 @@ def relay_secondary_node_proxy(proxy: dict[str, Any], config: LinkRayConfig | No
     target_prefix = server.split(".", 1)[0].lower()
     if not name.lower().startswith(f"{target_prefix}-"):
         return proxy
-    if port == DEFAULT_PORTS["vless_tls"]:
-        return proxy
     proxy = dict(proxy)
     proxy["server"] = config.domain
     proxy["port"] = relay_port(port, 1, RELAY_PORT_OFFSET)
