@@ -1,6 +1,7 @@
 import json
 import tempfile
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from linkray.config import LinkRayConfig
@@ -93,6 +94,27 @@ class SingBoxRuntimeTests(unittest.TestCase):
             )
             self.assertEqual(same_user, user)
             self.assertFalse(second_changed)
+
+    def test_ensure_runtime_user_handles_parallel_subscription_refreshes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runtime_dir = Path(tmp)
+            config = LinkRayConfig(domain="edge-a.example.com")
+
+            def create_user(index: int) -> None:
+                ensure_runtime_user(
+                    f"subscription-token-{index}",
+                    config,
+                    runtime_dir,
+                    secret="server-secret",
+                    name=f"user-{index:02d}",
+                )
+
+            with ThreadPoolExecutor(max_workers=12) as pool:
+                list(pool.map(create_user, range(30)))
+
+            users = load_users(runtime_dir)
+            self.assertEqual(len(users), 30)
+            self.assertEqual({user.name for user in users}, {f"user-{index:02d}" for index in range(30)})
 
     def test_reconcile_runtime_users_prunes_non_active_marzban_users(self):
         with tempfile.TemporaryDirectory() as tmp:

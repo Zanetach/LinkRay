@@ -19,6 +19,7 @@ from .doctor import exit_code, run_doctor
 from .egern import serve_egern
 from .install import install_master, install_node
 from .ports import write_ports_json
+from .protocol_prefs import DEFAULT_PROTOCOL_PREFS_PATH
 from .protocols import PROTOCOL_CAPABILITIES, protocol_capabilities_json
 from .relay import serve_relay
 from .render import render_master, render_node, validate_rendered
@@ -259,6 +260,7 @@ def add_shadowrocket_parser(subparsers: argparse._SubParsersAction[argparse.Argu
     shadowrocket.add_argument("--server-domain", default="")
     shadowrocket.add_argument("--snell-runtime-dir", type=Path, default=Path("/var/lib/marzban/linkray/snell"))
     shadowrocket.add_argument("--snell-reload-command", default="")
+    shadowrocket.add_argument("--protocol-preferences-path", type=Path, default=DEFAULT_PROTOCOL_PREFS_PATH)
 
 
 def add_singbox_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -276,6 +278,7 @@ def add_singbox_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentP
     singbox.add_argument("--reload-command", default="")
     singbox.add_argument("--sync-command", default="", help="Optional shell command to sync runtime users to secondary nodes after changes.")
     singbox.add_argument("--rules-base-url", default="")
+    singbox.add_argument("--protocol-preferences-path", type=Path, default=DEFAULT_PROTOCOL_PREFS_PATH)
     singbox.add_argument(
         "--singbox-inbound",
         action="append",

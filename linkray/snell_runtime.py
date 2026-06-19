@@ -6,6 +6,7 @@ import hmac
 import json
 import os
 import subprocess
+import tempfile
 import threading
 import time
 from dataclasses import asdict, dataclass
@@ -20,6 +21,7 @@ DEFAULT_RUNTIME_DIR = Path("/var/lib/marzban/linkray/snell")
 USAGE_SNAPSHOT_FILE = "usage-snapshot.json"
 USER_PORT_BASE = 40000
 USER_PORT_COUNT = 10000
+USER_STORE_LOCK = threading.RLock()
 
 
 @dataclass(frozen=True)
@@ -86,10 +88,24 @@ def load_users(runtime_dir: Path) -> list[SnellUser]:
     return [SnellUser(**item) for item in data.get("users", [])]
 
 
+def write_text_atomic(path: Path, content: str, mode: int | None = None) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=str(path.parent))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(content)
+        if mode is not None:
+            os.chmod(tmp_name, mode)
+        os.replace(tmp_name, path)
+    finally:
+        if os.path.exists(tmp_name):
+            os.unlink(tmp_name)
+
+
 def save_users(runtime_dir: Path, users: list[SnellUser]) -> None:
     runtime_dir.mkdir(parents=True, exist_ok=True)
     data = {"version": 1, "users": [asdict(user) for user in users]}
-    (runtime_dir / "users.json").write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    write_text_atomic(runtime_dir / "users.json", json.dumps(data, ensure_ascii=False, indent=2) + "\n", mode=0o600)
 
 
 def server_config_text(config: LinkRayConfig) -> str:
@@ -115,8 +131,7 @@ def write_server_config(runtime_dir: Path, config: LinkRayConfig) -> bool:
     content = server_config_text(config)
     if path.exists() and path.read_text(encoding="utf-8") == content:
         return False
-    path.write_text(content, encoding="utf-8")
-    path.chmod(0o600)
+    write_text_atomic(path, content, mode=0o600)
     return True
 
 
@@ -127,8 +142,7 @@ def write_user_config(runtime_dir: Path, user: SnellUser) -> bool:
     content = user_server_config_text(user.psk, user.port)
     if path.exists() and path.read_text(encoding="utf-8") == content:
         return False
-    path.write_text(content, encoding="utf-8")
-    path.chmod(0o600)
+    write_text_atomic(path, content, mode=0o600)
     return True
 
 
@@ -145,25 +159,26 @@ def ensure_runtime_user(
     reload_command: str | None = None,
     name: str | None = None,
 ) -> tuple[SnellUser, bool]:
-    effective_secret = secret or read_secret(runtime_dir)
-    users = load_users(runtime_dir)
-    by_hash = {item.token_hash: item for item in users}
-    existing = by_hash.get(hashlib.sha256(token.encode("utf-8")).hexdigest())
-    used_ports = {item.port for item in users if existing is None or item.token_hash != existing.token_hash}
-    user = credential_for_token(
-        token,
-        effective_secret,
-        name=name,
-        port=existing.port if existing else None,
-        used_ports=used_ports,
-    )
-    changed = existing != user
-    by_hash[user.token_hash] = user
-    ordered = sorted(by_hash.values(), key=lambda item: item.name)
-    if changed:
-        save_users(runtime_dir, ordered)
-    config_changed = write_user_config(runtime_dir, user)
-    should_reload = changed or config_changed
+    with USER_STORE_LOCK:
+        effective_secret = secret or read_secret(runtime_dir)
+        users = load_users(runtime_dir)
+        by_hash = {item.token_hash: item for item in users}
+        existing = by_hash.get(hashlib.sha256(token.encode("utf-8")).hexdigest())
+        used_ports = {item.port for item in users if existing is None or item.token_hash != existing.token_hash}
+        user = credential_for_token(
+            token,
+            effective_secret,
+            name=name,
+            port=existing.port if existing else None,
+            used_ports=used_ports,
+        )
+        changed = existing != user
+        by_hash[user.token_hash] = user
+        ordered = sorted(by_hash.values(), key=lambda item: item.name)
+        if changed:
+            save_users(runtime_dir, ordered)
+        config_changed = write_user_config(runtime_dir, user)
+        should_reload = changed or config_changed
     if should_reload and reload_command:
         run_reload_command(reload_command, user)
     return user, should_reload
@@ -279,7 +294,7 @@ def write_usage_snapshot(runtime_dir: Path, port_bytes: dict[int, int]) -> None:
         "updated_at": int(time.time()),
         "ports": {str(port): int(value) for port, value in sorted(port_bytes.items())},
     }
-    (runtime_dir / USAGE_SNAPSHOT_FILE).write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    write_text_atomic(runtime_dir / USAGE_SNAPSHOT_FILE, json.dumps(data, indent=2, sort_keys=True) + "\n", mode=0o600)
 
 
 def snell_usage_deltas(runtime_dir: Path, current_port_bytes: dict[int, int]) -> dict[str, int]:

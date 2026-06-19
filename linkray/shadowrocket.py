@@ -407,6 +407,7 @@ def serve_shadowrocket(args: argparse.Namespace) -> int:
         server_domain=getattr(args, "server_domain", ""),
         snell_runtime_dir=getattr(args, "snell_runtime_dir", SNELL_RUNTIME_DIR),
         snell_reload_command=getattr(args, "snell_reload_command", ""),
+        protocol_preferences_path=getattr(args, "protocol_preferences_path", DEFAULT_PROTOCOL_PREFS_PATH),
     )
     try:
         server.serve_forever()

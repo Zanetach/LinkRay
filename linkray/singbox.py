@@ -629,6 +629,7 @@ def serve_singbox(args: argparse.Namespace) -> int:
         reload_command=getattr(args, "reload_command", ""),
         sync_command=getattr(args, "sync_command", ""),
         singbox_inbound_ports=parse_singbox_inbound_ports(getattr(args, "singbox_inbound", None)),
+        protocol_preferences_path=getattr(args, "protocol_preferences_path", DEFAULT_PROTOCOL_PREFS_PATH),
         rules_base_url=getattr(args, "rules_base_url", ""),
     )
     try:

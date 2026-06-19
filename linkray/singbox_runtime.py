@@ -6,6 +6,8 @@ import hmac
 import json
 import os
 import subprocess
+import tempfile
+import threading
 import uuid
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -16,6 +18,7 @@ from .config import LinkRayConfig, SINGBOX_DEFAULT_PORTS
 
 SINGBOX_STATS_PORT = 61996
 DEFAULT_RUNTIME_DIR = Path("/var/lib/marzban/linkray/singbox")
+USER_STORE_LOCK = threading.RLock()
 
 
 @dataclass(frozen=True)
@@ -68,10 +71,24 @@ def load_users(runtime_dir: Path) -> list[SingBoxUser]:
     return [SingBoxUser(**item) for item in data.get("users", [])]
 
 
+def write_text_atomic(path: Path, content: str, mode: int | None = None) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=str(path.parent))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(content)
+        if mode is not None:
+            os.chmod(tmp_name, mode)
+        os.replace(tmp_name, path)
+    finally:
+        if os.path.exists(tmp_name):
+            os.unlink(tmp_name)
+
+
 def save_users(runtime_dir: Path, users: list[SingBoxUser]) -> None:
     runtime_dir.mkdir(parents=True, exist_ok=True)
     data = {"version": 1, "users": [asdict(user) for user in users]}
-    (runtime_dir / "users.json").write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    write_text_atomic(runtime_dir / "users.json", json.dumps(data, ensure_ascii=False, indent=2) + "\n", mode=0o600)
 
 
 def tls_server_config(config: LinkRayConfig) -> dict[str, Any]:
@@ -182,7 +199,7 @@ def write_server_config(runtime_dir: Path, config: LinkRayConfig, users: list[Si
     content = json.dumps(server_config(config, users), ensure_ascii=False, indent=2) + "\n"
     if path.exists() and path.read_text(encoding="utf-8") == content:
         return False
-    path.write_text(content, encoding="utf-8")
+    write_text_atomic(path, content, mode=0o600)
     return True
 
 
@@ -194,17 +211,18 @@ def ensure_runtime_user(
     reload_command: str | None = None,
     name: str | None = None,
 ) -> tuple[SingBoxUser, bool]:
-    effective_secret = secret or read_secret(runtime_dir)
-    user = credential_for_token(token, effective_secret, name=name)
-    users = load_users(runtime_dir)
-    by_hash = {item.token_hash: item for item in users}
-    changed = by_hash.get(user.token_hash) != user
-    by_hash[user.token_hash] = user
-    ordered = sorted(by_hash.values(), key=lambda item: item.name)
-    if changed:
-        save_users(runtime_dir, ordered)
-    config_changed = write_server_config(runtime_dir, config, ordered)
-    should_reload = changed or config_changed
+    with USER_STORE_LOCK:
+        effective_secret = secret or read_secret(runtime_dir)
+        user = credential_for_token(token, effective_secret, name=name)
+        users = load_users(runtime_dir)
+        by_hash = {item.token_hash: item for item in users}
+        changed = by_hash.get(user.token_hash) != user
+        by_hash[user.token_hash] = user
+        ordered = sorted(by_hash.values(), key=lambda item: item.name)
+        if changed:
+            save_users(runtime_dir, ordered)
+        config_changed = write_server_config(runtime_dir, config, ordered)
+        should_reload = changed or config_changed
     if should_reload and reload_command:
         subprocess.run(reload_command, shell=True, check=False)
     return user, should_reload
@@ -216,13 +234,14 @@ def reconcile_runtime_users(
     runtime_dir: Path = DEFAULT_RUNTIME_DIR,
     reload_command: str | None = None,
 ) -> bool:
-    users = load_users(runtime_dir)
-    kept = [user for user in users if user.name in active_usernames]
-    changed = kept != users
-    if changed:
-        save_users(runtime_dir, kept)
-    config_changed = write_server_config(runtime_dir, config, kept)
-    should_reload = changed or config_changed
+    with USER_STORE_LOCK:
+        users = load_users(runtime_dir)
+        kept = [user for user in users if user.name in active_usernames]
+        changed = kept != users
+        if changed:
+            save_users(runtime_dir, kept)
+        config_changed = write_server_config(runtime_dir, config, kept)
+        should_reload = changed or config_changed
     if should_reload and reload_command:
         subprocess.run(reload_command, shell=True, check=False)
     return should_reload

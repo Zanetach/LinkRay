@@ -72,15 +72,15 @@ class LinkRayConfig:
         if self.xray_runtime_mode not in XRAY_RUNTIME_MODES:
             allowed = ", ".join(XRAY_RUNTIME_MODES)
             raise ValueError(f"xray_runtime_mode must be one of: {allowed}")
+        self.port_map()
+        self.singbox_port_map()
+        self.snell_port_map()
         if self.reality_private_key.startswith("REPLACE_"):
             return
         if len(self.reality_private_key) < 16:
             raise ValueError("reality_private_key is unexpectedly short")
         if len(self.reality_short_id) < 4:
             raise ValueError("reality_short_id is unexpectedly short")
-        self.port_map()
-        self.singbox_port_map()
-        self.snell_port_map()
 
     def port_map(self) -> dict[str, int]:
         ports = dict(DEFAULT_PORTS)

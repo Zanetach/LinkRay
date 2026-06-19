@@ -2,6 +2,7 @@ import tempfile
 import json
 import threading
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest.mock import patch
 from urllib.request import Request, urlopen
@@ -86,6 +87,28 @@ class SnellRuntimeTests(unittest.TestCase):
             self.assertIn(f"listen = ::0:{user.port}", user_config)
             self.assertIn(f"psk = {user.psk}", user_config)
             self.assertNotIn("subscription-token", (runtime_dir / "users.json").read_text())
+
+    def test_ensure_runtime_user_handles_parallel_subscription_refreshes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runtime_dir = Path(tmp)
+            config = LinkRayConfig(domain="edge-a.example.com")
+
+            def create_user(index: int) -> None:
+                ensure_runtime_user(
+                    f"subscription-token-{index}",
+                    config,
+                    runtime_dir,
+                    secret="server-secret",
+                    name=f"user-{index:02d}",
+                )
+
+            with ThreadPoolExecutor(max_workers=12) as pool:
+                list(pool.map(create_user, range(30)))
+
+            users = load_users(runtime_dir)
+            self.assertEqual(len(users), 30)
+            self.assertEqual({user.name for user in users}, {f"user-{index:02d}" for index in range(30)})
+            self.assertEqual(len({user.port for user in users}), 30)
 
     def test_snell_subscription_builders_use_user_credentials(self):
         config = LinkRayConfig(domain="edge-a.example.com")
