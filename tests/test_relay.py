@@ -12,12 +12,14 @@ class RelayTests(unittest.TestCase):
         self.assertEqual(node.port_offset, 100)
 
     def test_relay_specs_shift_secondary_node_ports(self):
-        specs = relay_specs([parse_relay_node("edge-b=edge-b.example.com:100")], inbound_ports=[("vless_tls", 18080)])
+        specs = relay_specs([parse_relay_node("edge-b=edge-b.example.com:100")])
         by_tag = {item.inbound_tag: item for item in specs}
 
         self.assertEqual(by_tag["VLESS TCP TLS"].listen_port, 18180)
-        self.assertEqual(by_tag["VLESS TCP TLS"].target_port, 18080)
+        self.assertEqual(by_tag["VLESS TCP TLS"].target_port, 443)
         self.assertEqual(by_tag["VLESS TCP TLS"].domain, "edge-b.example.com")
+        self.assertEqual(by_tag["VLESS TCP REALITY"].listen_port, 18181)
+        self.assertEqual(by_tag["VLESS TCP REALITY"].target_port, 18081)
 
 
     def test_parse_relay_node_defaults_offset_to_100(self):

@@ -39,6 +39,7 @@ TLS_FALLBACK_PORT_KEYS = (
     "vmess_httpupgrade_tls",
 )
 RELAY_PORT_OFFSET = 100
+TLS_RELAY_BASE_PORT = 18080
 XRAY_RUNTIME_MODES = ("marzban", "linkray")
 LINKRAY_XRAY_API_PORT = 61998
 
@@ -222,7 +223,8 @@ def parse_snell_inbound_ports(values: list[str] | None) -> tuple[tuple[str, int]
 def relay_port(port: int, node_index: int, offset: int = RELAY_PORT_OFFSET) -> int:
     if node_index < 1:
         return port
-    value = port + (offset * node_index)
+    base_port = TLS_RELAY_BASE_PORT if port == DEFAULT_PORTS["vless_tls"] else port
+    value = base_port + (offset * node_index)
     validate_port(value)
     return value
 

@@ -119,7 +119,7 @@ class ShadowrocketTests(unittest.TestCase):
             )
 
         self.assertIn("edge-a-VLESS_TLS_Vision = vless,203.0.113.10,443", output)
-        self.assertIn("edge-b-VLESS_TLS_Vision = vless,203.0.113.10,543", output)
+        self.assertIn("edge-b-VLESS_TLS_Vision = vless,203.0.113.10,18180", output)
         self.assertIn("peer=edge-a.example.com", output)
         self.assertIn("peer=edge-b.example.com", output)
         self.assertIn("sample-user-Snell = snell,203.0.113.10,40123", output)
@@ -261,7 +261,7 @@ class ShadowrocketTests(unittest.TestCase):
             )
 
         decoded = base64.b64decode(output).decode()
-        self.assertIn("@203.0.113.10:543", decoded)
+        self.assertIn("@203.0.113.10:18180", decoded)
         self.assertIn("@203.0.113.10:18183", decoded)
         self.assertIn("@203.0.113.10:18185", decoded)
         self.assertIn("sni=edge-b.example.com", decoded)

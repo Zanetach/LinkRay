@@ -307,7 +307,7 @@ class ClashTests(unittest.TestCase):
         )
         self.assertRegex(
             text,
-            r"name: la-VLESS_WS_TLS\n\s+type: vless\n\s+server: 203\.0\.113\.10\n\s+port: 543\n\s+uuid:",
+            r"name: la-VLESS_WS_TLS\n\s+type: vless\n\s+server: 203\.0\.113\.10\n\s+port: 18180\n\s+uuid:",
         )
         self.assertIn("servername: ca.example.com", text)
         self.assertIn("servername: la.example.com", text)
@@ -329,7 +329,7 @@ class ClashTests(unittest.TestCase):
 
         self.assertRegex(
             text,
-            r"name: la-VLESS_TLS_Vision\n\s+type: vless\n\s+server: 203\.0\.113\.10\n\s+port: 543\n\s+uuid:",
+            r"name: la-VLESS_TLS_Vision\n\s+type: vless\n\s+server: 203\.0\.113\.10\n\s+port: 18180\n\s+uuid:",
         )
         self.assertRegex(
             text,
@@ -386,7 +386,7 @@ class ClashTests(unittest.TestCase):
 
         self.assertRegex(
             text,
-            r"name: la-VLESS_TLS_Vision\n\s+type: vless\n\s+server: 203\.0\.113\.10\n\s+port: 543\n\s+uuid:",
+            r"name: la-VLESS_TLS_Vision\n\s+type: vless\n\s+server: 203\.0\.113\.10\n\s+port: 18180\n\s+uuid:",
         )
         self.assertIn("servername: la.example.com", text)
 

@@ -6,9 +6,9 @@ import json
 import socket
 from urllib.parse import parse_qs, unquote, urlparse
 
+from .config import RELAY_PORT_OFFSET, relay_port
 
 FAKE_IP_NETWORK = ipaddress.ip_network("198.18.0.0/15")
-RELAY_PORT_OFFSET = 100
 
 
 def b64decode_text(value: str) -> str:
@@ -150,7 +150,7 @@ def relay_secondary_url_link(link: str, master_domain: str, *, offset: int = REL
     if "@" not in parsed.netloc:
         return link
     userinfo, _server = parsed.netloc.rsplit("@", 1)
-    return parsed._replace(netloc=f"{userinfo}@{master_domain}:{port + offset}").geturl()
+    return parsed._replace(netloc=f"{userinfo}@{master_domain}:{relay_port(port, 1, offset)}").geturl()
 
 
 def relay_secondary_vmess_link(link: str, master_domain: str, *, offset: int = RELAY_PORT_OFFSET) -> str:
@@ -167,7 +167,7 @@ def relay_secondary_vmess_link(link: str, master_domain: str, *, offset: int = R
     if not isinstance(host, str) or not should_relay_secondary_node(str(name), host, master_domain):
         return link
     data["add"] = master_domain
-    data["port"] = str(port + offset)
+    data["port"] = str(relay_port(port, 1, offset))
     encoded = base64.urlsafe_b64encode(
         json.dumps(data, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     ).decode("ascii").rstrip("=")

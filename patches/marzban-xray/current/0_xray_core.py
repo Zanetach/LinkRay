@@ -54,9 +54,6 @@ def core_health_check():
             config = xray.config.include_db_users()
         xray.core.restart(config)
 
-    if LINKRAY_EXTERNAL_XRAY:
-        return
-
     # nodes' core
     for node_id, node in list(xray.nodes.items()):
         if node.connected:
@@ -97,19 +94,8 @@ def start_core():
         except Exception:
             traceback.print_exc()
 
-    if LINKRAY_EXTERNAL_XRAY:
-        logger.info("Skipping Marzban nodes Xray core; LinkRay manages node runtimes externally")
-        scheduler.add_job(
-            core_health_check,
-            "interval",
-            seconds=JOB_CORE_HEALTH_CHECK_INTERVAL,
-            coalesce=True,
-            max_instances=1,
-        )
-        return
-
     # nodes' core
-    logger.info("Starting nodes Xray core")
+    logger.info("Starting Marzban nodes Xray core")
     with GetDB() as db:
         dbnodes = crud.get_nodes(db=db, enabled=True)
         node_ids = [dbnode.id for dbnode in dbnodes]
@@ -135,10 +121,6 @@ def app_shutdown():
     else:
         logger.info("Stopping main Xray core")
         xray.core.stop()
-
-    if LINKRAY_EXTERNAL_XRAY:
-        logger.info("Skipping Marzban nodes Xray core shutdown; LinkRay-managed runtimes stay external")
-        return
 
     logger.info("Stopping nodes Xray core")
     for node in list(xray.nodes.values()):

@@ -972,6 +972,25 @@ def hosts_sql(config: LinkRayConfig, nodes: Sequence[NodeHost]) -> str:
     for row in host_rows(config, nodes):
         values = ", ".join(sql_string(item) for item in row)
         lines.append(f"INSERT INTO hosts({column_list}) VALUES ({values});")
+    for node in nodes[1:]:
+        node.validate()
+        values = ", ".join(
+            sql_string(item)
+            for item in (node.name, node.domain, 62050, 62051, "connecting", 1.0)
+        )
+        lines.append(
+            "INSERT OR IGNORE INTO nodes(name, address, port, api_port, status, usage_coefficient) "
+            f"VALUES ({values});"
+        )
+        lines.append(
+            "UPDATE nodes SET "
+            f"address = {sql_string(node.domain)}, "
+            "port = 62050, "
+            "api_port = 62051, "
+            "status = CASE WHEN status = 'disabled' THEN status ELSE 'connecting' END, "
+            "usage_coefficient = 1.0 "
+            f"WHERE name = {sql_string(node.name)};"
+        )
     lines.append("COMMIT;")
     lines.append("")
     return "\n".join(lines)

@@ -13,7 +13,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, unquote, urlparse
 
 from ._http import PASS_HEADERS, AdapterHandler, fetch_upstream, first_query_value, parse_link_netloc
-from .config import LinkRayConfig
+from .config import RELAY_PORT_OFFSET, LinkRayConfig, relay_port
 from .native import b64decode_text, decode_subscription_links
 from .protocol_prefs import DEFAULT_PROTOCOL_PREFS_PATH, ProtocolPreferences
 from .rules import COMPACT_CN_DOMAIN_SUFFIXES, FOREIGN_DOMAIN_SUFFIXES, RouteRules, load_route_rules
@@ -22,7 +22,6 @@ from .snell_runtime import SnellUser
 
 
 TOKEN_RE = re.compile(r"^/sub/([^/]+)/clash-meta/?$")
-RELAY_PORT_OFFSET = 100
 FAKE_IP_NETWORK = ipaddress.ip_network("198.18.0.0/15")
 
 
@@ -241,7 +240,7 @@ def relay_secondary_node_proxy(proxy: dict[str, Any], config: LinkRayConfig | No
         return proxy
     proxy = dict(proxy)
     proxy["server"] = config.domain
-    proxy["port"] = port + RELAY_PORT_OFFSET
+    proxy["port"] = relay_port(port, 1, RELAY_PORT_OFFSET)
     return proxy
 
 

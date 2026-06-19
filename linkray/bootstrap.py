@@ -318,10 +318,7 @@ def master_postinstall_runtime_commands(config: LinkRayConfig) -> list[str]:
         "sqlite3 /var/lib/marzban/db.sqlite3 < /var/lib/marzban/linkray/hosts.sql",
         "sqlite3 /var/lib/marzban/db.sqlite3 "
         "\"delete from node_user_usages where node_id not in (select id from nodes); "
-        "delete from node_usages where node_id not in (select id from nodes); "
-        "delete from node_user_usages where node_id in (select id from nodes); "
-        "delete from node_usages where node_id in (select id from nodes); "
-        "delete from nodes;\"",
+        "delete from node_usages where node_id not in (select id from nodes);\"",
         "nginx -t",
         "systemctl reload nginx",
     ]

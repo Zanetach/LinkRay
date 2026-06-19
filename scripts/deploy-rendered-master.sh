@@ -117,10 +117,7 @@ docker compose up -d --force-recreate --remove-orphans linkray
 sqlite3 /var/lib/marzban/db.sqlite3 < /var/lib/marzban/linkray/hosts.sql
 sqlite3 /var/lib/marzban/db.sqlite3 \
   "delete from node_user_usages where node_id not in (select id from nodes);
-   delete from node_usages where node_id not in (select id from nodes);
-   delete from node_user_usages where node_id in (select id from nodes);
-   delete from node_usages where node_id in (select id from nodes);
-   delete from nodes;"
+   delete from node_usages where node_id not in (select id from nodes);"
 modprobe tcp_bbr || true
 sysctl --system
 default_if="$(ip route show default 2>/dev/null | sed -n 's/.* dev \([^ ]*\).*/\1/p' | head -1)"
