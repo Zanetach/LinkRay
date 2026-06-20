@@ -74,7 +74,7 @@ class EgernTests(unittest.TestCase):
 
         self.assertIsNone(convert_link(f"vmess://{b64(json.dumps(vmess))}"))
 
-    def test_build_egern_yaml_relays_secondary_servers_in_public_mode(self):
+    def test_build_egern_yaml_filters_secondary_servers_in_public_mode(self):
         vmess = {
             "ps": "la-VMess_TLS",
             "add": "la.example.com",
@@ -105,16 +105,16 @@ class EgernTests(unittest.TestCase):
 
         self.assertIn('flow: "xtls-rprx-vision"', output)
         self.assertIn('name: "ca-VLESS_TLS_Vision"', output)
-        self.assertIn('name: "la-VLESS_TLS_Vision"', output)
-        self.assertIn('name: "la-Trojan_TLS"', output)
-        self.assertIn('name: "la-VMess_TLS"', output)
-        self.assertIn('name: "la-Shadowsocks"', output)
+        self.assertNotIn('name: "la-VLESS_TLS_Vision"', output)
+        self.assertNotIn('name: "la-Trojan_TLS"', output)
+        self.assertNotIn('name: "la-VMess_TLS"', output)
+        self.assertNotIn('name: "la-Shadowsocks"', output)
         self.assertIn('server: "203.0.113.10"', output)
         self.assertIn("port: 443", output)
-        self.assertIn("port: 18183", output)
-        self.assertIn("port: 18184", output)
-        self.assertIn("port: 18185", output)
-        self.assertIn('sni: "la.example.com"', output)
+        self.assertNotIn("port: 18183", output)
+        self.assertNotIn("port: 18184", output)
+        self.assertNotIn("port: 18185", output)
+        self.assertNotIn('sni: "la.example.com"', output)
 
     def test_build_egern_yaml_skips_legacy_marzban_placeholder_node(self):
         links = "\n".join(

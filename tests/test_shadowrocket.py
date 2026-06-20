@@ -119,9 +119,9 @@ class ShadowrocketTests(unittest.TestCase):
             )
 
         self.assertIn("edge-a-VLESS_TLS_Vision = vless,203.0.113.10,443", output)
-        self.assertIn("edge-b-VLESS_TLS_Vision = vless,203.0.113.10,18180", output)
+        self.assertNotIn("edge-b-VLESS_TLS_Vision", output)
         self.assertIn("peer=edge-a.example.com", output)
-        self.assertIn("peer=edge-b.example.com", output)
+        self.assertNotIn("peer=edge-b.example.com", output)
         self.assertIn("sample-user-Snell = snell,203.0.113.10,40123", output)
 
     def test_build_shadowrocket_conf_keeps_large_cn_rule_sets_compact(self):
@@ -231,7 +231,7 @@ class ShadowrocketTests(unittest.TestCase):
         self.assertIn("vmess://", decoded)
         self.assertIn("edge-a-VLESS_Reality_Vision", decoded)
 
-    def test_build_shadowrocket_subscription_relays_secondary_nodes(self):
+    def test_build_shadowrocket_subscription_filters_secondary_nodes_in_public_mode(self):
         module = self.shadowrocket_module()
         vmess = {
             "ps": "edge-b-VMess_TLS",
@@ -247,6 +247,7 @@ class ShadowrocketTests(unittest.TestCase):
         }
         links = "\n".join(
             [
+                "vless://11111111-1111-1111-1111-111111111111@edge-a.example.com:443?security=tls&type=tcp&sni=edge-a.example.com#edge-a-VLESS_TLS_Vision",
                 "vless://11111111-1111-1111-1111-111111111111@edge-b.example.com:443?security=tls&type=tcp&sni=edge-b.example.com#edge-b-VLESS_TLS_Vision",
                 "trojan://password@edge-b.example.com:18083?security=tls&type=tcp&sni=edge-b.example.com#edge-b-Trojan_TLS",
                 f"vmess://{b64(json.dumps(vmess))}",
@@ -261,17 +262,14 @@ class ShadowrocketTests(unittest.TestCase):
             )
 
         decoded = base64.b64decode(output).decode()
-        self.assertIn("@203.0.113.10:18180", decoded)
-        self.assertIn("@203.0.113.10:18183", decoded)
-        self.assertIn("@203.0.113.10:18185", decoded)
-        self.assertIn("sni=edge-b.example.com", decoded)
-        vmess_links = [line for line in decoded.splitlines() if line.startswith("vmess://")]
-        self.assertEqual(len(vmess_links), 1)
-        vmess_payload = json.loads(base64.urlsafe_b64decode(vmess_links[0].removeprefix("vmess://") + "=="))
-        self.assertEqual(vmess_payload["add"], "203.0.113.10")
-        self.assertEqual(vmess_payload["port"], "18184")
+        self.assertIn("@203.0.113.10:443", decoded)
+        self.assertIn("sni=edge-a.example.com", decoded)
+        self.assertNotIn("edge-b-VLESS_TLS_Vision", decoded)
+        self.assertNotIn("edge-b-Trojan_TLS", decoded)
+        self.assertNotIn("edge-b-VMess_TLS", decoded)
+        self.assertNotIn("edge-b-Shadowsocks", decoded)
 
-    def test_build_shadowrocket_subscription_relays_secondary_fallback_nodes_via_master(self):
+    def test_build_shadowrocket_subscription_filters_secondary_fallback_nodes_in_public_mode(self):
         module = self.shadowrocket_module()
         vmess_ws = {
             "ps": "edge-b-VMess_WS_TLS",
@@ -288,6 +286,7 @@ class ShadowrocketTests(unittest.TestCase):
         vmess_httpupgrade = dict(vmess_ws, ps="edge-b-VMess_HTTPUpgrade_TLS", net="httpupgrade")
         links = "\n".join(
             [
+                "vless://11111111-1111-1111-1111-111111111111@edge-a.example.com:443?security=tls&type=tcp&sni=edge-a.example.com#edge-a-VLESS_TLS_Vision",
                 "vless://11111111-1111-1111-1111-111111111111@edge-b.example.com:443?security=tls&type=tcp&sni=edge-b.example.com#edge-b-VLESS_TLS_Vision",
                 "vless://11111111-1111-1111-1111-111111111111@edge-b.example.com:443?security=tls&type=ws&sni=edge-b.example.com&host=edge-b.example.com&path=/vless-ws#edge-b-VLESS_WS_TLS",
                 f"vmess://{b64(json.dumps(vmess_ws))}",
@@ -302,14 +301,11 @@ class ShadowrocketTests(unittest.TestCase):
             )
 
         decoded = base64.b64decode(output).decode()
-        self.assertIn("@203.0.113.10:18180", decoded)
-        self.assertNotIn("@203.0.113.10:18186", decoded)
-        vmess_ports = []
-        for line in decoded.splitlines():
-            if line.startswith("vmess://"):
-                payload = json.loads(base64.urlsafe_b64decode(line.removeprefix("vmess://") + "=="))
-                vmess_ports.append(payload["port"])
-        self.assertEqual(["18180"], vmess_ports)
+        self.assertIn("edge-a-VLESS_TLS_Vision", decoded)
+        self.assertNotIn("edge-b-VLESS_TLS_Vision", decoded)
+        self.assertNotIn("edge-b-VLESS_WS_TLS", decoded)
+        self.assertNotIn("edge-b-VMess_WS_TLS", decoded)
+        self.assertNotIn("edge-b-VMess_HTTPUpgrade_TLS", decoded)
 
     def test_build_shadowrocket_subscription_skips_legacy_marzban_placeholder_node(self):
         module = self.shadowrocket_module()

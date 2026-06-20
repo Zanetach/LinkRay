@@ -18,7 +18,7 @@ from .native import (
     encode_subscription_links,
     legacy_marzban_native_link,
     public_ipv4_for_host,
-    relay_secondary_node_link,
+    primary_domain_native_link,
     rewrite_server_to_public_ip,
     stable_native_link,
 )
@@ -255,9 +255,9 @@ def build_shadowrocket_conf(
             continue
         if public_only and not stable_native_link(link):
             continue
+        if public_only and config and not primary_domain_native_link(link, config.domain):
+            continue
         if public_only:
-            if config:
-                link = relay_secondary_node_link(link, config.domain)
             link = rewrite_server_to_public_ip(link)
         converted = convert_link(link)
         if not converted:
@@ -309,8 +309,8 @@ def build_shadowrocket_subscription(subscription_payload: bytes, config: LinkRay
             continue
         if not stable_native_link(link):
             continue
-        if config:
-            link = relay_secondary_node_link(link, config.domain)
+        if config and not primary_domain_native_link(link, config.domain):
+            continue
         link = rewrite_server_to_public_ip(link)
         name = urlparse(link).fragment or link
         if name in seen:

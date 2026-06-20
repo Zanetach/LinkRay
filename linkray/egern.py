@@ -13,7 +13,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 from ._http import PASS_HEADERS, AdapterHandler, fetch_upstream, first_query_value, parse_link_netloc
 from .config import LinkRayConfig
-from .native import b64decode_text, decode_subscription_links, legacy_marzban_native_link, relay_secondary_node_link, stable_native_link
+from .native import b64decode_text, decode_subscription_links, legacy_marzban_native_link, primary_domain_native_link, stable_native_link
 from .rules import COMPACT_CN_DOMAIN_SUFFIXES, FOREIGN_DOMAIN_SUFFIXES, RouteRules, load_route_rules
 
 
@@ -329,8 +329,8 @@ def build_egern_yaml(
             continue
         if public_only and not stable_native_link(link):
             continue
-        if public_only and config:
-            link = relay_secondary_node_link(link, config.domain)
+        if public_only and config and not primary_domain_native_link(link, config.domain):
+            continue
         converted = convert_link(link)
         if not converted:
             continue

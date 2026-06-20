@@ -140,6 +140,25 @@ def rewrite_server_to_public_ip(link: str) -> str:
     return link
 
 
+def native_link_server(link: str) -> str:
+    if link.startswith(("vless://", "trojan://", "ss://")):
+        return urlparse(link).hostname or ""
+    if link.startswith("vmess://"):
+        try:
+            data = json.loads(b64decode_text(link.removeprefix("vmess://")))
+        except (ValueError, UnicodeDecodeError):
+            return ""
+        return str(data.get("add") or "")
+    return ""
+
+
+def primary_domain_native_link(link: str, master_domain: str) -> bool:
+    if not master_domain:
+        return True
+    server = native_link_server(link)
+    return server.lower().strip(".") == master_domain.lower().strip(".")
+
+
 def relay_secondary_url_link(link: str, master_domain: str, *, offset: int = RELAY_PORT_OFFSET) -> str:
     parsed = urlparse(link)
     host = parsed.hostname
