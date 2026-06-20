@@ -439,6 +439,11 @@ class ClashTests(unittest.TestCase):
             with patch("linkray.clash.socket.getaddrinfo", side_effect=fake_getaddrinfo):
                 with urlopen(f"http://127.0.0.1:{adapter.server_address[1]}/sub/token/clash-meta", timeout=3) as response:
                     text = response.read().decode("utf-8")
+                with urlopen(
+                    f"http://127.0.0.1:{adapter.server_address[1]}/sub/token/clash-meta-full",
+                    timeout=3,
+                ) as response:
+                    full_text = response.read().decode("utf-8")
         finally:
             adapter.shutdown()
             adapter.server_close()
@@ -447,6 +452,8 @@ class ClashTests(unittest.TestCase):
 
         self.assertNotIn("name: la-VLESS_TLS_Vision", text)
         self.assertNotIn("servername: la.example.com", text)
+        self.assertIn("name: la-VLESS_TLS_Vision", full_text)
+        self.assertIn("servername: la.example.com", full_text)
 
     def test_build_clash_meta_yaml_public_only_excludes_origin_ips_from_tun_routes(self):
         payload = encoded_subscription(

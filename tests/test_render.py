@@ -229,7 +229,7 @@ class RenderTests(unittest.TestCase):
             nginx = (output / "etc/nginx/conf.d/marzban-panel.conf").read_text()
             self.assertIn("location ~ ^/sub/[^/]+/?$", nginx)
             self.assertIn("proxy_pass http://127.0.0.1:61993", nginx)
-            self.assertIn("location ~ ^/sub/[^/]+/clash-meta/?$", nginx)
+            self.assertIn("location ~ ^/sub/[^/]+/(clash-meta|clash-meta-full)/?$", nginx)
             self.assertIn("proxy_pass http://127.0.0.1:61991", nginx)
             self.assertIn("location ~ ^/sub/[^/]+/egern/?$", nginx)
             self.assertIn("proxy_pass http://127.0.0.1:61992", nginx)
@@ -370,6 +370,8 @@ class RenderTests(unittest.TestCase):
                 self.assertIn("['Shadowrocket',base+'/shadowrocket','/shadowrocket']", patch)
                 self.assertNotIn("Shadowrocket 节点", patch)
                 self.assertIn("base+'/clash-meta'", patch)
+                self.assertIn("base+'/clash-meta-full'", patch)
+                self.assertIn("Clash/Mihomo 全量调试", patch)
                 self.assertIn("Xray-core 稳定链路", patch)
                 self.assertIn("sing-box 高级链路", patch)
                 self.assertNotIn("Snell 专用链路", patch)
@@ -377,7 +379,7 @@ class RenderTests(unittest.TestCase):
                 self.assertNotIn("Shadowrocket Snell 配置", patch)
                 self.assertNotIn("Clash/Mihomo Snell", patch)
                 self.assertNotIn("Egern Snell", patch)
-                self.assertIn("Shadowrocket 默认链接用于普通节点订阅", patch)
+                self.assertIn("全量调试入口用于查看 CA/LA 完整 Xray 节点", patch)
                 self.assertIn("Hysteria2 / TUIC / AnyTLS", patch)
                 self.assertIn("下载客户端", patch)
                 self.assertIn("https://github.com/chen08209/FlClash", patch)
@@ -399,6 +401,8 @@ class RenderTests(unittest.TestCase):
                 self.assertIn("自动识别订阅", html)
                 self.assertIn("Shadowrocket", html)
                 self.assertIn("base + '/egern'", html)
+                self.assertIn("base + '/clash-meta-full'", html)
+                self.assertIn("Clash/Mihomo 全量调试", html)
                 self.assertIn("['Shadowrocket', base + '/shadowrocket', '/shadowrocket']", html)
                 self.assertNotIn("Shadowrocket 节点", html)
                 self.assertIn("Xray-core 稳定链路", html)
@@ -408,7 +412,7 @@ class RenderTests(unittest.TestCase):
                 self.assertNotIn("Shadowrocket Snell 配置", html)
                 self.assertNotIn("Clash/Mihomo Snell", html)
                 self.assertNotIn("Egern Snell", html)
-                self.assertIn("Shadowrocket 默认链接用于普通节点订阅", html)
+                self.assertIn("全量调试入口用于查看 CA/LA 完整 Xray 节点", html)
                 self.assertIn("Hysteria2 / TUIC / AnyTLS", html)
                 self.assertIn("下载客户端", html)
                 self.assertIn("https://github.com/chen08209/FlClash", html)
@@ -416,7 +420,14 @@ class RenderTests(unittest.TestCase):
                 self.assertIn("https://apps.apple.com/app/shadowrocket/id932747118", html)
                 self.assertIn("https://apps.apple.com/app/egern/id1616105820", html)
                 self.assertLess(html.index("['自动识别订阅', base]"), html.index("['Clash/Mihomo', base + '/clash-meta']"))
-                self.assertLess(html.index("['Clash/Mihomo', base + '/clash-meta']"), html.index("['Shadowrocket', base + '/shadowrocket'"))
+                self.assertLess(
+                    html.index("['Clash/Mihomo', base + '/clash-meta']"),
+                    html.index("['Clash/Mihomo 全量调试', base + '/clash-meta-full'"),
+                )
+                self.assertLess(
+                    html.index("['Clash/Mihomo 全量调试', base + '/clash-meta-full'"),
+                    html.index("['Shadowrocket', base + '/shadowrocket'"),
+                )
                 self.assertNotIn("Clash" + " for Windows", html)
 
     def test_dashboard_html_adds_protocol_inbound_details_without_touching_app_bundle(self):

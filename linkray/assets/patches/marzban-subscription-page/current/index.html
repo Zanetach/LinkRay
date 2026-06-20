@@ -137,15 +137,16 @@
   <main class="panel">
     <h1>客户端订阅链接</h1>
     <div class="sections" id="links"></div>
-    <p class="hint">优先使用自动识别订阅；高级协议按运行时分组，Hysteria2 / TUIC / AnyTLS 使用 sing-box 链接，Shadowrocket 默认链接用于普通节点订阅。</p>
+    <p class="hint">优先使用自动识别订阅；全量调试会展示 CA/LA 和高级 Xray 节点，可能包含客户端测速不稳定的节点。</p>
     <div class="qr" id="qr"></div>
   </main>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <script>
-    const base = location.href.replace(/\/(clash-meta|shadowrocket|shadowrocket-conf|egern|sing-box|v2ray-json|clash)\/?$/, '').replace(/\/$/, '');
+    const base = location.href.replace(/\/(clash-meta|clash-meta-full|shadowrocket|shadowrocket-conf|egern|sing-box|v2ray-json|clash)\/?$/, '').replace(/\/$/, '');
     const xrayRows = [
       ['自动识别订阅', base],
       ['Clash/Mihomo', base + '/clash-meta'],
+      ['Clash/Mihomo 全量调试', base + '/clash-meta-full', '/clash-meta-full'],
       ['Shadowrocket', base + '/shadowrocket', '/shadowrocket'],
       ['Egern', base + '/egern'],
       ['v2ray-json', base + '/v2ray-json'],
@@ -156,7 +157,7 @@
     const groups = [
       {
         title: 'Xray-core 稳定链路',
-        note: 'VLESS / VMess / Trojan / Shadowsocks 等稳定节点；Shadowrocket 链接使用普通节点订阅格式。',
+        note: 'VLESS / VMess / Trojan / Shadowsocks 等稳定节点；全量调试入口用于查看 CA/LA 完整 Xray 节点。',
         rows: xrayRows,
         downloads: [
           ['FlClash', 'https://github.com/chen08209/FlClash'],

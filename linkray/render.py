@@ -393,7 +393,7 @@ def nginx_panel(config: LinkRayConfig) -> str:
         add_header Cache-Control "no-store" always;
     }}
 
-    location ~ ^/sub/[^/]+/clash-meta/?$ {{
+    location ~ ^/sub/[^/]+/(clash-meta|clash-meta-full)/?$ {{
         proxy_pass http://127.0.0.1:61991;
         proxy_http_version 1.1;
         proxy_set_header Host $host;

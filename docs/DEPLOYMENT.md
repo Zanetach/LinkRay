@@ -359,6 +359,8 @@ Check subscription from a client machine:
 ```bash
 curl -ksS '<marzban-subscription-url>/clash-meta' -o /tmp/linkray.yaml
 mihomo -t -f /tmp/linkray.yaml
+curl -ksS '<marzban-subscription-url>/clash-meta-full' -o /tmp/linkray-full.yaml
+mihomo -t -f /tmp/linkray-full.yaml
 curl -ksS '<marzban-subscription-url>/shadowrocket' -o /tmp/linkray-shadowrocket-sub.txt
 curl -ksS '<marzban-subscription-url>/shadowrocket-conf' -o /tmp/linkray-shadowrocket.conf
 curl -ksS '<marzban-subscription-url>/sing-box' -o /tmp/linkray-sing-box.json
@@ -367,7 +369,8 @@ sing-box check -c /tmp/linkray-sing-box.json
 
 Expected result for a two-node deployment:
 
-- 24 proxies
+- Stable Clash/Mihomo contains the conservative client-safe subset
+- Full Clash/Mihomo contains the complete Xray inventory for diagnostics
 - 19 policy groups
 - 79 rules
 - `mihomo -t` succeeds

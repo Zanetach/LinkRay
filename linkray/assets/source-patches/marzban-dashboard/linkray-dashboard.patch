@@ -160,6 +160,7 @@ index 0000000..fe62c96
 +const rows = (base: string): [string, string][] => [
 +  ["自动识别订阅", base],
 +  ["Clash/Mihomo", `${base}/clash-meta`],
++  ["Clash/Mihomo 全量调试", `${base}/clash-meta-full`],
 +  ["Egern", `${base}/egern`],
 +  ["Shadowrocket", `${base}/shadowrocket`],
 +  ["sing-box", `${base}/sing-box`],

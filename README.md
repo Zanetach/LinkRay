@@ -142,7 +142,8 @@ LinkRay separates server protocol inventory from client-compatible subscription 
 | Client route | Stable output shape |
 |---|---|
 | `/sub/<token>` | Automatic client detection; falls back to native/base output |
-| `/sub/<token>/clash-meta` | Xray-core Clash/Mihomo YAML; no Snell v5 |
+| `/sub/<token>/clash-meta` | Stable Xray-core Clash/Mihomo YAML; filters timeout-prone relay or advanced entries |
+| `/sub/<token>/clash-meta-full` | Full Xray-core Clash/Mihomo YAML for diagnostics; may include CA/LA and advanced entries that some clients cannot test reliably |
 | `/sub/<token>/egern` | Egern-compatible Xray subset, including Reality where Egern supports it |
 | `/sub/<token>/shadowrocket` | Shadowrocket node subscription for ordinary imports |
 | `/sub/<token>/shadowrocket-conf` | Full Shadowrocket config with routing rules and Snell support |
@@ -162,7 +163,8 @@ linkray protocols --json
 | Route | Output |
 |---|---|
 | `/sub/<token>` | Automatic format routing for identifiable clients |
-| `/sub/<token>/clash-meta` | LinkRay-generated Clash/Mihomo YAML |
+| `/sub/<token>/clash-meta` | LinkRay-generated stable Clash/Mihomo YAML |
+| `/sub/<token>/clash-meta-full` | LinkRay-generated full Clash/Mihomo YAML for diagnostics |
 | `/sub/<token>/egern` | Egern YAML |
 | `/sub/<token>/shadowrocket` | Shadowrocket node subscription for normal subscription imports |
 | `/sub/<token>/shadowrocket-conf` | Full Shadowrocket configuration with route rules and Snell support |

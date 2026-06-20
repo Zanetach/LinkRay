@@ -21,7 +21,7 @@ from .snell_runtime import DEFAULT_RUNTIME_DIR as SNELL_RUNTIME_DIR
 from .snell_runtime import SnellUser
 
 
-TOKEN_RE = re.compile(r"^/sub/([^/]+)/clash-meta/?$")
+TOKEN_RE = re.compile(r"^/sub/([^/]+)/(clash-meta|clash-meta-full)/?$")
 FAKE_IP_NETWORK = ipaddress.ip_network("198.18.0.0/15")
 
 
@@ -664,6 +664,7 @@ class ClashHandler(AdapterHandler):
             self.send_bytes(404, {"Content-Type": "text/plain"}, b"not found\n")
             return
         token = match.group(1)
+        mode = match.group(2)
         try:
             _, upstream_headers, raw = fetch_upstream(self.marzban_url, token, {"Accept": "text/plain"})
             config = LinkRayConfig(domain=self.server_domain) if self.server_domain else None
@@ -671,7 +672,7 @@ class ClashHandler(AdapterHandler):
                 raw,
                 config=config,
                 rules_base_url=self.rules_base_url,
-                public_only=True,
+                public_only=mode == "clash-meta",
             ).encode("utf-8")
         except HTTPError as exc:
             self.send_bytes(exc.code, dict(exc.headers.items()), exc.read() or b"upstream error\n")
