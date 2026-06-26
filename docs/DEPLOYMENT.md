@@ -58,6 +58,29 @@ The resulting dashboard is available at:
 https://edge-a.example.com:9443/dashboard/
 ```
 
+### Server-Side Residential SOCKS5
+
+For AI services that are sensitive to data-center IP ranges, keep the
+residential upstream on the server instead of asking every client to configure
+it manually:
+
+```bash
+export LINKRAY_RESIDENTIAL_SOCKS_URL='socks5://user:password@residential.example.com:443'
+
+sudo -E linkray bootstrap master \
+  --domain edge-a.example.com \
+  --node edge-a=edge-a.example.com \
+  --node edge-b=edge-b.example.com \
+  --admin-username admin \
+  --admin-password 'CHANGE_THIS_PASSWORD' \
+  --residential-socks-url-env LINKRAY_RESIDENTIAL_SOCKS_URL \
+  --apply
+```
+
+This renders an Xray-core `residential` outbound and routes the built-in AI
+domain set through that outbound. Keep the environment variable in a root-only
+secret file for production runs; do not commit it to Git.
+
 On a new master server, run the dry-run first:
 
 ```bash

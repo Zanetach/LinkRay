@@ -186,6 +186,30 @@ Clash/Mihomo subscriptions protect proxy server domains from `fake-ip` DNS
 pollution by adding those domains to `fake-ip-filter`, `nameserver-policy`, and,
 when resolvable on the server, top-level `hosts`.
 
+## Server-Side Residential Egress
+
+LinkRay can route selected AI domains through a residential SOCKS5 upstream on
+the server side. Clients keep using the normal LinkRay subscription; the
+residential proxy credentials stay on the server and are not exposed in client
+profiles.
+
+```bash
+export LINKRAY_RESIDENTIAL_SOCKS_URL='socks5://user:password@residential.example.com:443'
+
+linkray render master \
+  --domain ca.example.com \
+  --residential-socks-url-env LINKRAY_RESIDENTIAL_SOCKS_URL \
+  --output ./rendered
+```
+
+When enabled, Xray-core adds a `residential` outbound and routes AI-related
+domains such as OpenAI, ChatGPT, Claude, Anthropic, Cursor, and GitHub Copilot
+through it. Other traffic remains on the normal LinkRay/VPS egress unless the
+domain list is explicitly extended.
+
+Do not put residential proxy URLs into Git or public logs. The rendered manifest
+stores only a safe summary such as `socks5://residential.example.com:443`.
+
 ## Rule Assets
 
 `linkray rules update` refreshes two layers of routing data:

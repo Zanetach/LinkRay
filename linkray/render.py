@@ -16,6 +16,7 @@ from .config import (
     LinkRayConfig,
     NodeHost,
     RenderResult,
+    parse_residential_proxy_url,
     relay_port,
 )
 from .rules import BUILTIN_CN_DOMAIN_SUFFIXES, BUILTIN_CN_IP_CIDRS, RouteRules, write_route_rules
@@ -193,6 +194,7 @@ def tls_fallbacks(config: LinkRayConfig, ports: dict[str, int]) -> list[dict[str
 def xray_config(config: LinkRayConfig) -> dict:
     config.validate()
     ports = config.port_map()
+    residential = parse_residential_proxy_url(config.residential_proxy_url)
     vless_tls = _inbound("VLESS TCP TLS", "vless_tls", "vless", tls_stream(config, alpn=("h2", "http/1.1")), ports)
     vless_tls["settings"]["fallbacks"] = tls_fallbacks(config, ports)
     inbounds = [
@@ -209,17 +211,50 @@ def xray_config(config: LinkRayConfig) -> dict:
         _local_inbound("VMess HTTPUpgrade TLS","vmess_httpupgrade_tls", "vmess", httpupgrade_plain_stream("/vmess-httpupgrade"), ports),
         _inbound("Trojan GRPC TLS","trojan_grpc_tls",             "trojan",      grpc_tls_stream(config, "trojan-grpc"),            ports),
     ]
+    outbounds = [
+        {"protocol": "freedom", "tag": "direct"},
+        {"protocol": "blackhole", "tag": "blocked"},
+    ]
+    rules = [
+        {"type": "field", "ip": ["geoip:private"], "outboundTag": "blocked"}
+    ]
+    if residential:
+        residential_outbound = {
+            "protocol": "socks",
+            "tag": "residential",
+            "settings": {
+                "servers": [
+                    {
+                        "address": residential.server,
+                        "port": residential.port,
+                    }
+                ]
+            },
+        }
+        if residential.username or residential.password:
+            residential_outbound["settings"]["servers"][0]["users"] = [
+                {
+                    "user": residential.username,
+                    "pass": residential.password,
+                }
+            ]
+        outbounds.insert(0, residential_outbound)
+        residential_domains = [f"domain:{domain}" for domain in config.residential_domain_suffixes if domain]
+        if residential_domains:
+            rules.insert(
+                0,
+                {
+                    "type": "field",
+                    "domain": residential_domains,
+                    "outboundTag": "residential",
+                },
+            )
     return {
         "log": {"loglevel": "warning"},
         "inbounds": inbounds,
-        "outbounds": [
-            {"protocol": "freedom", "tag": "direct"},
-            {"protocol": "blackhole", "tag": "blocked"},
-        ],
+        "outbounds": outbounds,
         "routing": {
-            "rules": [
-                {"type": "field", "ip": ["geoip:private"], "outboundTag": "blocked"}
-            ]
+            "rules": rules
         },
     }
 
@@ -555,6 +590,10 @@ def render_manifest(config: LinkRayConfig, nodes: Sequence[NodeHost], role: str 
             "reality_dest": config.reality_dest,
             "inbound_ports": ports,
             "snell_inbound_ports": config.snell_port_map(),
+            "residential_proxy": parse_residential_proxy_url(config.residential_proxy_url).safe_summary
+            if config.residential_proxy_url
+            else "",
+            "residential_domain_suffixes": list(config.residential_domain_suffixes),
         },
         "nodes": [{"name": node.name, "domain": node.domain} for node in nodes],
     }

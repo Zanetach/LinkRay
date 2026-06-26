@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+from urllib.parse import unquote, urlparse
 
 
 DEFAULT_PORTS = {
@@ -42,6 +43,58 @@ RELAY_PORT_OFFSET = 100
 TLS_RELAY_BASE_PORT = 18080
 XRAY_RUNTIME_MODES = ("marzban", "linkray")
 LINKRAY_XRAY_API_PORT = 61998
+DEFAULT_RESIDENTIAL_DOMAIN_SUFFIXES = (
+    "openai.com",
+    "chatgpt.com",
+    "oaistatic.com",
+    "oaiusercontent.com",
+    "anthropic.com",
+    "claude.ai",
+    "console.anthropic.com",
+    "cursor.com",
+    "githubcopilot.com",
+    "copilot.microsoft.com",
+)
+
+
+@dataclass(frozen=True)
+class ResidentialProxy:
+    type: str
+    server: str
+    port: int
+    username: str = field(default="", repr=False)
+    password: str = field(default="", repr=False)
+
+    def validate(self) -> None:
+        if self.type != "socks5":
+            raise ValueError("residential proxy currently supports socks5 only")
+        if not self.server:
+            raise ValueError("residential proxy server is required")
+        validate_port(self.port)
+
+    @property
+    def safe_summary(self) -> str:
+        return f"{self.type}://{self.server}:{self.port}"
+
+
+def parse_residential_proxy_url(value: str | None) -> ResidentialProxy | None:
+    if not value:
+        return None
+    parsed = urlparse(value.strip())
+    scheme = parsed.scheme.lower()
+    if scheme not in {"socks5", "socks"}:
+        raise ValueError("residential proxy URL must use socks5://")
+    if not parsed.hostname or parsed.port is None:
+        raise ValueError("residential proxy URL must include host and port")
+    proxy = ResidentialProxy(
+        type="socks5",
+        server=parsed.hostname,
+        port=parsed.port,
+        username=unquote(parsed.username or ""),
+        password=unquote(parsed.password or ""),
+    )
+    proxy.validate()
+    return proxy
 
 
 @dataclass(frozen=True)
@@ -60,6 +113,8 @@ class LinkRayConfig:
     marzban_http_port: int = 8000
     xray_runtime_mode: str = "marzban"
     snell_psk: str = "REPLACE_WITH_SNELL_PSK"
+    residential_proxy_url: str = field(default="", repr=False)
+    residential_domain_suffixes: tuple[str, ...] = DEFAULT_RESIDENTIAL_DOMAIN_SUFFIXES
     inbound_ports: tuple[tuple[str, int], ...] = ()
     singbox_inbound_ports: tuple[tuple[str, int], ...] = ()
     snell_inbound_ports: tuple[tuple[str, int], ...] = ()
@@ -72,6 +127,8 @@ class LinkRayConfig:
         if self.xray_runtime_mode not in XRAY_RUNTIME_MODES:
             allowed = ", ".join(XRAY_RUNTIME_MODES)
             raise ValueError(f"xray_runtime_mode must be one of: {allowed}")
+        if self.residential_proxy_url:
+            parse_residential_proxy_url(self.residential_proxy_url)
         self.port_map()
         self.singbox_port_map()
         self.snell_port_map()

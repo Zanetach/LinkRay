@@ -1,6 +1,6 @@
 import unittest
 
-from linkray.config import LinkRayConfig
+from linkray.config import LinkRayConfig, parse_residential_proxy_url
 
 
 class ConfigTests(unittest.TestCase):
@@ -29,6 +29,26 @@ class ConfigTests(unittest.TestCase):
         )
 
         with self.assertRaisesRegex(ValueError, "invalid port"):
+            config.validate()
+
+    def test_parse_residential_proxy_url_accepts_socks5_without_leaking_secret_repr(self):
+        proxy = parse_residential_proxy_url("socks5://user:pass@example.com:443")
+
+        self.assertIsNotNone(proxy)
+        self.assertEqual(proxy.server, "example.com")
+        self.assertEqual(proxy.port, 443)
+        self.assertEqual(proxy.username, "user")
+        self.assertEqual(proxy.password, "pass")
+        self.assertEqual(proxy.safe_summary, "socks5://example.com:443")
+        self.assertNotIn("pass", repr(proxy))
+
+    def test_validate_rejects_non_socks_residential_proxy(self):
+        config = LinkRayConfig(
+            domain="edge-a.example.com",
+            residential_proxy_url="http://user:pass@example.com:8080",
+        )
+
+        with self.assertRaisesRegex(ValueError, "socks5"):
             config.validate()
 
 

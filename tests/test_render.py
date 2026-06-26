@@ -10,6 +10,7 @@ from linkray.render import (
     host_rows,
     hosts_sql,
     marzban_env,
+    render_manifest,
     render_master,
     render_node,
     validate_rendered,
@@ -105,6 +106,29 @@ class RenderTests(unittest.TestCase):
             self.assertIn("--singbox-inbound hysteria2=29080", singbox_service)
             self.assertIn("--singbox-inbound anytls=29082", singbox_service)
             self.assertEqual(validate_rendered(output), [])
+
+    def test_xray_config_can_route_ai_domains_to_residential_socks_proxy(self):
+        config = LinkRayConfig(
+            domain="edge-a.example.com",
+            residential_proxy_url="socks5://proxy-user:proxy-pass@res.example.com:443",
+        )
+
+        data = xray_config(config)
+        outbounds = {item["tag"]: item for item in data["outbounds"]}
+        self.assertEqual(outbounds["residential"]["protocol"], "socks")
+        server = outbounds["residential"]["settings"]["servers"][0]
+        self.assertEqual(server["address"], "res.example.com")
+        self.assertEqual(server["port"], 443)
+        self.assertEqual(server["users"][0]["user"], "proxy-user")
+        self.assertEqual(server["users"][0]["pass"], "proxy-pass")
+        residential_rule = data["routing"]["rules"][0]
+        self.assertEqual(residential_rule["outboundTag"], "residential")
+        self.assertIn("domain:openai.com", residential_rule["domain"])
+        self.assertIn("domain:claude.ai", residential_rule["domain"])
+
+        manifest = json.loads(render_manifest(config, [NodeHost("edge-a", "edge-a.example.com")]))
+        self.assertEqual(manifest["config"]["residential_proxy"], "socks5://res.example.com:443")
+        self.assertNotIn("proxy-pass", json.dumps(manifest))
 
     def test_custom_inbound_ports_reject_duplicate_runtime_ports(self):
         config = LinkRayConfig(

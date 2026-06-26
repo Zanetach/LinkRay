@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 
 from .api import serve_api
@@ -50,6 +51,11 @@ def add_common_master_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--panel-port", default=9443, type=int)
     parser.add_argument("--snell-psk", default="REPLACE_WITH_SNELL_PSK")
     parser.add_argument(
+        "--residential-socks-url-env",
+        default="",
+        help="Environment variable containing a socks5:// residential proxy URL for AI-domain server-side routing.",
+    )
+    parser.add_argument(
         "--xray-runtime",
         choices=XRAY_RUNTIME_MODES,
         default="marzban",
@@ -78,6 +84,7 @@ def add_common_master_args(parser: argparse.ArgumentParser) -> None:
 
 
 def config_from_args(args: argparse.Namespace) -> LinkRayConfig:
+    residential_proxy_url = os.environ.get(args.residential_socks_url_env, "") if args.residential_socks_url_env else ""
     return LinkRayConfig(
         domain=args.domain,
         admin_username=args.admin_username,
@@ -90,6 +97,7 @@ def config_from_args(args: argparse.Namespace) -> LinkRayConfig:
         panel_port=args.panel_port,
         xray_runtime_mode=args.xray_runtime,
         snell_psk=args.snell_psk,
+        residential_proxy_url=residential_proxy_url,
         inbound_ports=parse_inbound_ports(args.inbound),
         singbox_inbound_ports=parse_singbox_inbound_ports(args.singbox_inbound),
         snell_inbound_ports=parse_snell_inbound_ports(args.snell_inbound),
@@ -101,6 +109,11 @@ def add_common_node_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--cert-file", default="/var/lib/marzban/certs/linkray/fullchain.cer")
     parser.add_argument("--key-file", default="/var/lib/marzban/certs/linkray/linkray.key")
     parser.add_argument("--snell-psk", default="REPLACE_WITH_SNELL_PSK")
+    parser.add_argument(
+        "--residential-socks-url-env",
+        default="",
+        help="Environment variable containing a socks5:// residential proxy URL for AI-domain server-side routing.",
+    )
     parser.add_argument(
         "--singbox-inbound",
         action="append",
@@ -116,11 +129,13 @@ def add_common_node_args(parser: argparse.ArgumentParser) -> None:
 def node_config_from_args(args: argparse.Namespace) -> LinkRayConfig | None:
     if not getattr(args, "domain", None):
         return None
+    residential_proxy_url = os.environ.get(args.residential_socks_url_env, "") if args.residential_socks_url_env else ""
     return LinkRayConfig(
         domain=args.domain,
         cert_file=args.cert_file,
         key_file=args.key_file,
         snell_psk=args.snell_psk,
+        residential_proxy_url=residential_proxy_url,
         singbox_inbound_ports=parse_singbox_inbound_ports(args.singbox_inbound),
         snell_inbound_ports=parse_snell_inbound_ports(args.snell_inbound),
     )
